@@ -122,11 +122,12 @@ def extract_synthesis_report(
         CODE_REVIEW_SYNTHESIS_MARKERS if synthesis_type == "code_review" else SYNTHESIS_MARKERS
     )
 
-    # Use shared extraction with METRICS_JSON as stop marker
+    # No stop_at_markers needed: with contract-first layout, metrics precede prose.
+    # Fallback patterns (## Summary, # Synthesis) match prose headings that come
+    # after the leading contract/metrics blocks, so they are naturally excluded.
     return extract_report(
         raw_output,
         markers,
-        stop_at_markers=[_METRICS_START_MARKER],
     )
 
 

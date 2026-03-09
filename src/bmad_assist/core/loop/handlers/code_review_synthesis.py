@@ -40,8 +40,11 @@ from bmad_assist.core.types import EpicId
 from bmad_assist.security.integration import load_security_findings_from_cache
 from bmad_assist.core.loop.synthesis_contract import (
     ExtractionQuality,
+    RESOLUTION_COUNT_FIELDS,
     SynthesisDecision,
+    VALID_RESOLUTIONS,
     make_synthesis_decision,
+    parse_resolution_block,
 )
 from bmad_assist.validation.reports import extract_synthesis_report
 
@@ -51,18 +54,8 @@ logger = logging.getLogger(__name__)
 _RESOLUTION_START = "<!-- SYNTHESIS_RESOLUTION_START -->"
 _RESOLUTION_END = "<!-- SYNTHESIS_RESOLUTION_END -->"
 
-# Valid resolution values
-VALID_RESOLUTIONS = frozenset({"resolved", "rework", "halt"})
-
-# Integer count fields in the resolution block
-_COUNT_FIELDS = (
-    "verified_critical",
-    "verified_high",
-    "fixed_critical",
-    "fixed_high",
-    "remaining_critical",
-    "remaining_high",
-)
+# _COUNT_FIELDS alias for local use (imported as RESOLUTION_COUNT_FIELDS)
+_COUNT_FIELDS = RESOLUTION_COUNT_FIELDS
 
 # Regex patterns for layered extraction (Layer 2 and 3)
 _HEADER_RESOLUTION_RE = re.compile(
@@ -91,64 +84,8 @@ _SEMANTIC_HALT_RE = re.compile(
 )
 
 
-def _parse_marker_block(block: str) -> dict[str, Any] | None:
-    """Parse key: value lines from a resolution block string.
-
-    Returns validated dict or None on validation failure.
-    """
-    parsed: dict[str, Any] = {}
-    for line in block.splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip()
-        if key and value:
-            parsed[key] = value
-
-    resolution = parsed.get("resolution")
-    if resolution not in VALID_RESOLUTIONS:
-        logger.warning(
-            "Invalid or missing resolution value in block: %r (valid: %s)",
-            resolution,
-            ", ".join(sorted(VALID_RESOLUTIONS)),
-        )
-        return None
-
-    for field in _COUNT_FIELDS:
-        raw = parsed.get(field)
-        if raw is not None:
-            try:
-                val = int(raw)
-                if val < 0:
-                    logger.warning("Negative count for %s: %d", field, val)
-                    return None
-                parsed[field] = val
-            except (ValueError, TypeError):
-                logger.warning("Non-integer count for %s: %r", field, raw)
-                return None
-
-    # Cross-validate: override "resolved" if remaining counts contradict
-    if parsed.get("resolution") == "resolved":
-        remaining_critical = parsed.get("remaining_critical", 0)
-        remaining_high = parsed.get("remaining_high", 0)
-        if isinstance(remaining_critical, int) and remaining_critical > 0:
-            logger.info(
-                "Cross-validation override: resolution 'resolved' but "
-                "remaining_critical=%d, overriding to 'rework'",
-                remaining_critical,
-            )
-            parsed["resolution"] = "rework"
-        elif isinstance(remaining_high, int) and remaining_high > 0:
-            logger.info(
-                "Cross-validation override: resolution 'resolved' but "
-                "remaining_high=%d, overriding to 'rework'",
-                remaining_high,
-            )
-            parsed["resolution"] = "rework"
-
-    return parsed
+# _parse_marker_block is now shared as parse_resolution_block in synthesis_contract.
+_parse_marker_block = parse_resolution_block
 
 
 def _extract_resolution_layered(
@@ -1042,6 +979,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
                         ),
                         "resolution_data": resolution_data,
                         "synthesis_report_path": str(synthesis_report_path),
+                        **self._timing_outputs(),
                     }
                 )
 

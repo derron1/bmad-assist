@@ -84,11 +84,57 @@
     </action>
   </step>
 
+  <step n="3.5" goal="Prepare contract data before writing">
+    <action>Before generating any output, compute these values from your analysis:
+      - Count verified critical issues and verified high issues
+      - Count fixed critical issues and fixed high issues (those addressed by STORY_PATCH)
+      - Compute remaining = verified - fixed for each severity
+      - Determine resolution:
+        "resolved" if remaining_critical == 0 AND remaining_high == 0
+        "rework" if any critical or high issues remain unaddressed
+        "halt" if unable to reliably determine validation outcome
+      - Prepare METRICS_JSON quality and consensus values from your analysis
+    </action>
+    <critical>These computed values will be emitted FIRST in your output, before any prose.</critical>
+  </step>
+
   <step n="4" goal="Generate synthesis report">
-    <critical>Your synthesis report MUST be wrapped in HTML comment markers for extraction:</critical>
+    <critical>You MUST emit the VALIDATION_CONTRACT_START/END block and METRICS_JSON BEFORE any prose sections.
+      Do not begin the Synthesis Summary until both the contract block and METRICS_JSON are complete.
+      The contract block is mandatory — omitting it makes the entire response invalid.</critical>
     <action>Produce structured output in this exact format (including the markers):</action>
     <output-format>
 &lt;!-- VALIDATION_SYNTHESIS_START --&gt;
+&lt;!-- VALIDATION_CONTRACT_START --&gt;
+resolution: {resolved|rework|halt}
+verified_critical: {N}
+verified_high: {N}
+fixed_critical: {N}
+fixed_high: {N}
+remaining_critical: {N}
+remaining_high: {N}
+&lt;!-- VALIDATION_CONTRACT_END --&gt;
+
+&lt;!-- METRICS_JSON_START --&gt;
+{
+  "quality": {
+    "actionable_ratio": 0.0,
+    "specificity_score": 0.0,
+    "evidence_quality": 0.0,
+    "follows_template": true,
+    "internal_consistency": 0.0
+  },
+  "consensus": {
+    "agreed_findings": 0,
+    "unique_findings": 0,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.0,
+    "false_positive_count": 0
+  }
+}
+&lt;!-- METRICS_JSON_END --&gt;
+
 ## Synthesis Summary
 [Brief overview: X issues verified, Y false positives dismissed, Z changes applied to story file]
 
@@ -144,8 +190,90 @@
   [2-3 lines of updated content]
   ```
 ]
+
+[Emit any STORY_PATCH blocks here, after prose but before the end marker]
+
 &lt;!-- VALIDATION_SYNTHESIS_END --&gt;
     </output-format>
+
+    <example title="Complete contract-first output">
+&lt;!-- VALIDATION_SYNTHESIS_START --&gt;
+&lt;!-- VALIDATION_CONTRACT_START --&gt;
+resolution: rework
+verified_critical: 1
+verified_high: 2
+fixed_critical: 1
+fixed_high: 1
+remaining_critical: 0
+remaining_high: 1
+&lt;!-- VALIDATION_CONTRACT_END --&gt;
+
+&lt;!-- METRICS_JSON_START --&gt;
+{
+  "quality": {
+    "actionable_ratio": 0.85,
+    "specificity_score": 0.78,
+    "evidence_quality": 0.80,
+    "follows_template": true,
+    "internal_consistency": 0.90
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.75,
+    "false_positive_count": 1
+  }
+}
+&lt;!-- METRICS_JSON_END --&gt;
+
+## Synthesis Summary
+3 issues verified (1 critical, 2 high), 1 false positive dismissed, 2 changes applied to story file.
+
+## Validations Quality
+- Validator A: 8/10 - thorough coverage of acceptance criteria
+- Validator B: 7/10 - good technical depth, one false positive
+Summary: 7.5/10
+
+## Issues Verified (by severity)
+
+### Critical
+- **Issue**: Missing idempotency guard for payment processing | **Source**: Validator A, B | **Fix**: Added idempotency key requirement to AC
+
+### High
+- **Issue**: No timeout specified for external API calls | **Source**: Validator A | **Fix**: Added 30s timeout to technical constraints
+- **Issue**: Missing rollback strategy for partial failures | **Source**: Validator B | **Fix**: Deferred (remaining high)
+
+## Issues Dismissed
+- **Claimed Issue**: Missing pagination for results | **Raised by**: Validator B | **Dismissal Reason**: Story scope is single-item lookup, pagination not applicable
+
+## Deep Verify Integration
+Deep Verify did not produce findings for this story.
+
+## Changes Applied
+**Location**: story.md - Acceptance Criteria
+**Change**: Added idempotency guard requirement
+**Before**:
+```
+- Payment request is processed successfully
+```
+**After**:
+```
+- Payment request includes idempotency key
+- Duplicate requests with same key return original result
+```
+
+&lt;!-- STORY_PATCH_START heading="## acceptance criteria" --&gt;
+## Acceptance Criteria
+- Payment request includes idempotency key
+- Duplicate requests with same key return original result
+- External API calls timeout after 30 seconds
+- Failed payments return appropriate error codes
+&lt;!-- STORY_PATCH_END --&gt;
+
+&lt;!-- VALIDATION_SYNTHESIS_END --&gt;
+    </example>
 
   </step>
 
@@ -153,5 +281,6 @@
     <action>Verify all Critical and High issues have been addressed</action>
     <action>Confirm story file changes are coherent and preserve structure</action>
     <action>Ensure synthesis report is complete with all sections populated</action>
+    <action>Verify the contract block at the top matches your analysis counts</action>
   </step>
 </workflow>

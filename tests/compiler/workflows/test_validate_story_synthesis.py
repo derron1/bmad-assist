@@ -1905,3 +1905,219 @@ As a developer, I want a test story.
         assert "[Deep Verify Findings]" in result.context
         assert "REJECT" in result.context
         assert "Missing error handling" in result.context
+
+
+class TestGraduatedStagedTrimming:
+    """Tests for graduated staged prompt budget enforcement.
+
+    Verifies that the compiler breaks context into graduated trimmable sections
+    (strategic → source → deep_verify → validations → story) instead of a
+    monolithic non-trimmable "other" block.
+    """
+
+    def test_strategic_trimmed_before_validations(
+        self,
+        tmp_project: Path,
+        two_validations: list[AnonymizedValidation],
+    ) -> None:
+        """Strategic docs are trimmed before validations when prompt exceeds cap."""
+        from bmad_assist.compiler.workflows.validate_story_synthesis import (
+            ValidateStorySynthesisCompiler,
+        )
+
+        # Large project_context to force trimming
+        pc_content = "# Project Context\n\n" + "Context details. " * 2000
+        (tmp_project / "docs" / "project_context.md").write_text(pc_content)
+
+        context = create_test_context(
+            tmp_project,
+            epic_num=11,
+            story_num=1,
+            validations=two_validations,
+        )
+
+        compiler = ValidateStorySynthesisCompiler()
+
+        # Patch prompt budget enforcer to use a tight cap
+        with patch(
+            "bmad_assist.compiler.budget.PromptBudgetEnforcer.from_config"
+        ) as mock_enforcer_cls:
+            from bmad_assist.compiler.budget import PromptBudgetEnforcer
+
+            mock_enforcer_cls.return_value = PromptBudgetEnforcer(
+                "validate_story_synthesis", cap=5000
+            )
+            result = compiler.compile(context)
+
+        # Validations should still be present (trimmed last)
+        assert "[Validator A]" in result.context
+        assert "[Validator B]" in result.context
+
+    def test_story_preserved_when_over_cap(
+        self,
+        tmp_project: Path,
+        two_validations: list[AnonymizedValidation],
+    ) -> None:
+        """Story file is never trimmed, even when prompt exceeds cap."""
+        from bmad_assist.compiler.workflows.validate_story_synthesis import (
+            ValidateStorySynthesisCompiler,
+        )
+
+        context = create_test_context(
+            tmp_project,
+            epic_num=11,
+            story_num=1,
+            validations=two_validations,
+        )
+
+        compiler = ValidateStorySynthesisCompiler()
+
+        # Very tight cap to force aggressive trimming
+        with patch(
+            "bmad_assist.compiler.budget.PromptBudgetEnforcer.from_config"
+        ) as mock_enforcer_cls:
+            from bmad_assist.compiler.budget import PromptBudgetEnforcer
+
+            mock_enforcer_cls.return_value = PromptBudgetEnforcer(
+                "validate_story_synthesis", cap=2000
+            )
+            result = compiler.compile(context)
+
+        # Story content must survive even with tight cap
+        assert "Test Story" in result.context
+
+    def test_sections_categorized_correctly(
+        self,
+        tmp_project: Path,
+    ) -> None:
+        """All file keys are categorized into the correct sections."""
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+        from bmad_assist.compiler.workflows.validate_story_synthesis import (
+            ValidateStorySynthesisCompiler,
+        )
+
+        dv_data = {
+            "verdict": "REJECT",
+            "score": 10.0,
+            "findings": [
+                {
+                    "id": "F1",
+                    "severity": "high",
+                    "title": "Test finding",
+                    "description": "Test desc",
+                    "method_id": "pattern_match",
+                    "domain": "quality",
+                    "evidence": [],
+                }
+            ],
+            "domains_detected": [{"domain": "quality", "confidence": 0.9}],
+            "methods_executed": ["pattern_match"],
+            "duration_ms": 100,
+        }
+
+        context = create_test_context(
+            tmp_project,
+            epic_num=11,
+            story_num=1,
+            validations=[
+                AnonymizedValidation(
+                    validator_id="Validator A",
+                    content="Findings A",
+                    original_ref="uuid-1",
+                ),
+                AnonymizedValidation(
+                    validator_id="Validator B",
+                    content="Findings B",
+                    original_ref="uuid-2",
+                ),
+            ],
+        )
+        context.resolved_variables["deep_verify_findings"] = dv_data
+
+        # Capture the sections passed to enforce()
+        captured_sections: list[ContextSection] = []
+        original_enforce = PromptBudgetEnforcer.enforce
+
+        def capture_enforce(self_enforcer: Any, sections: list[ContextSection]) -> Any:
+            captured_sections.extend(sections)
+            return original_enforce(self_enforcer, sections)
+
+        compiler = ValidateStorySynthesisCompiler()
+
+        with patch.object(PromptBudgetEnforcer, "enforce", capture_enforce):
+            compiler.compile(context)
+
+        # Verify 5 sections exist with correct keys
+        section_keys = {s.key for s in captured_sections}
+        assert section_keys == {"strategic", "source", "deep_verify", "validations", "story"}
+
+        # Verify trimmability
+        section_map = {s.key: s for s in captured_sections}
+        assert section_map["story"].trimmable is False
+        assert section_map["strategic"].trimmable is True
+        assert section_map["source"].trimmable is True
+        assert section_map["deep_verify"].trimmable is True
+        assert section_map["validations"].trimmable is True
+
+        # Verify priority order: strategic < source < deep_verify < validations < story
+        assert section_map["strategic"].priority < section_map["source"].priority
+        assert section_map["source"].priority < section_map["deep_verify"].priority
+        assert section_map["deep_verify"].priority < section_map["validations"].priority
+        assert section_map["validations"].priority < section_map["story"].priority
+
+
+class TestWorkflowContract:
+    """Tests for validate-story-synthesis output contract."""
+
+    def test_instructions_require_metrics_json_and_resolution(self) -> None:
+        """Bundled instructions include machine-readable metrics and resolution."""
+        instructions_path = Path(
+            "src/bmad_assist/workflows/validate-story-synthesis/instructions.xml"
+        )
+        content = instructions_path.read_text(encoding="utf-8")
+
+        assert "&lt;!-- METRICS_JSON_START --&gt;" in content
+        assert "&lt;!-- METRICS_JSON_END --&gt;" in content
+        assert '"quality"' in content
+        assert '"consensus"' in content
+        assert "resolution: {resolved|rework|halt}" in content
+
+    def test_contract_markers_present(self) -> None:
+        """Instructions include VALIDATION_CONTRACT_START/END markers."""
+        instructions_path = Path(
+            "src/bmad_assist/workflows/validate-story-synthesis/instructions.xml"
+        )
+        content = instructions_path.read_text(encoding="utf-8")
+
+        assert "VALIDATION_CONTRACT_START" in content
+        assert "VALIDATION_CONTRACT_END" in content
+
+    def test_metrics_before_prose(self) -> None:
+        """METRICS_JSON_START appears before ## Synthesis Summary in output format."""
+        instructions_path = Path(
+            "src/bmad_assist/workflows/validate-story-synthesis/instructions.xml"
+        )
+        content = instructions_path.read_text(encoding="utf-8")
+
+        metrics_pos = content.find("METRICS_JSON_START")
+        summary_pos = content.find("## Synthesis Summary")
+        assert metrics_pos != -1
+        assert summary_pos != -1
+        assert metrics_pos < summary_pos, (
+            "METRICS_JSON_START must appear before ## Synthesis Summary"
+        )
+
+    def test_patches_before_end_marker(self) -> None:
+        """STORY_PATCH appears before VALIDATION_SYNTHESIS_END in output format."""
+        instructions_path = Path(
+            "src/bmad_assist/workflows/validate-story-synthesis/instructions.xml"
+        )
+        content = instructions_path.read_text(encoding="utf-8")
+
+        patch_pos = content.find("STORY_PATCH")
+        end_pos = content.rfind("VALIDATION_SYNTHESIS_END")
+        assert patch_pos != -1
+        assert end_pos != -1
+        assert patch_pos < end_pos, (
+            "STORY_PATCH must appear before VALIDATION_SYNTHESIS_END"
+        )

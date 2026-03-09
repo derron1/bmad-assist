@@ -34,6 +34,7 @@ from bmad_assist.core.loop.synthesis_contract import (
     SynthesisDecision,
     extract_story_patches,
     make_synthesis_decision,
+    parse_resolution_block,
 )
 from bmad_assist.core.loop.types import PhaseResult
 from bmad_assist.core.paths import get_paths
@@ -55,6 +56,10 @@ from bmad_assist.validation.validation_metrics import (
 
 logger = logging.getLogger(__name__)
 
+# Markers for structured contract block in validation synthesis output
+_CONTRACT_START = "<!-- VALIDATION_CONTRACT_START -->"
+_CONTRACT_END = "<!-- VALIDATION_CONTRACT_END -->"
+
 # Regex patterns for layered resolution extraction in validate_story_synthesis.
 # (Same logic as code_review_synthesis but applied to validation synthesis output.)
 _HEADER_RESOLUTION_RE = re.compile(
@@ -70,6 +75,45 @@ _SEMANTIC_REWORK_RE = re.compile(
     r"critical issues? remain|validation failed",
     re.IGNORECASE,
 )
+_CRITICAL_SECTION_RE = re.compile(
+    r"###\s+Critical\s*\n(.*?)(?=\n###|\n##|\Z)", re.DOTALL | re.IGNORECASE
+)
+_CHANGES_APPLIED_RE = re.compile(
+    r"##\s+Changes Applied\s*\n(.*?)(?=\n##|\Z)", re.DOTALL | re.IGNORECASE
+)
+_ISSUE_LINE_RE = re.compile(r"^\s*-\s+\*\*", re.MULTILINE)
+
+
+def _infer_resolution_from_structure(stdout: str) -> str | None:
+    """Infer resolution from heading-based synthesis structure."""
+    if not stdout.strip():
+        return None
+
+    critical_match = _CRITICAL_SECTION_RE.search(stdout)
+    changes_match = _CHANGES_APPLIED_RE.search(stdout)
+
+    if not critical_match and not changes_match:
+        return None
+
+    if not critical_match:
+        return "resolved"
+
+    critical_body = critical_match.group(1).strip()
+    has_critical_issues = bool(_ISSUE_LINE_RE.search(critical_body))
+    if not has_critical_issues:
+        return "resolved"
+
+    if not changes_match:
+        return "rework"
+
+    changes_body = changes_match.group(1).strip()
+    if not changes_body:
+        return "rework"
+
+    if re.fullmatch(r"\[.*?\]", changes_body, re.DOTALL):
+        return None
+
+    return "resolved"
 
 
 def _extract_validation_resolution(
@@ -77,12 +121,38 @@ def _extract_validation_resolution(
 ) -> tuple[dict[str, Any] | None, ExtractionQuality]:
     """Extract resolution from validation synthesis output using layered strategy.
 
-    Layer 1: bare "resolution: X" key-value line (validation synthesis has no markers).
-    Layer 2: semantic keyword signals.
+    Layer 0: VALIDATION_CONTRACT_START/END markers (STRICT).
+             If markers found but block is invalid, return FAILED (fail-closed).
+    Layer 1: bare "resolution: X" key-value line (DEGRADED).
+    Layer 2: semantic keyword signals (DEGRADED).
+    Layer 3: structural inference from heading-based synthesis sections (DEGRADED).
 
     Returns:
         (parsed_dict_or_None, ExtractionQuality)
     """
+    # Layer 0: VALIDATION_CONTRACT_START/END markers (STRICT)
+    start_idx = stdout.find(_CONTRACT_START)
+    if start_idx != -1:
+        end_idx = stdout.find(_CONTRACT_END, start_idx + len(_CONTRACT_START))
+        if end_idx != -1:
+            block = stdout[start_idx + len(_CONTRACT_START) : end_idx].strip()
+            if block:
+                parsed = parse_resolution_block(block)
+                if parsed is not None:
+                    logger.info(
+                        "Validation synthesis resolution extracted via contract markers: %s (STRICT)",
+                        parsed.get("resolution"),
+                    )
+                    return parsed, ExtractionQuality.STRICT
+            # Markers found but block is empty or invalid — fail-closed.
+            # Do NOT fall through to weaker layers when markers are present.
+            logger.warning(
+                "VALIDATION_CONTRACT markers found but block is empty or invalid; "
+                "treating as FAILED (not falling through to header fallback)"
+            )
+            return None, ExtractionQuality.FAILED
+
+    # Layer 1: bare "resolution: X" key-value line (DEGRADED)
     res_match = _HEADER_RESOLUTION_RE.search(stdout)
     if res_match:
         resolution_str = res_match.group(1).lower()
@@ -98,6 +168,14 @@ def _extract_validation_resolution(
     if _SEMANTIC_RESOLVED_RE.search(stdout):
         logger.info("Validation synthesis resolution inferred via semantic fallback: resolved")
         return {"resolution": "resolved"}, ExtractionQuality.DEGRADED
+
+    structural = _infer_resolution_from_structure(stdout)
+    if structural:
+        logger.info(
+            "Validation synthesis resolution inferred via structural fallback: %s",
+            structural,
+        )
+        return {"resolution": structural}, ExtractionQuality.DEGRADED
 
     logger.warning(
         "Validation synthesis: all extraction layers failed "
@@ -362,6 +440,13 @@ class ValidateStorySynthesisHandler(BaseHandler):
         from bmad_assist.providers.registry import get_provider
 
         synthesis_config = self.config.compiler.synthesis
+        # Resolve effective budget: use the tighter of synthesis budget vs prompt cap
+        prompt_cap = self.config.compiler.prompt_budget.get_cap("validate_story_synthesis")
+        effective_budget = (
+            min(synthesis_config.token_budget, prompt_cap)
+            if prompt_cap > 0
+            else synthesis_config.token_budget
+        )
         base_tokens = estimate_base_context_tokens(
             self.project_path, self.config, "validate_story_synthesis"
         )
@@ -371,7 +456,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
         steps = decide_compression_steps(
             total_tokens,
             base_tokens,
-            synthesis_config.token_budget,
+            effective_budget,
             synthesis_config.base_context_limit,
         )
 
@@ -383,10 +468,12 @@ class ValidateStorySynthesisHandler(BaseHandler):
 
         if steps:
             logger.info(
-                "Compression pipeline: steps=%s, total=%d, budget=%d, base=%d",
+                "Compression pipeline: steps=%s, total=%d, budget=%d (synthesis=%d, prompt_cap=%d), base=%d",
                 steps,
                 total_tokens,
+                effective_budget,
                 synthesis_config.token_budget,
+                prompt_cap,
                 base_tokens,
             )
 
@@ -475,12 +562,12 @@ class ValidateStorySynthesisHandler(BaseHandler):
                         elapsed,
                         synthesis_config.max_compression_timeout,
                     )
-                elif total_tokens > synthesis_config.token_budget:
+                elif total_tokens > effective_budget:
                     validations_to_use = progressive_synthesize(
                         extracted_reviews=validations_to_use,
                         batch_size=synthesis_config.progressive_batch_size,
                         base_context_summary=f"Project at {self.project_path.name}",
-                        token_budget=synthesis_config.token_budget,
+                        token_budget=effective_budget,
                         invoke_fn=invoke_fn,
                         log=logger,
                         cache_dir=cache_dir,
@@ -501,7 +588,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
             logger.info(
                 "Compression: passthrough (total=%d <= budget=%d)",
                 total_tokens,
-                synthesis_config.token_budget,
+                effective_budget,
             )
 
         compression_end = time.monotonic()
@@ -617,7 +704,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
             # story changes are expressed as STORY_PATCH blocks in stdout, not
             # direct edits, so Edit/Write are excluded to prevent ToolCallGuard
             # triggering on repeated same-file edits)
-            result = self.invoke_provider(prompt, allowed_tools=["Read", "Bash"])
+            result = self.invoke_provider(prompt, allowed_tools=["Read"])
 
             # Record end time for benchmarking
             end_time = datetime.now(UTC)
@@ -770,7 +857,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
                 )
 
                 # Extract synthesis resolution via layered strategy
-                res_parsed, res_quality = _extract_validation_resolution(result.stdout)
+                res_parsed, res_quality = _extract_validation_resolution(extracted_synthesis)
                 synthesis_decision: SynthesisDecision = make_synthesis_decision(
                     res_parsed, res_quality, evidence_verdict, evidence_score_data
                 )
@@ -792,6 +879,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
                             if synthesis_decision.failure_class
                             else None
                         ),
+                        **self._timing_outputs(),
                     }
                 )
 

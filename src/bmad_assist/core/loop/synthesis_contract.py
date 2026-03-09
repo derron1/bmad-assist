@@ -27,8 +27,11 @@ __all__ = [
     "FailureClass",
     "SynthesisDecision",
     "StoryPatch",
+    "VALID_RESOLUTIONS",
+    "RESOLUTION_COUNT_FIELDS",
     "extract_story_patches",
     "make_synthesis_decision",
+    "parse_resolution_block",
 ]
 
 logger = logging.getLogger(__name__)
@@ -99,6 +102,88 @@ class SynthesisDecision:
     failure_class: FailureClass | None
     raw_parsed: dict[str, Any] | None
     evidence_summary: str
+
+
+# ---------------------------------------------------------------------------
+# Shared resolution block parsing
+# ---------------------------------------------------------------------------
+
+# Valid resolution values (shared by code_review_synthesis and validate_story_synthesis)
+VALID_RESOLUTIONS = frozenset({"resolved", "rework", "halt"})
+
+# Integer count fields in the resolution block
+RESOLUTION_COUNT_FIELDS = (
+    "verified_critical",
+    "verified_high",
+    "fixed_critical",
+    "fixed_high",
+    "remaining_critical",
+    "remaining_high",
+)
+
+
+def parse_resolution_block(block: str) -> dict[str, Any] | None:
+    """Parse key: value lines from a resolution marker block.
+
+    Shared by code_review_synthesis and validate_story_synthesis handlers.
+    Validates resolution value and integer count fields, then cross-validates
+    that "resolved" is consistent with remaining counts.
+
+    Returns validated dict or None on validation failure.
+    """
+    parsed: dict[str, Any] = {}
+    for line in block.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            parsed[key] = value
+
+    resolution = parsed.get("resolution")
+    if resolution not in VALID_RESOLUTIONS:
+        logger.warning(
+            "Invalid or missing resolution value in block: %r (valid: %s)",
+            resolution,
+            ", ".join(sorted(VALID_RESOLUTIONS)),
+        )
+        return None
+
+    for field in RESOLUTION_COUNT_FIELDS:
+        raw = parsed.get(field)
+        if raw is not None:
+            try:
+                val = int(raw)
+                if val < 0:
+                    logger.warning("Negative count for %s: %d", field, val)
+                    return None
+                parsed[field] = val
+            except (ValueError, TypeError):
+                logger.warning("Non-integer count for %s: %r", field, raw)
+                return None
+
+    # Cross-validate: override "resolved" if remaining counts contradict
+    if parsed.get("resolution") == "resolved":
+        remaining_critical = parsed.get("remaining_critical", 0)
+        remaining_high = parsed.get("remaining_high", 0)
+        if isinstance(remaining_critical, int) and remaining_critical > 0:
+            logger.info(
+                "Cross-validation override: resolution 'resolved' but "
+                "remaining_critical=%d, overriding to 'rework'",
+                remaining_critical,
+            )
+            parsed["resolution"] = "rework"
+        elif isinstance(remaining_high, int) and remaining_high > 0:
+            logger.info(
+                "Cross-validation override: resolution 'resolved' but "
+                "remaining_high=%d, overriding to 'rework'",
+                remaining_high,
+            )
+            parsed["resolution"] = "rework"
+
+    return parsed
 
 
 # ---------------------------------------------------------------------------

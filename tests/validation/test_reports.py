@@ -1520,3 +1520,65 @@ class TestStory22_8FailedValidatorsInSynthesis:
         assert metadata["story"] == 8
         assert metadata["duration_ms"] == 8432
         assert "timestamp" in metadata
+
+
+class TestExtractSynthesisReportContractFirst:
+    """Tests for extract_synthesis_report with contract-first layout.
+
+    Verifies that the reports.py stop_at_markers removal does not
+    truncate fallback extraction when metrics precede prose.
+    """
+
+    def test_contract_first_layout_fallback_not_truncated(self) -> None:
+        """Fallback extraction with contract-first layout returns full prose."""
+        from bmad_assist.validation.reports import extract_synthesis_report
+
+        # Simulate output WITHOUT VALIDATION_SYNTHESIS_START/END markers
+        # (forces Stage 2 fallback extraction via heading patterns)
+        raw_output = (
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: resolved\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n\n"
+            "<!-- METRICS_JSON_START -->\n"
+            '{"quality": {"actionable_ratio": 0.8}}\n'
+            "<!-- METRICS_JSON_END -->\n\n"
+            "## Synthesis Summary\n"
+            "3 issues verified, 1 false positive dismissed.\n\n"
+            "## Issues Verified (by severity)\n\n"
+            "### Critical\n"
+            "- **Issue**: Missing guard | **Fix**: Added guard\n\n"
+            "## Changes Applied\n"
+            "**Location**: story.md\n"
+        )
+        result = extract_synthesis_report(raw_output, synthesis_type="validation")
+
+        # Prose must NOT be truncated at METRICS_JSON_START
+        assert "## Synthesis Summary" in result
+        assert "3 issues verified" in result
+        assert "## Changes Applied" in result
+
+    def test_marker_based_extraction_includes_full_content(self) -> None:
+        """Stage 1 marker-based extraction includes all content between markers."""
+        from bmad_assist.validation.reports import extract_synthesis_report
+
+        raw_output = (
+            "tool noise before...\n"
+            "<!-- VALIDATION_SYNTHESIS_START -->\n"
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: resolved\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n\n"
+            "<!-- METRICS_JSON_START -->\n"
+            '{"quality": {"actionable_ratio": 0.8}}\n'
+            "<!-- METRICS_JSON_END -->\n\n"
+            "## Synthesis Summary\n"
+            "All good.\n\n"
+            "## Changes Applied\n"
+            "None needed.\n"
+            "<!-- VALIDATION_SYNTHESIS_END -->\n"
+        )
+        result = extract_synthesis_report(raw_output, synthesis_type="validation")
+
+        assert "VALIDATION_CONTRACT_START" in result
+        assert "## Synthesis Summary" in result
+        assert "## Changes Applied" in result
+        assert "tool noise" not in result
