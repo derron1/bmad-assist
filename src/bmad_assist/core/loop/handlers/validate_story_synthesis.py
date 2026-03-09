@@ -29,6 +29,8 @@ from bmad_assist.core.exceptions import ConfigError
 from bmad_assist.core.io import get_original_cwd
 from bmad_assist.core.loop.handlers.base import BaseHandler, check_for_edit_failures
 from bmad_assist.core.loop.synthesis_contract import (
+    RESOLUTION_COUNT_FIELDS,
+    VALID_RESOLUTIONS,
     ExtractionQuality,
     FailureClass,
     SynthesisDecision,
@@ -48,6 +50,7 @@ from bmad_assist.validation.reports import (
     extract_synthesis_report,
     save_synthesis_report,
 )
+from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 from bmad_assist.validation.validation_metrics import (
     calculate_aggregate_metrics,
     extract_validator_metrics,
@@ -82,6 +85,66 @@ _CHANGES_APPLIED_RE = re.compile(
     r"##\s+Changes Applied\s*\n(.*?)(?=\n##|\Z)", re.DOTALL | re.IGNORECASE
 )
 _ISSUE_LINE_RE = re.compile(r"^\s*-\s+\*\*", re.MULTILINE)
+
+# For repair pass: extract Synthesis Summary section
+_SUMMARY_SECTION_RE = re.compile(
+    r"(## Synthesis Summary\s*\n.*?)(?=\n##|\Z)", re.DOTALL | re.IGNORECASE
+)
+
+_REPAIR_PROMPT_TEMPLATE = """\
+You previously produced a validation synthesis report. The structured contract \
+and/or metrics blocks were missing or malformed. Re-emit ONLY these two blocks \
+based on your analysis below. Do not include any prose, patches, or other content.
+
+<!-- VALIDATION_CONTRACT_START -->
+resolution: {{resolved|rework|halt}}
+verified_critical: {{N}}
+verified_high: {{N}}
+fixed_critical: {{N}}
+fixed_high: {{N}}
+remaining_critical: {{N}}
+remaining_high: {{N}}
+<!-- VALIDATION_CONTRACT_END -->
+
+<!-- METRICS_JSON_START -->
+{{"quality": {{"actionable_ratio": 0.0, "specificity_score": 0.0, "evidence_quality": 0.0, "follows_template": true, "internal_consistency": 0.0}}, "consensus": {{"agreed_findings": 0, "unique_findings": 0, "disputed_findings": 0, "missed_findings": 0, "agreement_score": 0.0, "false_positive_count": 0}}}}
+<!-- METRICS_JSON_END -->
+
+Here is the relevant context from your synthesis report:
+
+{context}
+"""
+
+
+def _build_repair_context(extracted_synthesis: str) -> str:
+    """Build targeted context excerpt for the repair prompt.
+
+    Extracts:
+    1. Raw contract block if markers present
+    2. Synthesis Summary section if identifiable
+    3. First ~1500 chars of prose as general context
+    """
+    parts: list[str] = []
+
+    # 1. Raw contract block if present
+    start_idx = extracted_synthesis.find(_CONTRACT_START)
+    if start_idx != -1:
+        end_idx = extracted_synthesis.find(_CONTRACT_END, start_idx)
+        if end_idx != -1:
+            block = extracted_synthesis[
+                start_idx : end_idx + len(_CONTRACT_END)
+            ]
+            parts.append(f"[Original contract block]\n{block}")
+
+    # 2. Synthesis Summary section
+    summary_match = _SUMMARY_SECTION_RE.search(extracted_synthesis)
+    if summary_match:
+        parts.append(f"[Summary]\n{summary_match.group(1).strip()}")
+
+    # 3. General prose context
+    parts.append(f"[Prose excerpt]\n{extracted_synthesis[:1500]}")
+
+    return "\n\n".join(parts)
 
 
 def _infer_resolution_from_structure(stdout: str) -> str | None:
@@ -146,10 +209,36 @@ def _extract_validation_resolution(
                     return parsed, ExtractionQuality.STRICT
             # Markers found but block is empty or invalid — fail-closed.
             # Do NOT fall through to weaker layers when markers are present.
-            logger.warning(
-                "VALIDATION_CONTRACT markers found but block is empty or invalid; "
-                "treating as FAILED (not falling through to header fallback)"
-            )
+            if not block:
+                logger.warning(
+                    "VALIDATION_CONTRACT markers found but block is EMPTY; "
+                    "treating as FAILED (not falling through to header fallback)"
+                )
+            else:
+                # Diagnose what went wrong: parse raw key:value pairs for logging
+                expected_keys = {"resolution"} | set(RESOLUTION_COUNT_FIELDS)
+                raw_keys: dict[str, str] = {}
+                for line in block.splitlines():
+                    line = line.strip()
+                    if not line or ":" not in line:
+                        continue
+                    k, _, v = line.partition(":")
+                    raw_keys[k.strip()] = v.strip()
+                actual_keys = set(raw_keys.keys())
+                extra_keys = sorted(actual_keys - expected_keys)
+                missing_keys = sorted(expected_keys - actual_keys)
+                raw_resolution = raw_keys.get("resolution")
+                resolution_valid = raw_resolution in VALID_RESOLUTIONS
+                logger.warning(
+                    "VALIDATION_CONTRACT markers found but block is INVALID; "
+                    "treating as FAILED. Diagnostics: resolution=%r (valid=%s), "
+                    "missing_keys=%s, extra_keys=%s, raw_block=%.300s",
+                    raw_resolution,
+                    resolution_valid,
+                    missing_keys or "none",
+                    extra_keys or "none",
+                    block[:300],
+                )
             return None, ExtractionQuality.FAILED
 
     # Layer 1: bare "resolution: X" key-value line (DEGRADED)
@@ -858,6 +947,51 @@ class ValidateStorySynthesisHandler(BaseHandler):
 
                 # Extract synthesis resolution via layered strategy
                 res_parsed, res_quality = _extract_validation_resolution(extracted_synthesis)
+                metrics = extract_synthesis_metrics(result.stdout)
+
+                # Phase 1.5: Contract repair if main synthesis was substantial
+                # but contract/metrics extraction failed
+                markers_present = (
+                    _CONTRACT_START in extracted_synthesis
+                    and _CONTRACT_END in extracted_synthesis
+                )
+                needs_contract_repair = (
+                    # Case 1: markers present but extraction was not STRICT
+                    (markers_present and res_quality != ExtractionQuality.STRICT)
+                    # Case 2: no markers and extraction failed entirely
+                    or (res_quality == ExtractionQuality.FAILED and res_parsed is None)
+                )
+                needs_metrics_repair = metrics is None
+                needs_repair = (
+                    (needs_contract_repair or needs_metrics_repair)
+                    and len(extracted_synthesis.strip()) >= 200
+                )
+
+                if needs_repair:
+                    logger.info(
+                        "Attempting contract repair pass: "
+                        "contract_repair=%s metrics_repair=%s",
+                        needs_contract_repair,
+                        needs_metrics_repair,
+                    )
+                    repair_parsed, repair_quality, repair_metrics = (
+                        self._attempt_contract_repair(extracted_synthesis)
+                    )
+                    if needs_contract_repair and repair_parsed is not None:
+                        res_parsed = repair_parsed
+                        res_quality = repair_quality
+                        logger.info(
+                            "Contract repair succeeded: resolution=%s quality=%s",
+                            res_parsed.get("resolution"),
+                            res_quality.value,
+                        )
+                    if needs_metrics_repair and repair_metrics is not None:
+                        # Note: metrics from repair are not persisted to the
+                        # synthesizer record (already saved above), but they
+                        # inform the decision and logging.
+                        metrics = repair_metrics
+                        logger.info("Metrics repair succeeded")
+
                 synthesis_decision: SynthesisDecision = make_synthesis_decision(
                     res_parsed, res_quality, evidence_verdict, evidence_score_data
                 )
@@ -963,6 +1097,61 @@ class ValidateStorySynthesisHandler(BaseHandler):
                 exc_info=True,
             )
             return ""
+
+    def _attempt_contract_repair(
+        self,
+        extracted_synthesis: str,
+    ) -> tuple[dict[str, Any] | None, ExtractionQuality, "SynthesisMetrics | None"]:
+        """Attempt a short follow-up LLM call to recover contract + metrics blocks.
+
+        Only called when:
+        - Main synthesis produced meaningful output (>= 200 chars)
+        - Contract block is invalid OR metrics block is missing/invalid
+
+        Returns:
+            (parsed_resolution, extraction_quality, metrics) — any may be None on failure.
+        """
+        from bmad_assist.validation.synthesis_parser import SynthesisMetrics
+
+        repair_context = _build_repair_context(extracted_synthesis)
+        repair_prompt = _REPAIR_PROMPT_TEMPLATE.format(context=repair_context)
+
+        logger.info("Contract repair pass: invoking provider (no tools, single attempt)")
+        try:
+            repair_result = self.invoke_provider(
+                repair_prompt,
+                retry_timeout_minutes=2,
+                retry_delay=10,
+                allowed_tools=[],
+            )
+        except Exception as e:
+            logger.warning("Contract repair pass: provider call failed: %s", e)
+            return None, ExtractionQuality.FAILED, None
+
+        if repair_result.exit_code != 0 or not repair_result.stdout:
+            logger.warning(
+                "Contract repair pass: provider returned exit_code=%s, stdout_len=%d",
+                repair_result.exit_code,
+                len(repair_result.stdout) if repair_result.stdout else 0,
+            )
+            return None, ExtractionQuality.FAILED, None
+
+        repair_stdout = repair_result.stdout
+
+        # Extract contract from repair output
+        repair_parsed, repair_quality = _extract_validation_resolution(repair_stdout)
+
+        # Extract metrics from repair output
+        repair_metrics = extract_synthesis_metrics(repair_stdout)
+
+        logger.info(
+            "Contract repair pass result: resolution=%s quality=%s metrics=%s",
+            repair_parsed.get("resolution") if repair_parsed else None,
+            repair_quality.value,
+            "present" if repair_metrics else "absent",
+        )
+
+        return repair_parsed, repair_quality, repair_metrics
 
     def _save_synthesizer_record(
         self,

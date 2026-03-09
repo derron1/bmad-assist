@@ -97,7 +97,7 @@ No JSON here.
             result = extract_synthesis_metrics(output_without_markers)
 
         assert result is None
-        assert "Markers not found" in caplog.text
+        assert "Metrics extraction failed" in caplog.text
 
     def test_returns_none_on_invalid_json(self, caplog: LogCaptureFixture) -> None:
         """Returns None with warning when JSON is invalid."""
@@ -388,7 +388,7 @@ class TestLoggingExcerpt:
             extract_synthesis_metrics(output)
 
         # Check log message includes excerpt
-        assert "Markers not found" in caplog.text
+        assert "Metrics extraction failed" in caplog.text
         # Excerpt should be truncated to ~500 chars
         assert "A" * 500 in caplog.text
 
@@ -612,6 +612,365 @@ class TestCreateSynthesizerRecord:
         )
 
         assert record.execution.sequence_position == 4
+
+
+# ---------------------------------------------------------------------------
+# Backward scan fallback (Fix 4 regression tests)
+# ---------------------------------------------------------------------------
+
+_VALID_METRICS_JSON = """{
+  "quality": {
+    "actionable_ratio": 0.8,
+    "specificity_score": 0.7,
+    "evidence_quality": 0.6,
+    "follows_template": true,
+    "internal_consistency": 0.9
+  },
+  "consensus": {
+    "agreed_findings": 5,
+    "unique_findings": 2,
+    "disputed_findings": 1,
+    "missed_findings": 0,
+    "agreement_score": 0.625,
+    "false_positive_count": 0
+  }
+}"""
+
+
+class TestBackwardScanFallback:
+    """Tests for _try_json_backward_extraction and its integration."""
+
+    def test_fenced_json_near_end(self) -> None:
+        """JSON in a ```json fence near end is extracted without markers."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "## Synthesis Summary\n\n"
+            "All issues addressed.\n\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n"
+        )
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.8
+
+    def test_bare_json_near_end(self) -> None:
+        """Bare JSON object near end is extracted without markers."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "## Synthesis Summary\n\n"
+            "Review complete.\n\n"
+            f"{_VALID_METRICS_JSON}\n"
+        )
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.consensus is not None
+        assert result.consensus.agreement_score == 0.625
+
+    def test_no_json_still_returns_none(self, caplog: "LogCaptureFixture") -> None:
+        """No markers and no JSON anywhere → returns None."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = "## Summary\n\nPure text, no JSON.\n"
+        with caplog.at_level(logging.WARNING):
+            result = extract_synthesis_metrics(output)
+        assert result is None
+
+    def test_markers_invalid_json_fallback_to_tail(self) -> None:
+        """Markers present with bad JSON, valid JSON elsewhere → fallback recovers."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "<!-- METRICS_JSON_START -->\n"
+            "{ broken json }\n"
+            "<!-- METRICS_JSON_END -->\n\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n"
+        )
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.quality is not None
+
+    def test_large_output_with_trailing_commentary(self) -> None:
+        """Metrics JSON followed by 50k+ of trailing text is still found."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        trailing = "x" * 56000
+        output = (
+            "## Summary\n\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n"
+            f"\n{trailing}\n"
+        )
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.quality is not None
+
+    def test_max_backward_candidates_limit(self) -> None:
+        """Only the last _MAX_BACKWARD_CANDIDATES bare JSON objects are tried."""
+        from bmad_assist.validation.synthesis_parser import (
+            _MAX_BACKWARD_CANDIDATES,
+            _try_json_backward_extraction,
+        )
+
+        # Place valid metrics at the start as a bare JSON object (no fences),
+        # then N+1 unrelated bare JSON objects after it.
+        # The backward scan should only check the last N bare candidates
+        # (and no fences exist), so the valid one at the start is never reached.
+        unrelated = '{"unrelated": true}'
+        parts = [_VALID_METRICS_JSON + "\n"]
+        for _ in range(_MAX_BACKWARD_CANDIDATES + 1):
+            parts.append(f"\n{unrelated}\n")
+        output = "".join(parts)
+
+        result = _try_json_backward_extraction(output)
+        # Should not find metrics (all scanned candidates are unrelated)
+        assert result is None
+
+    def test_unrelated_json_ignored(self) -> None:
+        """JSON without 'quality' or 'consensus' keys is skipped."""
+        from bmad_assist.validation.synthesis_parser import _try_json_backward_extraction
+
+        output = '{"name": "test", "value": 42}\n'
+        result = _try_json_backward_extraction(output)
+        assert result is None
+
+
+class TestMarkdownFallback:
+    """Tests for heading-based markdown fallback."""
+
+    def test_markdown_fallback_recovers_follows_template(self) -> None:
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """## Synthesis Summary
+
+5 issues verified, 2 false positives dismissed, 3 changes applied.
+
+## Issues Verified
+
+### Critical
+- **Issue**: Missing idempotency guard
+
+## Issues Dismissed
+
+- **Claimed Issue**: Duplicate notification audit
+
+## Changes Applied
+
+**Location**: story.md - Acceptance Criteria
+"""
+        result = extract_synthesis_metrics(output)
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is True
+
+    def test_markdown_fallback_recovers_consensus_counts(self) -> None:
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """## Synthesis Summary
+
+9 issues verified, 3 false positives dismissed, 5 changes applied.
+
+## Issues Verified
+
+## Issues Dismissed
+
+## Changes Applied
+"""
+        result = extract_synthesis_metrics(output)
+
+        assert result is not None
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 9
+        assert result.consensus.false_positive_count == 3
+        assert result.consensus.agreement_score == pytest.approx(0.75)
+
+    def test_markdown_fallback_returns_none_for_unstructured_output(self) -> None:
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = "Plain prose with no headings, no JSON, and no recoverable structure."
+        result = extract_synthesis_metrics(output)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Layer 1.5: Post-contract fenced JSON recovery
+# ---------------------------------------------------------------------------
+
+
+class TestLayer15PostContractFencedJson:
+    """Tests for Layer 1.5: fenced JSON after VALIDATION_CONTRACT_END."""
+
+    def test_fenced_json_after_contract_end_extracted(self) -> None:
+        """Fenced JSON with correct keys immediately after contract end is extracted."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "<!-- VALIDATION_SYNTHESIS_START -->\n"
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: rework\n"
+            "verified_critical: 1\n"
+            "verified_high: 1\n"
+            "fixed_critical: 1\n"
+            "fixed_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 1\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n\n"
+            "## Synthesis Summary\n\nDone.\n"
+        )
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.8
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 5
+
+    def test_fenced_json_with_extra_keys_rejected(self) -> None:
+        """Fenced JSON with invented keys like story_id is rejected by Layer 1.5."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        bad_json = """{
+  "quality": {
+    "actionable_ratio": 0.8,
+    "specificity_score": 0.7,
+    "evidence_quality": 0.6,
+    "follows_template": true,
+    "internal_consistency": 0.9
+  },
+  "consensus": {
+    "agreed_findings": 5,
+    "unique_findings": 2,
+    "disputed_findings": 1,
+    "missed_findings": 0,
+    "agreement_score": 0.625,
+    "false_positive_count": 0
+  },
+  "story_id": "S-123"
+}"""
+        output = (
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: rework\n"
+            "verified_critical: 1\n"
+            "verified_high: 0\n"
+            "fixed_critical: 1\n"
+            "fixed_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 0\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n\n"
+            f"```json\n{bad_json}\n```\n"
+        )
+        # Layer 1.5 should reject due to extra keys, but backward scan (Layer 2)
+        # may still pick it up since it has quality/consensus keys.
+        # The important thing is Layer 1.5 specifically rejects it.
+        from bmad_assist.validation.synthesis_parser import (
+            _try_post_contract_fenced_json,
+        )
+
+        result = _try_post_contract_fenced_json(output)
+        assert result is None  # Rejected by strict key check
+
+    def test_fenced_json_too_far_from_contract_rejected(self) -> None:
+        """Fenced JSON more than 200 chars from contract end is not matched."""
+        from bmad_assist.validation.synthesis_parser import (
+            _try_post_contract_fenced_json,
+        )
+
+        gap = "x" * 250
+        output = (
+            "<!-- VALIDATION_CONTRACT_END -->\n"
+            f"{gap}\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n"
+        )
+        result = _try_post_contract_fenced_json(output)
+        assert result is None
+
+    def test_fenced_json_ignored_when_metrics_markers_present(self) -> None:
+        """When METRICS_JSON markers exist, Layer 1.5 is skipped entirely."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        # Markers present with broken JSON + fenced JSON after contract end
+        output = (
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: resolved\n"
+            "verified_critical: 0\n"
+            "verified_high: 0\n"
+            "fixed_critical: 0\n"
+            "fixed_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 0\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n\n"
+            f"```json\n{_VALID_METRICS_JSON}\n```\n\n"
+            "<!-- METRICS_JSON_START -->\n"
+            "{ broken json }\n"
+            "<!-- METRICS_JSON_END -->\n"
+        )
+        # The METRICS_JSON markers are present, so Layer 1.5 should NOT fire.
+        # Layer 1 tries markers and gets bad JSON.
+        # Layer 2 (backward scan) picks up the fenced JSON.
+        result = extract_synthesis_metrics(output)
+        # Should still recover via backward scan, but Layer 1.5 was not the path
+        assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# Contract block key validation
+# ---------------------------------------------------------------------------
+
+
+class TestContractBlockKeyValidation:
+    """Tests for contract block with wrong/invented keys."""
+
+    def test_contract_with_invented_keys_still_parses_if_valid_fields_present(
+        self,
+    ) -> None:
+        """Extra keys like story_id alongside valid keys -> parse succeeds."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "resolution: rework\n"
+            "verified_critical: 1\n"
+            "verified_high: 2\n"
+            "fixed_critical: 1\n"
+            "fixed_high: 1\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 1\n"
+            "story_id: S-123\n"
+            "validators_count: 4\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is not None
+        assert result["resolution"] == "rework"
+        assert result["verified_critical"] == 1
+        # Extra keys are present but don't cause failure
+        assert result.get("story_id") == "S-123"
+
+    def test_contract_missing_resolution_fails(self) -> None:
+        """Contract block without resolution key -> returns None."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "verified_critical: 1\n"
+            "verified_high: 2\n"
+            "fixed_critical: 1\n"
+            "fixed_high: 1\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 1\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is None
+
+    def test_contract_with_renamed_keys_and_no_valid_resolution_fails(self) -> None:
+        """Contract with only renamed keys and no valid resolution -> returns None."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "resolution: maybe\n"  # invalid resolution value
+            "critical_verified: 1\n"
+            "high_verified: 2\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is None
 
 
 # Type hints for fixtures

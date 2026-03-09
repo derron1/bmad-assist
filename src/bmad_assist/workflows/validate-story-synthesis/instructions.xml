@@ -96,6 +96,14 @@
       - Prepare METRICS_JSON quality and consensus values from your analysis
     </action>
     <critical>These computed values will be emitted FIRST in your output, before any prose.</critical>
+    <critical>Contract key rules:
+      - Copy these key names EXACTLY: resolution, verified_critical, verified_high, fixed_critical, fixed_high, remaining_critical, remaining_high
+      - Do NOT add extra keys (e.g., story_id, story_key, validators_count)
+      - Do NOT rename keys (e.g., critical_verified instead of verified_critical)
+      - Do NOT wrap METRICS_JSON in fenced code blocks — no ```json wrapper
+      - METRICS_JSON top-level keys must be exactly "quality" and "consensus" — no other keys
+      - If uncertain about any value, use 0 for counts and "halt" for resolution — never invent fields
+    </critical>
   </step>
 
   <step n="4" goal="Generate synthesis report">
@@ -196,7 +204,45 @@ remaining_high: {N}
 &lt;!-- VALIDATION_SYNTHESIS_END --&gt;
     </output-format>
 
-    <example title="Complete contract-first output">
+    <example title="Canonical contract and metrics blocks">
+&lt;!-- VALIDATION_CONTRACT_START --&gt;
+resolution: rework
+verified_critical: 1
+verified_high: 2
+fixed_critical: 1
+fixed_high: 1
+remaining_critical: 0
+remaining_high: 1
+&lt;!-- VALIDATION_CONTRACT_END --&gt;
+
+&lt;!-- METRICS_JSON_START --&gt;
+{
+  "quality": {
+    "actionable_ratio": 0.85,
+    "specificity_score": 0.78,
+    "evidence_quality": 0.80,
+    "follows_template": true,
+    "internal_consistency": 0.90
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.75,
+    "false_positive_count": 1
+  }
+}
+&lt;!-- METRICS_JSON_END --&gt;
+    </example>
+
+    <critical title="Invalid output patterns — these will cause extraction failure">
+      INVALID contract keys: story_id, story_key, validators_count, critical_verified, high_remaining
+      INVALID metrics format: ```json { "quality": ... } ``` (do NOT use fenced code blocks for METRICS_JSON)
+      INVALID metrics keys: Any top-level key other than "quality" and "consensus" (e.g., "summary", "overview")
+    </critical>
+
+    <example title="Full output with prose and patch">
 &lt;!-- VALIDATION_SYNTHESIS_START --&gt;
 &lt;!-- VALIDATION_CONTRACT_START --&gt;
 resolution: rework
@@ -231,45 +277,13 @@ remaining_high: 1
 ## Synthesis Summary
 3 issues verified (1 critical, 2 high), 1 false positive dismissed, 2 changes applied to story file.
 
-## Validations Quality
-- Validator A: 8/10 - thorough coverage of acceptance criteria
-- Validator B: 7/10 - good technical depth, one false positive
-Summary: 7.5/10
-
-## Issues Verified (by severity)
-
-### Critical
-- **Issue**: Missing idempotency guard for payment processing | **Source**: Validator A, B | **Fix**: Added idempotency key requirement to AC
-
-### High
-- **Issue**: No timeout specified for external API calls | **Source**: Validator A | **Fix**: Added 30s timeout to technical constraints
-- **Issue**: Missing rollback strategy for partial failures | **Source**: Validator B | **Fix**: Deferred (remaining high)
-
-## Issues Dismissed
-- **Claimed Issue**: Missing pagination for results | **Raised by**: Validator B | **Dismissal Reason**: Story scope is single-item lookup, pagination not applicable
-
-## Deep Verify Integration
-Deep Verify did not produce findings for this story.
-
-## Changes Applied
-**Location**: story.md - Acceptance Criteria
-**Change**: Added idempotency guard requirement
-**Before**:
-```
-- Payment request is processed successfully
-```
-**After**:
-```
-- Payment request includes idempotency key
-- Duplicate requests with same key return original result
-```
+[... prose sections: Validations Quality, Issues Verified, Issues Dismissed, Deep Verify Integration, Changes Applied ...]
 
 &lt;!-- STORY_PATCH_START heading="## acceptance criteria" --&gt;
 ## Acceptance Criteria
 - Payment request includes idempotency key
 - Duplicate requests with same key return original result
 - External API calls timeout after 30 seconds
-- Failed payments return appropriate error codes
 &lt;!-- STORY_PATCH_END --&gt;
 
 &lt;!-- VALIDATION_SYNTHESIS_END --&gt;
