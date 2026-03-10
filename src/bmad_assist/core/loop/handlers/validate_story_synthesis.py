@@ -21,7 +21,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from bmad_assist.compiler import compile_workflow
 from bmad_assist.compiler.types import CompilerContext
@@ -62,6 +62,29 @@ logger = logging.getLogger(__name__)
 # Markers for structured contract block in validation synthesis output
 _CONTRACT_START = "<!-- VALIDATION_CONTRACT_START -->"
 _CONTRACT_END = "<!-- VALIDATION_CONTRACT_END -->"
+
+# Bare keywords for detecting partial/malformed contract attempts.
+# Either keyword appearing means the LLM attempted a contract block.
+_CONTRACT_KW_START = "VALIDATION_CONTRACT_START"
+_CONTRACT_KW_END = "VALIDATION_CONTRACT_END"
+
+
+def _contract_marker_state(text: str) -> Literal["complete", "partial", "none"]:
+    """Classify contract marker presence in synthesis output.
+
+    Returns:
+        "complete" – both exact start and end markers found
+        "partial"  – at least one bare keyword found, but not a complete pair
+        "none"     – no contract-related markers at all
+    """
+    has_exact_start = _CONTRACT_START in text
+    has_exact_end = _CONTRACT_END in text
+    if has_exact_start and has_exact_end:
+        return "complete"
+    if _CONTRACT_KW_START in text or _CONTRACT_KW_END in text:
+        return "partial"
+    return "none"
+
 
 # Regex patterns for layered resolution extraction in validate_story_synthesis.
 # (Same logic as code_review_synthesis but applied to validation synthesis output.)
@@ -126,15 +149,24 @@ def _build_repair_context(extracted_synthesis: str) -> str:
     """
     parts: list[str] = []
 
-    # 1. Raw contract block if present
-    start_idx = extracted_synthesis.find(_CONTRACT_START)
-    if start_idx != -1:
+    # 1. Raw contract block if present (exact or partial markers)
+    marker_state = _contract_marker_state(extracted_synthesis)
+    if marker_state == "complete":
+        start_idx = extracted_synthesis.find(_CONTRACT_START)
         end_idx = extracted_synthesis.find(_CONTRACT_END, start_idx)
-        if end_idx != -1:
-            block = extracted_synthesis[
-                start_idx : end_idx + len(_CONTRACT_END)
-            ]
-            parts.append(f"[Original contract block]\n{block}")
+        block = extracted_synthesis[start_idx : end_idx + len(_CONTRACT_END)]
+        parts.append(f"[Original contract block]\n{block}")
+    elif marker_state == "partial":
+        # Find the first occurrence of either bare keyword
+        kw_start = extracted_synthesis.find(_CONTRACT_KW_START)
+        kw_end = extracted_synthesis.find(_CONTRACT_KW_END)
+        # Use whichever appears first (or only one present)
+        candidates = [i for i in (kw_start, kw_end) if i != -1]
+        kw_idx = min(candidates)
+        partial_block = extracted_synthesis[kw_idx : kw_idx + 500]
+        # Label based on which keyword was found at kw_idx
+        label = "partial start" if kw_idx == kw_start else "partial end"
+        parts.append(f"[Malformed contract block ({label})]\n{partial_block}")
 
     # 2. Synthesis Summary section
     summary_match = _SUMMARY_SECTION_RE.search(extracted_synthesis)
@@ -951,15 +983,14 @@ class ValidateStorySynthesisHandler(BaseHandler):
 
                 # Phase 1.5: Contract repair if main synthesis was substantial
                 # but contract/metrics extraction failed
-                markers_present = (
-                    _CONTRACT_START in extracted_synthesis
-                    and _CONTRACT_END in extracted_synthesis
-                )
+                marker_state = _contract_marker_state(extracted_synthesis)
                 needs_contract_repair = (
-                    # Case 1: markers present but extraction was not STRICT
-                    (markers_present and res_quality != ExtractionQuality.STRICT)
-                    # Case 2: no markers and extraction failed entirely
-                    or (res_quality == ExtractionQuality.FAILED and res_parsed is None)
+                    # complete markers but extraction was not STRICT (malformed block content)
+                    (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
+                    # partial markers (malformed/truncated) — repair proactively
+                    or marker_state == "partial"
+                    # no markers at all and extraction failed entirely
+                    or (marker_state == "none" and res_quality == ExtractionQuality.FAILED and res_parsed is None)
                 )
                 needs_metrics_repair = metrics is None
                 needs_repair = (

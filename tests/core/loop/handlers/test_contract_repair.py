@@ -16,7 +16,10 @@ import pytest
 
 from bmad_assist.core.loop.handlers.validate_story_synthesis import (
     _CONTRACT_END,
+    _CONTRACT_KW_END,
+    _CONTRACT_KW_START,
     _CONTRACT_START,
+    _contract_marker_state,
     _extract_validation_resolution,
 )
 from bmad_assist.core.loop.synthesis_contract import ExtractionQuality
@@ -273,3 +276,113 @@ class TestBuildRepairContext:
         context = _build_repair_context("Some synthesis content here.")
         assert "[Prose excerpt]" in context
         assert "Some synthesis content here." in context
+
+    def test_includes_malformed_contract_block_for_partial_markers(self) -> None:
+        """Repair context includes malformed block when only partial markers present."""
+        from bmad_assist.core.loop.handlers.validate_story_synthesis import (
+            _build_repair_context,
+        )
+
+        context = _build_repair_context(_SYNTHESIS_PARTIAL_START)
+        assert "[Malformed contract block (partial start)]" in context
+        assert "VALIDATION_CONTRACT_START" in context
+        assert "story_file" in context  # The wrong keys should be visible
+
+
+# ---------------------------------------------------------------------------
+# Fixtures: partial/malformed marker synthesis outputs
+# ---------------------------------------------------------------------------
+
+_SYNTHESIS_PARTIAL_START = (
+    "<!-- VALIDATION_CONTRACT_START\n"
+    "story_file: stories/s42.md\n"
+    "validator_ids: arch, security\n"
+    "critical_verified: 2\n"
+    "\n"
+    "## Synthesis Summary\n"
+    "2 issues verified across validators.\n\n"
+    "### Critical\n"
+    "- **Missing auth guard** | **Source**: arch, security | **Fix**: Added guard\n\n"
+    "## Changes Applied\n"
+    "Applied one change to story file.\n"
+    + ("x" * 200)  # Ensure > 200 chars
+)
+
+_SYNTHESIS_PARTIAL_END_ONLY = (
+    "## Synthesis Summary\n"
+    "All issues resolved.\n\n"
+    "resolution: resolved\n"
+    "<!-- VALIDATION_CONTRACT_END\n"
+    + ("x" * 200)
+)
+
+
+class TestContractMarkerState:
+    """Tests for _contract_marker_state helper."""
+
+    def test_marker_state_complete(self) -> None:
+        """Both exact markers -> complete."""
+        text = (
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: rework\n"
+            "<!-- VALIDATION_CONTRACT_END -->\n"
+        )
+        assert _contract_marker_state(text) == "complete"
+
+    def test_marker_state_partial_start(self) -> None:
+        """Bare start keyword without closing --> -> partial."""
+        assert _contract_marker_state(_SYNTHESIS_PARTIAL_START) == "partial"
+
+    def test_marker_state_partial_end_only(self) -> None:
+        """Bare end keyword only -> partial."""
+        assert _contract_marker_state(_SYNTHESIS_PARTIAL_END_ONLY) == "partial"
+
+    def test_marker_state_none(self) -> None:
+        """No contract keywords at all -> none."""
+        assert _contract_marker_state("Just some plain synthesis text.") == "none"
+
+    def test_marker_state_exact_start_bare_end_is_partial(self) -> None:
+        """Exact start marker + bare end keyword (no -->) -> partial, not complete."""
+        text = (
+            "<!-- VALIDATION_CONTRACT_START -->\n"
+            "resolution: rework\n"
+            "<!-- VALIDATION_CONTRACT_END\n"  # Missing -->
+        )
+        assert _contract_marker_state(text) == "partial"
+
+
+class TestPartialMarkerRepairTrigger:
+    """Tests for repair trigger with partial/malformed markers."""
+
+    def test_repair_triggered_for_partial_start_markers(self) -> None:
+        """Partial start marker with DEGRADED fallback -> repair triggers."""
+        res_parsed, res_quality = _extract_validation_resolution(
+            _SYNTHESIS_PARTIAL_START
+        )
+
+        marker_state = _contract_marker_state(_SYNTHESIS_PARTIAL_START)
+        needs_contract_repair = (
+            (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
+            or marker_state == "partial"
+            or (marker_state == "none" and res_quality == ExtractionQuality.FAILED and res_parsed is None)
+        )
+
+        assert marker_state == "partial"
+        assert res_quality != ExtractionQuality.STRICT
+        assert needs_contract_repair is True
+
+    def test_repair_triggered_for_partial_end_only_markers(self) -> None:
+        """Partial end-only marker -> repair triggers."""
+        res_parsed, res_quality = _extract_validation_resolution(
+            _SYNTHESIS_PARTIAL_END_ONLY
+        )
+
+        marker_state = _contract_marker_state(_SYNTHESIS_PARTIAL_END_ONLY)
+        needs_contract_repair = (
+            (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
+            or marker_state == "partial"
+            or (marker_state == "none" and res_quality == ExtractionQuality.FAILED and res_parsed is None)
+        )
+
+        assert marker_state == "partial"
+        assert needs_contract_repair is True
