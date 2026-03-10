@@ -86,6 +86,23 @@ def _contract_marker_state(text: str) -> Literal["complete", "partial", "none"]:
     return "none"
 
 
+def _most_repair_worthy_marker_state(
+    *states: Literal["complete", "partial", "none"],
+) -> Literal["complete", "partial", "none"]:
+    """Return the marker state that most strongly indicates repair is needed.
+
+    Repair priority: partial > complete > none.
+    - "partial" = malformed markers detected, definitely needs repair.
+    - "complete" = markers present but content may be invalid.
+    - "none" = no contract attempt detected at all.
+    """
+    if "partial" in states:
+        return "partial"
+    if "complete" in states:
+        return "complete"
+    return "none"
+
+
 # Regex patterns for layered resolution extraction in validate_story_synthesis.
 # (Same logic as code_review_synthesis but applied to validation synthesis output.)
 _HEADER_RESOLUTION_RE = re.compile(
@@ -139,31 +156,35 @@ Here is the relevant context from your synthesis report:
 """
 
 
-def _build_repair_context(extracted_synthesis: str) -> str:
+def _build_repair_context(extracted_synthesis: str, raw_stdout: str = "") -> str:
     """Build targeted context excerpt for the repair prompt.
 
     Extracts:
-    1. Raw contract block if markers present
+    1. Raw contract block if markers present (from raw_stdout preferentially,
+       since extract_synthesis_report() may strip malformed markers)
     2. Synthesis Summary section if identifiable
     3. First ~1500 chars of prose as general context
     """
     parts: list[str] = []
 
-    # 1. Raw contract block if present (exact or partial markers)
-    marker_state = _contract_marker_state(extracted_synthesis)
+    # 1. Raw contract block if present (exact or partial markers).
+    # Prefer raw_stdout as the marker source: extract_synthesis_report()
+    # can strip malformed markers that are still visible in raw output.
+    marker_source = raw_stdout if raw_stdout else extracted_synthesis
+    marker_state = _contract_marker_state(marker_source)
     if marker_state == "complete":
-        start_idx = extracted_synthesis.find(_CONTRACT_START)
-        end_idx = extracted_synthesis.find(_CONTRACT_END, start_idx)
-        block = extracted_synthesis[start_idx : end_idx + len(_CONTRACT_END)]
+        start_idx = marker_source.find(_CONTRACT_START)
+        end_idx = marker_source.find(_CONTRACT_END, start_idx)
+        block = marker_source[start_idx : end_idx + len(_CONTRACT_END)]
         parts.append(f"[Original contract block]\n{block}")
     elif marker_state == "partial":
         # Find the first occurrence of either bare keyword
-        kw_start = extracted_synthesis.find(_CONTRACT_KW_START)
-        kw_end = extracted_synthesis.find(_CONTRACT_KW_END)
+        kw_start = marker_source.find(_CONTRACT_KW_START)
+        kw_end = marker_source.find(_CONTRACT_KW_END)
         # Use whichever appears first (or only one present)
         candidates = [i for i in (kw_start, kw_end) if i != -1]
         kw_idx = min(candidates)
-        partial_block = extracted_synthesis[kw_idx : kw_idx + 500]
+        partial_block = marker_source[kw_idx : kw_idx + 500]
         # Label based on which keyword was found at kw_idx
         label = "partial start" if kw_idx == kw_start else "partial end"
         parts.append(f"[Malformed contract block ({label})]\n{partial_block}")
@@ -983,7 +1004,14 @@ class ValidateStorySynthesisHandler(BaseHandler):
 
                 # Phase 1.5: Contract repair if main synthesis was substantial
                 # but contract/metrics extraction failed
-                marker_state = _contract_marker_state(extracted_synthesis)
+                marker_state_raw = _contract_marker_state(result.stdout)
+                marker_state_extracted = _contract_marker_state(extracted_synthesis)
+                # Use the signal most likely to trigger needed repair.
+                # If raw stdout has partial markers that extraction stripped,
+                # we still need repair.
+                marker_state = _most_repair_worthy_marker_state(
+                    marker_state_raw, marker_state_extracted,
+                )
                 needs_contract_repair = (
                     # complete markers but extraction was not STRICT (malformed block content)
                     (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
@@ -1006,7 +1034,9 @@ class ValidateStorySynthesisHandler(BaseHandler):
                         needs_metrics_repair,
                     )
                     repair_parsed, repair_quality, repair_metrics = (
-                        self._attempt_contract_repair(extracted_synthesis)
+                        self._attempt_contract_repair(
+                            extracted_synthesis, raw_stdout=result.stdout,
+                        )
                     )
                     if needs_contract_repair and repair_parsed is not None:
                         res_parsed = repair_parsed
@@ -1132,6 +1162,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
     def _attempt_contract_repair(
         self,
         extracted_synthesis: str,
+        raw_stdout: str = "",
     ) -> tuple[dict[str, Any] | None, ExtractionQuality, "SynthesisMetrics | None"]:
         """Attempt a short follow-up LLM call to recover contract + metrics blocks.
 
@@ -1144,7 +1175,7 @@ class ValidateStorySynthesisHandler(BaseHandler):
         """
         from bmad_assist.validation.synthesis_parser import SynthesisMetrics
 
-        repair_context = _build_repair_context(extracted_synthesis)
+        repair_context = _build_repair_context(extracted_synthesis, raw_stdout=raw_stdout)
         repair_prompt = _REPAIR_PROMPT_TEMPLATE.format(context=repair_context)
 
         logger.info("Contract repair pass: invoking provider (no tools, single attempt)")

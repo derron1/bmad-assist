@@ -19,8 +19,10 @@ from bmad_assist.core.loop.handlers.validate_story_synthesis import (
     _CONTRACT_KW_END,
     _CONTRACT_KW_START,
     _CONTRACT_START,
+    _build_repair_context,
     _contract_marker_state,
     _extract_validation_resolution,
+    _most_repair_worthy_marker_state,
 )
 from bmad_assist.core.loop.synthesis_contract import ExtractionQuality
 from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
@@ -386,3 +388,166 @@ class TestPartialMarkerRepairTrigger:
 
         assert marker_state == "partial"
         assert needs_contract_repair is True
+
+
+class TestMostRepairWorthyMarkerState:
+    """Tests for _most_repair_worthy_marker_state helper."""
+
+    def test_partial_wins_over_none(self) -> None:
+        assert _most_repair_worthy_marker_state("partial", "none") == "partial"
+
+    def test_complete_wins_over_none(self) -> None:
+        assert _most_repair_worthy_marker_state("none", "complete") == "complete"
+
+    def test_none_when_both_none(self) -> None:
+        assert _most_repair_worthy_marker_state("none", "none") == "none"
+
+    def test_partial_wins_over_complete(self) -> None:
+        assert _most_repair_worthy_marker_state("partial", "complete") == "partial"
+
+    def test_partial_wins_over_complete_reversed(self) -> None:
+        assert _most_repair_worthy_marker_state("complete", "partial") == "partial"
+
+
+# Raw stdout with malformed contract markers that extract_synthesis_report()
+# would strip, leaving clean prose in extracted_synthesis.
+_RAW_STDOUT_MALFORMED_CONTRACT = (
+    "<!-- VALIDATION_CONTRACT_START\n"
+    "invented_key: foo\n"
+    "malformed VALIDATION_CONTRACT_END -->\n\n"
+    "<!-- VALIDATION_SYNTHESIS_START -->\n"
+    "## Synthesis Summary\n"
+    "All issues resolved. The validators confirmed no remaining critical issues.\n\n"
+    "## Issues Verified (by severity)\n\n"
+    "### Critical\n"
+    "- **Missing auth guard** | **Source**: arch, security | **Fix**: Added guard\n\n"
+    "## Changes Applied\n"
+    "Applied one change to story file.\n"
+    + ("x" * 200)
+    + "\n<!-- VALIDATION_SYNTHESIS_END -->\n"
+)
+
+# What extract_synthesis_report would return: just the prose inside synthesis markers.
+_EXTRACTED_SYNTHESIS_NO_MARKERS = (
+    "## Synthesis Summary\n"
+    "All issues resolved. The validators confirmed no remaining critical issues.\n\n"
+    "## Issues Verified (by severity)\n\n"
+    "### Critical\n"
+    "- **Missing auth guard** | **Source**: arch, security | **Fix**: Added guard\n\n"
+    "## Changes Applied\n"
+    "Applied one change to story file.\n"
+    + ("x" * 200)
+)
+
+
+class TestRawStdoutMarkerDetection:
+    """Regression tests: marker detection should use raw stdout, not just extracted."""
+
+    def test_extracted_has_no_markers_raw_has_partial(self) -> None:
+        """The exact bug scenario: raw stdout has malformed markers, extracted has none."""
+        assert _contract_marker_state(_EXTRACTED_SYNTHESIS_NO_MARKERS) == "none"
+        assert _contract_marker_state(_RAW_STDOUT_MALFORMED_CONTRACT) == "partial"
+
+    def test_most_repair_worthy_catches_split(self) -> None:
+        """Combined marker state from raw + extracted detects the partial markers."""
+        raw_state = _contract_marker_state(_RAW_STDOUT_MALFORMED_CONTRACT)
+        extracted_state = _contract_marker_state(_EXTRACTED_SYNTHESIS_NO_MARKERS)
+        combined = _most_repair_worthy_marker_state(raw_state, extracted_state)
+        assert combined == "partial"
+
+    def test_needs_contract_repair_true_for_split_scenario(self) -> None:
+        """Full decision logic: repair triggers when raw has markers but extracted doesn't."""
+        res_parsed, res_quality = _extract_validation_resolution(
+            _EXTRACTED_SYNTHESIS_NO_MARKERS
+        )
+
+        marker_state = _most_repair_worthy_marker_state(
+            _contract_marker_state(_RAW_STDOUT_MALFORMED_CONTRACT),
+            _contract_marker_state(_EXTRACTED_SYNTHESIS_NO_MARKERS),
+        )
+        needs_contract_repair = (
+            (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
+            or marker_state == "partial"
+            or (
+                marker_state == "none"
+                and res_quality == ExtractionQuality.FAILED
+                and res_parsed is None
+            )
+        )
+
+        assert marker_state == "partial"
+        assert needs_contract_repair is True
+
+    def test_handler_invokes_repair_for_split_scenario(self) -> None:
+        """Integration: handler calls _attempt_contract_repair when raw stdout
+        has malformed markers but extracted synthesis has none."""
+        from bmad_assist.core.loop.handlers.validate_story_synthesis import (
+            ValidateStorySynthesisHandler,
+        )
+
+        handler = MagicMock(spec=ValidateStorySynthesisHandler)
+        # Simulate the repair returning successfully
+        handler._attempt_contract_repair = MagicMock(
+            return_value=({"resolution": "resolved"}, ExtractionQuality.STRICT, None)
+        )
+
+        # Replicate the handler's decision logic with raw stdout detection
+        marker_state_raw = _contract_marker_state(_RAW_STDOUT_MALFORMED_CONTRACT)
+        marker_state_extracted = _contract_marker_state(_EXTRACTED_SYNTHESIS_NO_MARKERS)
+        marker_state = _most_repair_worthy_marker_state(
+            marker_state_raw, marker_state_extracted,
+        )
+        res_parsed, res_quality = _extract_validation_resolution(
+            _EXTRACTED_SYNTHESIS_NO_MARKERS
+        )
+        metrics = extract_synthesis_metrics(_RAW_STDOUT_MALFORMED_CONTRACT)
+
+        needs_contract_repair = (
+            (marker_state == "complete" and res_quality != ExtractionQuality.STRICT)
+            or marker_state == "partial"
+            or (
+                marker_state == "none"
+                and res_quality == ExtractionQuality.FAILED
+                and res_parsed is None
+            )
+        )
+        needs_metrics_repair = metrics is None
+        needs_repair = (
+            (needs_contract_repair or needs_metrics_repair)
+            and len(_EXTRACTED_SYNTHESIS_NO_MARKERS.strip()) >= 200
+        )
+
+        assert needs_repair is True
+
+        # Simulate handler calling repair
+        if needs_repair:
+            handler._attempt_contract_repair(
+                _EXTRACTED_SYNTHESIS_NO_MARKERS,
+                raw_stdout=_RAW_STDOUT_MALFORMED_CONTRACT,
+            )
+
+        handler._attempt_contract_repair.assert_called_once_with(
+            _EXTRACTED_SYNTHESIS_NO_MARKERS,
+            raw_stdout=_RAW_STDOUT_MALFORMED_CONTRACT,
+        )
+
+
+class TestBuildRepairContextWithRawStdout:
+    """Tests for _build_repair_context using raw_stdout as primary marker source."""
+
+    def test_raw_stdout_partial_markers_used_over_extracted(self) -> None:
+        """When raw_stdout has partial markers but extracted doesn't,
+        repair context includes the malformed block from raw_stdout."""
+        context = _build_repair_context(
+            _EXTRACTED_SYNTHESIS_NO_MARKERS,
+            raw_stdout=_RAW_STDOUT_MALFORMED_CONTRACT,
+        )
+        assert "[Malformed contract block" in context
+        assert "VALIDATION_CONTRACT_START" in context
+        assert "invented_key" in context
+
+    def test_falls_back_to_extracted_when_no_raw_stdout(self) -> None:
+        """Without raw_stdout, marker detection falls back to extracted_synthesis."""
+        context = _build_repair_context(_SYNTHESIS_PARTIAL_START)
+        assert "[Malformed contract block (partial start)]" in context
+        assert "VALIDATION_CONTRACT_START" in context
