@@ -18,6 +18,7 @@ See: src/bmad_assist/compiler/workflow_discovery.py for the new discovery system
 
 """
 
+import json
 import logging
 import re
 import time
@@ -26,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import yaml
 from jinja2 import Template
@@ -141,6 +143,9 @@ class BaseHandler(ABC):
         self.config = config
         self.project_path = project_path
         self._handler_config: HandlerConfig | None = None
+        self._compile_ms: int | None = None  # Set by render_prompt(); cleared by execute()
+        self._invoke_ms: int | None = None   # Set by invoke_provider(); cleared by execute()
+        self._trace_enabled: bool = self._resolve_trace_enabled()
 
     @property
     @abstractmethod
@@ -283,9 +288,13 @@ class BaseHandler(ABC):
             ConfigError: If workflow compilation fails.
 
         """
+        self._compile_ms = None
+        _compile_t0 = time.perf_counter()
+
         # Try compiler
         compiled_prompt = self._try_compile_workflow(state)
         if compiled_prompt is not None:
+            self._compile_ms = int((time.perf_counter() - _compile_t0) * 1000)
             return compiled_prompt
 
         # Compiler failed - give clear error message
@@ -660,6 +669,9 @@ class BaseHandler(ABC):
             ProviderExitCodeError: If all retry attempts within timeout fail.
 
         """
+        self._invoke_ms = None
+        _invoke_t0 = time.perf_counter()
+
         provider = self.get_provider()
         display_model = self.get_model()  # For logging (prefers model_name)
         cli_model = self.get_cli_model()  # For actual CLI invocation (always model)
@@ -792,6 +804,9 @@ class BaseHandler(ABC):
                             "returning result as-is",
                             first_attempt_reason,
                         )
+                        self._invoke_ms = int((time.perf_counter() - _invoke_t0) * 1000)
+                        if logger.isEnabledFor(logging.DEBUG):
+                            self._write_provider_trace(result, prompt)
                         return result
 
                     guard.reset_for_retry()
@@ -835,6 +850,9 @@ class BaseHandler(ABC):
                             first_attempt_reason,
                         )
 
+                self._invoke_ms = int((time.perf_counter() - _invoke_t0) * 1000)
+                if self._trace_enabled:
+                    self._write_provider_trace(result, prompt)
                 return result
 
             except ProviderExitCodeError as e:
@@ -881,6 +899,11 @@ class BaseHandler(ABC):
         """
         from bmad_assist.core.io import save_prompt
 
+        # Reset split timing at execute() start so stale values from a previous
+        # invocation (long-lived handler instances) never leak into outputs.
+        self._compile_ms = None
+        self._invoke_ms = None
+
         # Capture start time for timing tracking
         start_time = datetime.now(UTC) if self.track_timing else None
 
@@ -926,6 +949,7 @@ class BaseHandler(ABC):
                     "response": result.stdout,
                     "model": result.model,
                     "duration_ms": result.duration_ms,
+                    **self._timing_outputs(),
                 }
                 if term_metadata:
                     outputs["termination_metadata"] = term_metadata
@@ -1017,3 +1041,87 @@ class BaseHandler(ABC):
             )
         except Exception as e:
             logger.warning("Failed to save timing for %s: %s", self.timing_workflow_id, e)
+
+    def _timing_outputs(self) -> dict[str, int]:
+        """Return compile_ms/invoke_ms as output keys if captured since last reset.
+
+        Safe to call even if render_prompt()/invoke_provider() were not called
+        (e.g., failure path) — returns only keys that were measured.
+
+        Returns:
+            Dict with 0–2 keys: "compile_ms" and/or "invoke_ms".
+
+        """
+        out: dict[str, int] = {}
+        if self._compile_ms is not None:
+            out["compile_ms"] = self._compile_ms
+        if self._invoke_ms is not None:
+            out["invoke_ms"] = self._invoke_ms
+        return out
+
+    def _resolve_trace_enabled(self) -> bool:
+        """Determine if provider traces should be written.
+
+        Resolution order (first match wins):
+
+        1. ``BMAD_PROVIDER_TRACE`` env var — explicit override.
+           ``"1"`` forces traces on regardless of ``--debug``.
+           ``"0"`` forces traces off regardless of ``--debug``.
+        2. Current DEBUG logging state **at handler construction time**.
+
+        The flag is captured once at construction so that runtime log-level
+        changes do not suppress traces for runs that started in debug mode.
+
+        Scope: process-global (env var), not project-scoped.
+        """
+        import os
+
+        env_val = os.environ.get("BMAD_PROVIDER_TRACE")
+        if env_val is not None:
+            return env_val == "1"
+        return logger.isEnabledFor(logging.DEBUG)
+
+    def _write_provider_trace(self, result: ProviderResult, prompt: str) -> None:
+        """Write a per-invocation phase-level summary trace to disk (debug only).
+
+        Phase-level summary artifact. Complements DebugJsonLogger (raw SDK message
+        streams written to ~/.bmad-assist/debug/json/) — does not replace it.
+
+        Content: single JSON line with prompt/response sizes, duration,
+        termination reason, and timestamp.
+
+        Path: <project_path>/.bmad-assist/debug/provider-<phase>-<ts>-<uid6>.jsonl
+
+        The 6-char UUID suffix ensures uniqueness across retries and concurrent
+        invocations at the same second.
+
+        Errors in trace writing (OSError, TypeError, ValueError) are caught and
+        suppressed — a debug-only artifact must never affect the phase.
+
+        Args:
+            result: Provider result from the completed invocation.
+            prompt: Rendered prompt string used for the invocation.
+
+        """
+        try:
+            ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+            uid6 = uuid4().hex[:6]
+            debug_dir = self.project_path / ".bmad-assist" / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            trace_path = debug_dir / f"provider-{self.phase_name}-{ts}-{uid6}.jsonl"
+
+            record = {
+                "phase": self.phase_name,
+                "model": result.model,
+                "prompt_tokens": len(prompt) // 4,
+                "response_tokens": len(result.stdout) // 4,
+                "duration_ms": result.duration_ms,
+                "termination_reason": result.termination_reason,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            with open(trace_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+
+            logger.debug("Wrote provider trace: %s", trace_path)
+        except (OSError, TypeError, ValueError) as e:
+            logger.debug("Provider trace write failed (non-fatal): %s", e)

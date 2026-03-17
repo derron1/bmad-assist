@@ -217,6 +217,31 @@ class TestClaudeSDKProviderInvoke:
 
             assert result.stdout == "Hello response"
 
+    def test_invoke_can_disable_completion_phrase_termination(
+        self,
+        provider: ClaudeSDKProvider,
+        mock_result_message: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Patch compilation can opt out of phrase-based stream termination."""
+        from claude_agent_sdk import AssistantMessage, TextBlock
+
+        messages = [
+            AssistantMessage(content=[TextBlock(text="task is complete")], model="sonnet"),
+            AssistantMessage(
+                content=[TextBlock(text="<transformed-document>ok</transformed-document>")],
+                model="sonnet",
+            ),
+            mock_result_message,
+        ]
+
+        monkeypatch.setenv("BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION", "1")
+
+        with _patch_sdk_client(messages):
+            result = provider.invoke("Hello")
+
+        assert "<transformed-document>ok</transformed-document>" in result.stdout
+
     def test_invoke_stderr_is_empty(
         self,
         provider: ClaudeSDKProvider,

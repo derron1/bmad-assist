@@ -67,6 +67,8 @@ class PhaseEvent(BaseModel):
     status: PhaseStatus | None = None  # success/error/timeout
     error_type: str | None = None
     termination_metadata: dict[str, Any] | None = None  # opaque termination data (guard stats, etc.)
+    compile_ms: int | None = None  # Time spent compiling the workflow prompt
+    invoke_ms: int | None = None   # Time spent invoking the provider
 
 
 class PhaseInvocation(BaseModel):
@@ -81,6 +83,8 @@ class PhaseInvocation(BaseModel):
     status: PhaseStatus
     error_type: str | None = None
     provider_count: int = 1  # Actual LLM invocations (>1 for multi-LLM phases)
+    compile_ms: int | None = None  # Time spent compiling the workflow prompt
+    invoke_ms: int | None = None   # Time spent invoking the provider
 
 
 class CurrentPhase(BaseModel):

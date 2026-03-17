@@ -52,6 +52,7 @@ from bmad_assist.providers.base import (
 from bmad_assist.providers.tool_guard import build_termination_fields
 
 logger = logging.getLogger(__name__)
+_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV = "BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION"
 
 # Supported short model names accepted by Claude Code CLI
 SUPPORTED_MODELS: frozenset[str] = frozenset({"opus", "sonnet", "haiku"})
@@ -499,15 +500,19 @@ class ClaudeSubprocessProvider(BaseProvider):
                     "BMAD Method Quality Competition v1.0",
                 ]
 
-                # Completion phrases that indicate task is done
-                completion_phrases = [
-                    "successfully completed",
-                    "task is done",
-                    "task is complete",
-                    "synthesis complete",
-                    "review complete",
-                    "validation complete",
-                ]
+                # Completion phrases are useful for final report workflows, but unsafe
+                # for patch/template compilation where they can appear before the
+                # transformed document is fully emitted.
+                completion_phrases: list[str] = []
+                if os.environ.get(_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV) != "1":
+                    completion_phrases = [
+                        "successfully completed",
+                        "task is done",
+                        "task is complete",
+                        "synthesis complete",
+                        "review complete",
+                        "validation complete",
+                    ]
 
                 for line in iter(stream.readline, ""):
                     raw_lines.append(line)

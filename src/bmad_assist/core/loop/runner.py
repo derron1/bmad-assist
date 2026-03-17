@@ -1073,6 +1073,8 @@ def _run_loop_body(
                 )
 
                 _pcount = (len(config.providers.multi) + 1) if phase_name.lower() in _MULTI_PHASES else 1
+                _compile_ms = result.outputs.get("compile_ms") if result.outputs else None
+                _invoke_ms = result.outputs.get("invoke_ms") if result.outputs else None
                 run_log.phases.append(
                     PhaseInvocation(
                         phase=phase_name,
@@ -1084,6 +1086,8 @@ def _run_loop_body(
                         status=phase_status,
                         error_type=result.error[:100] if result.error else None,
                         provider_count=_pcount,
+                        compile_ms=_compile_ms,
+                        invoke_ms=_invoke_ms,
                     )
                 )
                 # Extract termination_metadata from phase outputs (if guard was active)
@@ -1105,6 +1109,8 @@ def _run_loop_body(
                         status=phase_status,
                         error_type=result.error[:100] if result.error else None,
                         termination_metadata=term_metadata,
+                        compile_ms=_compile_ms,
+                        invoke_ms=_invoke_ms,
                     )
                 )
                 # Clear current_phase now that it's recorded in phases list

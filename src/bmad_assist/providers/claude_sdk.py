@@ -75,6 +75,7 @@ SUPPORTED_MODELS: frozenset[str] = frozenset({"opus", "sonnet", "haiku"})
 # from transient issues (API hiccups, slow WSL2 I/O, etc.).
 _sdk_init_failed_at: float = 0.0  # monotonic timestamp of last failure
 _SDK_RETRY_COOLDOWN: float = 120.0  # seconds before retrying SDK
+_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV = "BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION"
 
 # Default timeout in seconds (5 minutes)
 DEFAULT_TIMEOUT: int = 300
@@ -340,15 +341,19 @@ class ClaudeSDKProvider(BaseProvider):
             "BMAD Method Quality Competition v1.0",
         ]
 
-        # Completion phrases that indicate task is done
-        completion_phrases = [
-            "successfully completed",
-            "task is done",
-            "task is complete",
-            "synthesis complete",
-            "review complete",
-            "validation complete",
-        ]
+        # Completion phrases are useful for final report workflows, but unsafe
+        # for patch/template compilation where these phrases can appear before
+        # the transformed document is fully emitted.
+        completion_phrases: list[str] = []
+        if os.environ.get(_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV) != "1":
+            completion_phrases = [
+                "successfully completed",
+                "task is done",
+                "task is complete",
+                "synthesis complete",
+                "review complete",
+                "validation complete",
+            ]
 
         # Init timeout: CLI startup includes Node.js boot, CLAUDE.md loading,
         # MCP server init, settings parsing. On WSL2 with slow I/O this can
