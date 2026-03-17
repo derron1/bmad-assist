@@ -16,6 +16,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import difflib
 import logging
 import random
 from dataclasses import replace
@@ -455,16 +456,11 @@ class BatchVerifyOrchestrator:
                 summary="ACCEPT verdict (score: 0.0). 0 findings. Batch mode.",
             )
 
+        findings = self._deduplicate_findings(findings)
+        findings = self._apply_finding_limits(findings)
+
         # Assign sequential IDs
-        sorted_findings = sorted(
-            findings,
-            key=lambda f: {
-                Severity.CRITICAL: 0,
-                Severity.ERROR: 1,
-                Severity.WARNING: 2,
-                Severity.INFO: 3,
-            }.get(f.severity, 99),
-        )
+        sorted_findings = self._sort_by_severity(findings)
         reassigned = [
             replace(f, id=f"F{i}") for i, f in enumerate(sorted_findings, 1)
         ]
@@ -506,4 +502,80 @@ class BatchVerifyOrchestrator:
             domains_detected=[],
             methods_executed=[],
             summary="ACCEPT verdict (score: 0.0). No methods selected. Batch mode.",
+        )
+
+    def _deduplicate_findings(self, findings: list[Finding]) -> list[Finding]:
+        """Deduplicate findings using the same pattern/evidence heuristics as engine mode."""
+        if not findings:
+            return []
+
+        severity_priority = {
+            Severity.CRITICAL: 4,
+            Severity.ERROR: 3,
+            Severity.WARNING: 2,
+            Severity.INFO: 1,
+        }
+        unique: list[Finding] = []
+
+        for finding in findings:
+            is_duplicate = False
+            for existing in unique:
+                if finding.pattern_id and finding.pattern_id == existing.pattern_id:
+                    is_duplicate = True
+                    if severity_priority.get(finding.severity, 0) > severity_priority.get(
+                        existing.severity, 0
+                    ):
+                        unique[unique.index(existing)] = finding
+                    break
+
+                if finding.evidence and existing.evidence:
+                    similarity = difflib.SequenceMatcher(
+                        None,
+                        finding.evidence[0].quote,
+                        existing.evidence[0].quote,
+                    ).ratio()
+                    if similarity > 0.8:
+                        is_duplicate = True
+                        if severity_priority.get(finding.severity, 0) > severity_priority.get(
+                            existing.severity, 0
+                        ):
+                            unique[unique.index(existing)] = finding
+                        break
+
+            if not is_duplicate:
+                unique.append(finding)
+
+        return unique
+
+    def _apply_finding_limits(self, findings: list[Finding]) -> list[Finding]:
+        """Apply per-method and total finding limits before batch scoring."""
+        if not findings:
+            return []
+
+        limits = self._config.resource_limits
+        sorted_findings = self._sort_by_severity(findings)
+        method_counts: dict[MethodId, int] = {}
+        limited: list[Finding] = []
+
+        for finding in sorted_findings:
+            count = method_counts.get(finding.method_id, 0)
+            if count >= limits.max_findings_per_method:
+                continue
+            if len(limited) >= limits.max_total_findings:
+                break
+            method_counts[finding.method_id] = count + 1
+            limited.append(finding)
+
+        return limited
+
+    def _sort_by_severity(self, findings: list[Finding]) -> list[Finding]:
+        """Sort findings by severity, highest first."""
+        return sorted(
+            findings,
+            key=lambda f: {
+                Severity.CRITICAL: 0,
+                Severity.ERROR: 1,
+                Severity.WARNING: 2,
+                Severity.INFO: 3,
+            }.get(f.severity, 99),
         )
