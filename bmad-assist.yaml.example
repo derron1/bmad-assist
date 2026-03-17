@@ -235,6 +235,15 @@ compiler:
     code_review:
       include: [project-context]
 
+  # Final compiled prompt caps (applied after context assembly)
+  # Separate from source_context budgets which cap source file collection
+  prompt_budget:
+    enabled: true
+    default_cap: 80000            # Default prompt cap for all workflows
+    workflow_caps:
+      code_review: 50000
+      validate_story_synthesis: 40000
+
 
 benchmarking:
   enabled: true

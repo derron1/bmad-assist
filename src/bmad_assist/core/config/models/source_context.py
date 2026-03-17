@@ -116,6 +116,31 @@ class SourceContextBudgetsConfig(BaseModel):
         description="Fallback budget for unlisted workflows",
         json_schema_extra={"security": "safe", "ui_widget": "number"},
     )
+    # Code-review compiler-specific limits (not per-workflow token budgets)
+    max_diff_lines: int = Field(
+        default=400,
+        ge=0,
+        description=(
+            "Hard line cap for git diff in code_review compiler "
+            "(structural line cap, not token-based; hunk-aware cut)"
+        ),
+        json_schema_extra={"security": "safe", "ui_widget": "number"},
+    )
+    tea_context_tokens: int = Field(
+        default=4000,
+        ge=0,
+        description="Token budget for TEA context artifacts in code_review compiler",
+        json_schema_extra={"security": "safe", "ui_widget": "number"},
+    )
+    max_code_review_prompt_tokens: int = Field(
+        default=50000,
+        ge=0,
+        description=(
+            "Warning threshold for total compiled code_review prompt size; "
+            "logs warning if exceeded (no automated truncation at this stage)"
+        ),
+        json_schema_extra={"security": "safe", "ui_widget": "number"},
+    )
 
     def get_budget(self, workflow_name: str) -> int:
         """Get budget for a workflow by name.

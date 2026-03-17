@@ -20,6 +20,7 @@ from bmad_assist.compiler.output import generate_output
 from bmad_assist.compiler.shared_utils import (
     apply_post_process,
     context_snapshot,
+    estimate_tokens,
     find_sprint_status_file,
     resolve_story_file,
     safe_read_file,
@@ -29,7 +30,7 @@ from bmad_assist.compiler.source_context import (
     extract_file_paths_from_story,
     get_git_diff_files,
 )
-from bmad_assist.compiler.strategic_context import StrategicContextService
+from bmad_assist.compiler.strategic_context import StrategicContextService, _truncate_content
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext, WorkflowIR
 from bmad_assist.compiler.variable_utils import substitute_variables
 from bmad_assist.compiler.variables import resolve_variables
@@ -39,7 +40,7 @@ from bmad_assist.testarch.context import collect_tea_context
 
 logger = logging.getLogger(__name__)
 
-# Maximum lines for git diff before truncation
+# Maximum lines for git diff before truncation (legacy constant, config field preferred)
 _MAX_DIFF_LINES = 500
 
 # Timeout for git commands in seconds
@@ -59,6 +60,144 @@ _BINARY_PATTERN = re.compile(r"^\s*[^\s|]+\s*\|\s*Bin\s+", re.MULTILINE)
 _RENAME_WITH_CHANGES_PATTERN = re.compile(
     r"^\s*(?:\{[^}]+\}\s*=>\s*)?(.+?)\s*=>\s*(.+?)\s*\|\s*(\d+)", re.MULTILINE
 )
+
+
+def _get_budgets_config():  # type: ignore[return]
+    """Return SourceContextBudgetsConfig with a safe fallback to defaults."""
+    try:
+        from bmad_assist.core.config import get_config
+        from bmad_assist.core.exceptions import ConfigError
+
+        return get_config().compiler.source_context.budgets
+    except Exception:  # noqa: BLE001
+        from bmad_assist.core.config.models.source_context import SourceContextBudgetsConfig
+
+        return SourceContextBudgetsConfig()
+
+
+def _truncate_git_diff(diff: str, max_lines: int) -> str:
+    """Truncate git diff to max_lines using a hunk-aware boundary cut.
+
+    Walks lines and finds the last ``diff --git`` file header before the cap,
+    then cuts there so no file hunk is partially included. Falls back to a raw
+    line cut if no file boundary exists before the cap.
+
+    A truncation notice is appended in the form:
+        [DIFF TRUNCATED — N lines omitted. K files shown of T changed.]
+
+    Args:
+        diff: Raw git diff string.
+        max_lines: Maximum number of lines to retain.
+
+    Returns:
+        Possibly-truncated diff string.
+
+    """
+    if max_lines <= 0 or not diff:
+        return diff
+
+    lines = diff.splitlines(keepends=True)
+    if len(lines) <= max_lines:
+        return diff
+
+    total_lines = len(lines)
+    total_files = sum(1 for line in lines if line.startswith("diff --git "))
+
+    # Find the last "diff --git" header within the first max_lines lines so
+    # we don't cut mid-hunk; cut at that index to exclude the partial file.
+    cut_at = max_lines
+    for i in range(min(max_lines, total_lines) - 1, -1, -1):
+        if lines[i].startswith("diff --git "):
+            cut_at = i  # Exclude this partially-visible file
+            break
+
+    # Guard: if retained slice would contain zero diff --git blocks,
+    # advance cut_at to include the first file header so output always
+    # contains at least one real patch.
+    if cut_at > 0 and not any(
+        lines[j].startswith("diff --git ") for j in range(cut_at)
+    ):
+        first_file_idx = next(
+            (j for j in range(total_lines) if lines[j].startswith("diff --git ")),
+            None,
+        )
+        if first_file_idx is not None:
+            # Budget max_lines of content starting from the first file header
+            end = min(first_file_idx + max_lines, total_lines)
+            # Check if window contains a second diff --git (multi-file)
+            second_file_idx = next(
+                (j for j in range(first_file_idx + 1, end)
+                 if lines[j].startswith("diff --git ")),
+                None,
+            )
+            if second_file_idx is not None:
+                # Multi-file: cut at the second file boundary (keep first complete)
+                cut_at = second_file_idx
+            else:
+                # Single-file window: set cut_at = 0 so the existing
+                # single-file fallback below handles first-file truncation
+                # via @@ hunk boundaries.
+                cut_at = 0
+
+    if cut_at <= 0:
+        # Single file exceeds cap — fall back to hunk-level cut.
+        # Because cut_at slices from index 0, the file header lines
+        # (diff --git, index, ---, +++) are always retained in lines[:cut_at].
+        # Find the first @@ to know where hunks begin, then find the last
+        # complete @@ header before max_lines for a clean boundary.
+        first_hunk_start = None
+        for i in range(1, min(max_lines, total_lines)):
+            if lines[i].startswith("@@ "):
+                first_hunk_start = i
+                break
+
+        if first_hunk_start is not None:
+            # Find last @@ header before max_lines for a clean hunk boundary
+            hunk_cut = max_lines
+            for i in range(min(max_lines, total_lines) - 1, first_hunk_start, -1):
+                if lines[i].startswith("@@ "):
+                    hunk_cut = i
+                    break
+            cut_at = hunk_cut
+        else:
+            # No hunk headers found (binary diff or header-only); raw cap
+            cut_at = max_lines
+
+    shown_files = sum(1 for line in lines[:cut_at] if line.startswith("diff --git "))
+    omitted_lines = total_lines - cut_at
+
+    truncated = "".join(lines[:cut_at])
+    truncated += (
+        f"\n\n[DIFF TRUNCATED — {omitted_lines} lines omitted. "
+        f"{shown_files} files shown of {total_files} changed.]"
+    )
+
+    logger.warning(
+        "Git diff truncated: %d → %d lines (%d files shown of %d)",
+        total_lines,
+        cut_at,
+        shown_files,
+        total_files,
+    )
+    return truncated
+
+
+def _apply_tea_budget(tea_files: dict[str, str], budget_tokens: int) -> dict[str, str]:
+    """Enforce a token budget over TEA context artifacts.
+
+    Thin wrapper around ``apply_section_budget`` from the shared budget module.
+
+    Args:
+        tea_files: Mapping of artifact name → content from collect_tea_context().
+        budget_tokens: Maximum total tokens to retain.
+
+    Returns:
+        Budget-enforced mapping (same type, subset of input).
+
+    """
+    from bmad_assist.compiler.budget import apply_section_budget
+
+    return apply_section_budget(tea_files, budget_tokens)
 
 
 def _capture_git_diff(context: CompilerContext) -> str:
@@ -479,6 +618,23 @@ class CodeReviewCompiler:
                 links_only=context.links_only,
             )
 
+            # 2d: Unconditional total compiled size logging + budget enforcement
+            logger.info(
+                "CODE_REVIEW prompt: ~%d tokens (%d bytes)",
+                result.token_estimate,
+                result.size_bytes,
+            )
+            from bmad_assist.compiler.budget import PromptBudgetEnforcer
+
+            enforcer = PromptBudgetEnforcer.from_config("code_review")
+            if enforcer.cap > 0 and result.token_estimate > enforcer.cap:
+                logger.warning(
+                    "CODE_REVIEW prompt exceeds cap (%d tokens > %d). "
+                    "Staged budget enforcement active for strategic + TEA sections.",
+                    result.token_estimate,
+                    enforcer.cap,
+                )
+
             final_xml = apply_post_process(result.xml, context)
 
             return CompiledWorkflow(
@@ -516,6 +672,10 @@ class CodeReviewCompiler:
         """
         files: dict[str, str] = {}
         project_root = context.project_root
+        budgets = _get_budgets_config()
+
+        # 2a: Hard line cap for git diff (hunk-aware, applied before embedding)
+        git_diff = _truncate_git_diff(git_diff, budgets.max_diff_lines)
 
         # 1. Strategic docs (project-context only by default - 0% PRD citation in benchmarks)
         strategic_service = StrategicContextService(context, "code_review")
@@ -525,10 +685,13 @@ class CodeReviewCompiler:
         # 1b. Include code antipatterns - reviewers should know what mistakes to look for
         from bmad_assist.compiler.strategic_context import load_antipatterns
 
-        files.update(load_antipatterns(context, "code"))
+        files.update(load_antipatterns(context, "code", budget_tokens=1500))
 
         # 1c. TEA Context (test-design) for reviewing against test plan
-        files.update(collect_tea_context(context, "code_review", resolved))
+        # 2b: Enforce token budget over TEA artifacts
+        tea_files = collect_tea_context(context, "code_review", resolved)
+        tea_files = _apply_tea_budget(tea_files, budgets.tea_context_tokens)
+        files.update(tea_files)
 
         # 2. Git diff (embedded as virtual file, not in variables)
         if git_diff:
@@ -546,16 +709,34 @@ class CodeReviewCompiler:
                 if file_list_paths:
                     logger.debug("Extracted %d files from File List", len(file_list_paths))
 
-        # Get git diff files with hunk info
+        # Get git diff files with hunk info; also compute 2c overlap-trim exclusions
         git_diff_files = None
+        skip_paths: frozenset[str] = frozenset()
         if git_diff:
             modified_files = _extract_modified_files_from_stat(git_diff, skip_docs=True)
             if modified_files:
                 git_diff_files = get_git_diff_files(project_root, git_diff)
 
+                # 2c: Exclude files already well-covered by the diff (≥80% line coverage)
+                skip_set: set[str] = set()
+                for path, changed_lines in modified_files:
+                    abs_path = project_root / path
+                    content = safe_read_file(abs_path, project_root)
+                    if content is None:
+                        continue
+                    total_file_lines = content.count("\n") + 1
+                    if total_file_lines > 0 and changed_lines / total_file_lines >= 0.8:
+                        logger.debug(
+                            "Skipping %s in source context — %.0f%% covered by diff",
+                            path,
+                            (changed_lines / total_file_lines) * 100,
+                        )
+                        skip_set.add(path)
+                skip_paths = frozenset(skip_set)
+
         # Collect source files using service
         service = SourceContextService(context, "code_review")
-        source_files = service.collect_files(file_list_paths, git_diff_files)
+        source_files = service.collect_files(file_list_paths, git_diff_files, skip_paths)
         files.update(source_files)
 
         # 4. Story file (LAST - closest to instructions per recency-bias)
@@ -565,6 +746,50 @@ class CodeReviewCompiler:
             content = safe_read_file(story_path, project_root)
             if content:
                 files[str(story_path)] = content
+
+        # 5. Staged prompt budget enforcement
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+
+        enforcer = PromptBudgetEnforcer.from_config("code_review")
+        if enforcer.cap > 0:
+            # Partition files into sections by key patterns for trimming
+            strategic_keys = {
+                k for k in files
+                if k.startswith("[project-context") or k.startswith("[antipattern")
+            }
+            tea_keys = {k for k in files if k.startswith("[tea-")}
+            other_keys = [k for k in files if k not in strategic_keys and k not in tea_keys]
+
+            sections = [
+                ContextSection(
+                    "strategic",
+                    {k: files[k] for k in files if k in strategic_keys},
+                    priority=1,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "tea",
+                    {k: files[k] for k in files if k in tea_keys},
+                    priority=2,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "other",
+                    {k: files[k] for k in other_keys},
+                    priority=99,
+                    trimmable=False,
+                ),
+            ]
+
+            result = enforcer.enforce(sections)
+            if result.trimmed_sections:
+                # Rebuild files dict preserving original insertion order
+                trimmed_files: dict[str, str] = {}
+                rebuilt = {**result.sections["strategic"], **result.sections["tea"], **result.sections["other"]}
+                for key in files:
+                    if key in rebuilt:
+                        trimmed_files[key] = rebuilt[key]
+                files = trimmed_files
 
         return files
 

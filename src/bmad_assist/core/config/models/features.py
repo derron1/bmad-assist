@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from bmad_assist.core.config.models.prompt_budget import PromptBudgetConfig
 from bmad_assist.core.config.models.source_context import SourceContextConfig
 from bmad_assist.core.config.models.strategic_context import StrategicContextConfig
 
@@ -147,6 +148,10 @@ class CompilerConfig(BaseModel):
     synthesis: SynthesisConfig = Field(
         default_factory=SynthesisConfig,
         description="Adaptive synthesis prompt compression configuration",
+    )
+    prompt_budget: PromptBudgetConfig = Field(
+        default_factory=PromptBudgetConfig,
+        description="Final compiled prompt budget caps (separate from source-context budgets)",
     )
 
 

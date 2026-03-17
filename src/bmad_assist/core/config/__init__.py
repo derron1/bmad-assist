@@ -71,6 +71,7 @@ from bmad_assist.core.config.models import (
     PlaywrightServerConfig,
     PowerPromptConfig,
     ProjectPathsConfig,
+    PromptBudgetConfig,
     ProviderConfig,
     QAConfig,
     SourceContextBudgetsConfig,
@@ -134,6 +135,8 @@ __all__ = [
     "PowerPromptConfig",
     "BmadPathsConfig",
     "ProjectPathsConfig",
+    # Models - Prompt Budget
+    "PromptBudgetConfig",
     # Models - Source Context
     "SourceContextBudgetsConfig",
     "SourceContextScoringConfig",

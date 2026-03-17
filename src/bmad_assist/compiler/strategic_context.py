@@ -693,6 +693,8 @@ class StrategicContextService:
 def load_antipatterns(
     context: CompilerContext,
     antipattern_type: Literal["story", "code"],
+    *,
+    budget_tokens: int | None = None,
 ) -> dict[str, str]:
     """Load epic-scoped antipatterns file for context assembly.
 
@@ -747,6 +749,17 @@ def load_antipatterns(
 
     try:
         content = antipatterns_path.read_text(encoding="utf-8")
+        if budget_tokens is not None and budget_tokens > 0:
+            original_tokens = estimate_tokens(content)
+            if original_tokens > budget_tokens:
+                content, truncated_tokens = _truncate_content(content, budget_tokens)
+                logger.info(
+                    "Truncated %s antipatterns for epic %s from ~%d to ~%d tokens",
+                    antipattern_type,
+                    epic_id,
+                    original_tokens,
+                    truncated_tokens,
+                )
         logger.info(
             "Loaded %s antipatterns for epic %s (%d chars)", antipattern_type, epic_id, len(content)
         )

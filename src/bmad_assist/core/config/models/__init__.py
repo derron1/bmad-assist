@@ -38,6 +38,7 @@ from bmad_assist.core.config.models.providers import (
     ProviderConfig,
     get_phase_provider_config,
 )
+from bmad_assist.core.config.models.prompt_budget import PromptBudgetConfig
 from bmad_assist.core.config.models.source_context import (
     SourceContextBudgetsConfig,
     SourceContextConfig,
@@ -97,6 +98,8 @@ __all__ = [
     "WarningsConfig",
     "DEFAULT_LOOP_CONFIG",
     "TEA_FULL_LOOP_CONFIG",
+    # prompt_budget.py
+    "PromptBudgetConfig",
     # main.py
     "Config",
 ]

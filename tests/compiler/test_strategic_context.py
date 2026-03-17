@@ -205,6 +205,25 @@ class TestLoadAntipatterns:
 
         assert "Story Antipatterns" in result["[ANTIPATTERNS - DO NOT REPEAT]"]
 
+    def test_load_antipatterns_respects_budget(self, mock_context, impl_artifacts):
+        """Large antipattern files are truncated to the requested token budget."""
+        antipatterns_dir = impl_artifacts / "antipatterns"
+        antipatterns_dir.mkdir()
+        antipatterns_file = antipatterns_dir / "epic-24-code-antipatterns.md"
+        antipatterns_file.write_text(("## Heading\n\n" + ("x" * 200) + "\n\n") * 200)
+
+        with (
+            patch("bmad_assist.core.config.get_config") as mock_config,
+            patch("bmad_assist.core.paths.get_paths") as mock_paths,
+        ):
+            mock_config.return_value.antipatterns.enabled = True
+            mock_paths.return_value.implementation_artifacts = impl_artifacts
+
+            result = load_antipatterns(mock_context, "code", budget_tokens=200)
+
+        content = result["[ANTIPATTERNS - DO NOT REPEAT]"]
+        assert TRUNCATION_NOTICE in content
+
     def test_load_string_epic_id(self, tmp_path, impl_artifacts):
         """Test loading with string epic ID (e.g., 'testarch')."""
         context = MagicMock(spec=CompilerContext)

@@ -434,12 +434,15 @@ class SourceContextService:
         self,
         file_list_paths: list[str],
         git_diff_files: list[GitDiffFile] | None = None,
+        skip_paths: frozenset[str] = frozenset(),
     ) -> dict[str, str]:
         """Collect source files with scoring and budget management.
 
         Args:
             file_list_paths: File paths from story's File List section.
             git_diff_files: Files from git diff with change info.
+            skip_paths: Normalized paths to exclude from source context
+                (e.g., files already well-covered by the git diff).
 
         Returns:
             Dictionary mapping absolute file paths to content.
@@ -456,6 +459,11 @@ class SourceContextService:
         # Normalize paths for deduplication
         file_list_normalized = {_normalize_path(p) for p in file_list_paths}
         git_diff_map = {_normalize_path(f.path): f for f in git_diff_files}
+
+        # Apply overlap-trim exclusions before candidate selection
+        if skip_paths:
+            file_list_normalized -= skip_paths
+            git_diff_map = {p: f for p, f in git_diff_map.items() if p not in skip_paths}
 
         # Determine candidate files (intersection logic per ADR-2)
         if file_list_normalized and git_diff_map:
