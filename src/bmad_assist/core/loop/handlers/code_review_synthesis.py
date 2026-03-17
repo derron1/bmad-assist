@@ -557,11 +557,15 @@ class CodeReviewSynthesisHandler(BaseHandler):
             estimate_synthesis_tokens,
             pre_extract_reviews,
             progressive_synthesize,
+            resolve_synthesis_budget_limits,
         )
         from bmad_assist.core.retry import invoke_with_timeout_retry
         from bmad_assist.providers.registry import get_provider
 
         synthesis_config = self.config.compiler.synthesis
+        budget_limits = resolve_synthesis_budget_limits(
+            self.config, "code_review_synthesis"
+        )
         base_tokens = estimate_base_context_tokens(
             self.project_path, self.config, "code_review_synthesis"
         )
@@ -571,7 +575,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
         steps = decide_compression_steps(
             total_tokens,
             base_tokens,
-            synthesis_config.token_budget,
+            budget_limits.effective_budget,
             synthesis_config.base_context_limit,
         )
 
@@ -583,10 +587,12 @@ class CodeReviewSynthesisHandler(BaseHandler):
 
         if steps:
             logger.info(
-                "Compression pipeline: steps=%s, total=%d, budget=%d, base=%d",
+                "Compression pipeline: steps=%s, total=%d, budget=%d (synthesis=%d, prompt_cap=%d), base=%d",
                 steps,
                 total_tokens,
-                synthesis_config.token_budget,
+                budget_limits.effective_budget,
+                budget_limits.synthesis_budget,
+                budget_limits.prompt_cap,
                 base_tokens,
             )
 
@@ -930,21 +936,6 @@ class CodeReviewSynthesisHandler(BaseHandler):
                 except Exception as e:
                     logger.warning("Antipatterns extraction failed (non-blocking): %s", e)
 
-                # Story 13.10: Extract metrics and save synthesizer record
-                # Estimate tokens from char count (~4 chars per token)
-                estimated_output_tokens = len(result.stdout) // 4 if result.stdout else 0
-                self._save_synthesizer_record(
-                    synthesis_output=result.stdout,
-                    epic_num=epic_num,
-                    story_num=story_num,
-                    story_title=state.current_story or "",
-                    start_time=start_time,
-                    end_time=end_time,
-                    input_tokens=0,  # Not available from current provider result
-                    output_tokens=estimated_output_tokens,
-                    reviewer_count=len(reviewers_used),
-                )
-
                 # Include evidence score verdict in outputs for rework loop decision
                 verdict = (
                     evidence_score_data.get("verdict", "UNKNOWN")
@@ -964,6 +955,25 @@ class CodeReviewSynthesisHandler(BaseHandler):
                     decision.extraction_quality.value,
                     verdict,
                     resolution_data is not None,
+                )
+
+                # Story 13.10: Persist synthesizer record after final decision so
+                # custom metadata reflects the synthesized runtime outcome.
+                estimated_output_tokens = len(result.stdout) // 4 if result.stdout else 0
+                self._save_synthesizer_record(
+                    synthesis_output=result.stdout,
+                    epic_num=epic_num,
+                    story_num=story_num,
+                    story_title=state.current_story or "",
+                    start_time=start_time,
+                    end_time=end_time,
+                    input_tokens=0,  # Not available from current provider result
+                    output_tokens=estimated_output_tokens,
+                    reviewer_count=len(reviewers_used),
+                    record_custom={
+                        "final_extraction_quality": decision.extraction_quality.value,
+                        "final_resolution": decision.resolution.value,
+                    },
                 )
 
                 phase_result = PhaseResult.ok(
@@ -1073,6 +1083,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
         input_tokens: int,
         output_tokens: int,
         reviewer_count: int,
+        record_custom: dict[str, object] | None = None,
     ) -> None:
         """Extract metrics and save synthesizer evaluation record.
 
@@ -1091,6 +1102,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
             input_tokens: Input token count.
             output_tokens: Output token count.
             reviewer_count: Number of reviewers (for sequence_position).
+            record_custom: Additional custom fields to persist on the record.
 
         """
         from bmad_assist.benchmarking import PatchInfo, StoryInfo, WorkflowInfo
@@ -1154,6 +1166,8 @@ class CodeReviewSynthesisHandler(BaseHandler):
                 "phase": "code-review-synthesis",
                 "reviewer_count": reviewer_count,
             }
+            if record_custom:
+                custom.update(record_custom)
             # Add compression metrics if available
             compression_metrics = getattr(self, "_compression_metrics", None)
             if compression_metrics:

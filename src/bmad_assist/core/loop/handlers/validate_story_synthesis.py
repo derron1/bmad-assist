@@ -50,7 +50,7 @@ from bmad_assist.validation.reports import (
     extract_synthesis_report,
     save_synthesis_report,
 )
-from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+from bmad_assist.validation.synthesis_parser import SynthesisMetrics, extract_synthesis_metrics
 from bmad_assist.validation.validation_metrics import (
     calculate_aggregate_metrics,
     extract_validator_metrics,
@@ -577,18 +577,16 @@ class ValidateStorySynthesisHandler(BaseHandler):
             estimate_synthesis_tokens,
             pre_extract_reviews,
             progressive_synthesize,
+            resolve_synthesis_budget_limits,
         )
         from bmad_assist.core.retry import invoke_with_timeout_retry
         from bmad_assist.providers.registry import get_provider
 
         synthesis_config = self.config.compiler.synthesis
-        # Resolve effective budget: use the tighter of synthesis budget vs prompt cap
-        prompt_cap = self.config.compiler.prompt_budget.get_cap("validate_story_synthesis")
-        effective_budget = (
-            min(synthesis_config.token_budget, prompt_cap)
-            if prompt_cap > 0
-            else synthesis_config.token_budget
+        budget_limits = resolve_synthesis_budget_limits(
+            self.config, "validate_story_synthesis"
         )
+        effective_budget = budget_limits.effective_budget
         base_tokens = estimate_base_context_tokens(
             self.project_path, self.config, "validate_story_synthesis"
         )
@@ -614,8 +612,8 @@ class ValidateStorySynthesisHandler(BaseHandler):
                 steps,
                 total_tokens,
                 effective_budget,
-                synthesis_config.token_budget,
-                prompt_cap,
+                budget_limits.synthesis_budget,
+                budget_limits.prompt_cap,
                 base_tokens,
             )
 
@@ -982,22 +980,6 @@ class ValidateStorySynthesisHandler(BaseHandler):
                 except Exception as e:
                     logger.warning("Antipatterns extraction failed (non-blocking): %s", e)
 
-                # Story 13.6: Extract metrics and save synthesizer record
-                # Estimate tokens from char count (~4 chars per token)
-                # Consistent with code_review_synthesis.py token estimation
-                estimated_output_tokens = len(result.stdout) // 4 if result.stdout else 0
-                self._save_synthesizer_record(
-                    synthesis_output=result.stdout,
-                    epic_num=epic_num,
-                    story_num=story_num,
-                    story_title=state.current_story or "",
-                    start_time=start_time,
-                    end_time=end_time,
-                    input_tokens=0,  # Not available from current provider result
-                    output_tokens=estimated_output_tokens,
-                    validator_count=len(validators_used),
-                )
-
                 # Extract synthesis resolution via layered strategy
                 res_parsed, res_quality = _extract_validation_resolution(extracted_synthesis)
                 metrics = extract_synthesis_metrics(result.stdout)
@@ -1026,6 +1008,8 @@ class ValidateStorySynthesisHandler(BaseHandler):
                     and len(extracted_synthesis.strip()) >= 200
                 )
 
+                used_repaired_contract = False
+                used_repaired_metrics = False
                 if needs_repair:
                     logger.info(
                         "Attempting contract repair pass: "
@@ -1041,16 +1025,15 @@ class ValidateStorySynthesisHandler(BaseHandler):
                     if needs_contract_repair and repair_parsed is not None:
                         res_parsed = repair_parsed
                         res_quality = repair_quality
+                        used_repaired_contract = True
                         logger.info(
                             "Contract repair succeeded: resolution=%s quality=%s",
                             res_parsed.get("resolution"),
                             res_quality.value,
                         )
                     if needs_metrics_repair and repair_metrics is not None:
-                        # Note: metrics from repair are not persisted to the
-                        # synthesizer record (already saved above), but they
-                        # inform the decision and logging.
                         metrics = repair_metrics
+                        used_repaired_metrics = True
                         logger.info("Metrics repair succeeded")
 
                 synthesis_decision: SynthesisDecision = make_synthesis_decision(
@@ -1060,6 +1043,30 @@ class ValidateStorySynthesisHandler(BaseHandler):
                     "Validation synthesis decision: resolution=%s quality=%s",
                     synthesis_decision.resolution.value,
                     synthesis_decision.extraction_quality.value,
+                )
+
+                # Story 13.6: Save synthesizer record AFTER repair + decision
+                # so the persisted record reflects post-repair truth.
+                estimated_output_tokens = len(result.stdout) // 4 if result.stdout else 0
+                synth_record_custom: dict[str, object] = {
+                    "final_extraction_quality": res_quality.value,
+                    "final_resolution": synthesis_decision.resolution.value,
+                }
+                if needs_repair:
+                    synth_record_custom["repaired_contract"] = used_repaired_contract
+                    synth_record_custom["repaired_metrics"] = used_repaired_metrics
+                self._save_synthesizer_record(
+                    synthesis_output=result.stdout,
+                    epic_num=epic_num,
+                    story_num=story_num,
+                    story_title=state.current_story or "",
+                    start_time=start_time,
+                    end_time=end_time,
+                    input_tokens=0,  # Not available from current provider result
+                    output_tokens=estimated_output_tokens,
+                    validator_count=len(validators_used),
+                    metrics=metrics,
+                    record_custom=synth_record_custom,
                 )
 
                 phase_result = PhaseResult.ok(
@@ -1173,8 +1180,6 @@ class ValidateStorySynthesisHandler(BaseHandler):
         Returns:
             (parsed_resolution, extraction_quality, metrics) — any may be None on failure.
         """
-        from bmad_assist.validation.synthesis_parser import SynthesisMetrics
-
         repair_context = _build_repair_context(extracted_synthesis, raw_stdout=raw_stdout)
         repair_prompt = _REPAIR_PROMPT_TEMPLATE.format(context=repair_context)
 
@@ -1226,6 +1231,8 @@ class ValidateStorySynthesisHandler(BaseHandler):
         input_tokens: int,
         output_tokens: int,
         validator_count: int,
+        metrics: SynthesisMetrics | None = None,
+        record_custom: dict[str, object] | None = None,
     ) -> None:
         """Extract metrics and save synthesizer evaluation record.
 
@@ -1244,6 +1251,10 @@ class ValidateStorySynthesisHandler(BaseHandler):
             input_tokens: Input token count.
             output_tokens: Output token count.
             validator_count: Number of validators (for sequence_position).
+            metrics: Pre-extracted metrics (e.g. post-repair). If None,
+                create_synthesizer_record will extract from synthesis_output.
+            record_custom: Additional custom fields to persist on the record
+                (e.g. repair metadata, final_extraction_quality).
 
         """
         from bmad_assist.benchmarking import PatchInfo, StoryInfo, WorkflowInfo
@@ -1287,16 +1298,22 @@ class ValidateStorySynthesisHandler(BaseHandler):
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 validator_count=validator_count,
+                metrics=metrics,
             )
 
-            # Add compression metrics if available
+            # Build custom dict: start with caller-provided fields, then
+            # layer on compression metrics if available.
+            custom: dict[str, object] = {}
+            if record_custom:
+                custom.update(record_custom)
+
             compression_metrics = getattr(self, "_compression_metrics", None)
             if compression_metrics:
-                custom: dict[str, object] = {
-                    "phase": "validate-story-synthesis",
-                    "validator_count": validator_count,
-                }
+                custom.setdefault("phase", "validate-story-synthesis")
+                custom.setdefault("validator_count", validator_count)
                 custom.update(compression_metrics)
+
+            if custom:
                 if record.custom is not None:
                     custom = {**record.custom, **custom}
                 record = record.model_copy(update={"custom": custom})

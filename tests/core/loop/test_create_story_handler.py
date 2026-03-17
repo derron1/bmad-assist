@@ -1,7 +1,4 @@
-"""Tests for CreateStoryHandler.
-
-Verifies timing tracking configuration, story file rescue, and retry logic.
-"""
+"""Tests for CreateStoryHandler."""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,6 +7,7 @@ import pytest
 
 from bmad_assist.core.config import Config, MasterProviderConfig, ProviderConfig
 from bmad_assist.core.loop.handlers.create_story import (
+    _FINALIZATION_SUFFIX,
     MAX_RETRIES,
     MIN_STORY_CONTENT_LENGTH,
     REQUIRED_SECTIONS,
@@ -21,6 +19,8 @@ from bmad_assist.core.loop.handlers.create_story import (
 )
 from bmad_assist.core.loop.types import PhaseResult
 from bmad_assist.core.state import State
+from bmad_assist.providers.base import ProviderResult
+from bmad_assist.providers.tool_guard import GUARD_TERMINATION_PREFIX
 
 
 def _make_handler(project_path: Path | None = None) -> CreateStoryHandler:
@@ -49,6 +49,29 @@ def _make_story_content(
         "The widget factory should support multiple widget types including "
         "standard widgets, premium widgets, and custom widgets.\n"
         + extra
+    )
+
+
+def _make_provider_result(
+    *,
+    stdout: str = "",
+    stderr: str = "",
+    exit_code: int = 0,
+    duration_ms: int = 1234,
+    model: str | None = "opus",
+    termination_info: dict[str, object] | None = None,
+    termination_reason: str | None = None,
+) -> ProviderResult:
+    """Build a ProviderResult for handler tests."""
+    return ProviderResult(
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=exit_code,
+        duration_ms=duration_ms,
+        model=model,
+        command=("claude",),
+        termination_info=termination_info,
+        termination_reason=termination_reason,
     )
 
 
@@ -300,33 +323,32 @@ class TestExecuteIntegration:
         """Returns success when story file exists after first attempt."""
         handler = _make_handler(tmp_path)
         state = State(current_epic=3, current_story="3.2")
-        ok_result = PhaseResult.ok({"response": "done"})
+        provider_result = _make_provider_result(stdout="done")
 
         with (
-            patch.object(
-                CreateStoryHandler.__bases__[0], "execute", return_value=ok_result
-            ) as mock_exec,
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=provider_result) as mock_invoke,
             patch(
                 "bmad_assist.core.loop.handlers.create_story._find_story_file",
                 return_value=tmp_path / "3-2-story.md",
             ),
+            patch("bmad_assist.core.io.save_prompt"),
         ):
             result = handler.execute(state)
 
         assert result.success
-        mock_exec.assert_called_once_with(state)
+        mock_invoke.assert_called_once_with("prompt")
 
     def test_rescue_path(self, tmp_path: Path) -> None:
         """Rescues story from stdout when file is missing."""
         handler = _make_handler(tmp_path)
         state = State(current_epic=3, current_story="3.2")
         story_content = _make_story_content("3.2", "Widget Factory")
-        ok_result = PhaseResult.ok({"response": story_content})
+        provider_result = _make_provider_result(stdout=story_content)
 
         with (
-            patch.object(
-                CreateStoryHandler.__bases__[0], "execute", return_value=ok_result
-            ),
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=provider_result),
             patch(
                 "bmad_assist.core.loop.handlers.create_story._find_story_file",
                 return_value=None,
@@ -335,6 +357,7 @@ class TestExecuteIntegration:
                 "bmad_assist.core.loop.handlers.create_story._write_rescued_story",
                 return_value=tmp_path / "3-2-widget-factory.md",
             ) as mock_write,
+            patch("bmad_assist.core.io.save_prompt"),
         ):
             result = handler.execute(state)
 
@@ -348,13 +371,13 @@ class TestExecuteIntegration:
         state = State(current_epic=3, current_story="3.2")
 
         # First attempt: no file, no extractable content
-        bad_result = PhaseResult.ok({"response": "I couldn't save the file"})
+        bad_result = _make_provider_result(stdout="I couldn't save the file")
         # Second attempt: file exists
-        good_result = PhaseResult.ok({"response": "done"})
+        good_result = _make_provider_result(stdout="done")
 
         call_count = 0
 
-        def mock_execute(s: State) -> PhaseResult:
+        def mock_invoke(prompt: str) -> ProviderResult:
             nonlocal call_count
             call_count += 1
             return bad_result if call_count == 1 else good_result
@@ -367,13 +390,13 @@ class TestExecuteIntegration:
             return None if find_count == 1 else tmp_path / "3-2-story.md"
 
         with (
-            patch.object(
-                CreateStoryHandler.__bases__[0], "execute", side_effect=mock_execute
-            ),
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke),
             patch(
                 "bmad_assist.core.loop.handlers.create_story._find_story_file",
                 side_effect=mock_find,
             ),
+            patch("bmad_assist.core.io.save_prompt"),
         ):
             result = handler.execute(state)
 
@@ -384,34 +407,145 @@ class TestExecuteIntegration:
         """Fails after MAX_RETRIES + 1 attempts."""
         handler = _make_handler(tmp_path)
         state = State(current_epic=3, current_story="3.2")
-        bad_result = PhaseResult.ok({"response": "random noise"})
+        bad_result = _make_provider_result(stdout="random noise")
 
         with (
-            patch.object(
-                CreateStoryHandler.__bases__[0], "execute", return_value=bad_result
-            ) as mock_exec,
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=bad_result) as mock_invoke,
             patch(
                 "bmad_assist.core.loop.handlers.create_story._find_story_file",
                 return_value=None,
             ),
+            patch("bmad_assist.core.io.save_prompt"),
         ):
             result = handler.execute(state)
 
         assert not result.success
         assert "not created after" in result.error
-        assert mock_exec.call_count == MAX_RETRIES + 1
+        assert mock_invoke.call_count == MAX_RETRIES + 1
 
     def test_provider_error_no_retry(self, tmp_path: Path) -> None:
         """Does not retry on provider errors (result.success=False)."""
         handler = _make_handler(tmp_path)
         state = State(current_epic=3, current_story="3.2")
-        fail_result = PhaseResult.fail("Provider crashed")
+        fail_result = _make_provider_result(stderr="Provider crashed", exit_code=1)
 
-        with patch.object(
-            CreateStoryHandler.__bases__[0], "execute", return_value=fail_result
-        ) as mock_exec:
+        with (
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=fail_result) as mock_invoke,
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
             result = handler.execute(state)
 
         assert not result.success
         assert result.error == "Provider crashed"
-        mock_exec.assert_called_once()
+        mock_invoke.assert_called_once_with("prompt")
+
+
+class TestRateLimitRecovery:
+    """Tests for ToolCallGuard termination recovery."""
+
+    def test_rate_limit_with_rescuable_content(self, tmp_path: Path) -> None:
+        """Guard termination rescues valid story output."""
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        result = _make_provider_result(
+            stdout=_make_story_content(),
+            termination_info={"reason": "rate_exceeded"},
+            termination_reason=f"{GUARD_TERMINATION_PREFIX}rate_exceeded:would_be_91/90",
+        )
+
+        with (
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=result),
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._write_rescued_story",
+                return_value=tmp_path / "3-2-widget-factory.md",
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            phase_result = handler.execute(state)
+
+        assert phase_result.success
+        assert phase_result.outputs["rate_limit_rescued"] is True
+        assert "termination_metadata" in phase_result.outputs
+
+    def test_rate_limit_finalization_retry(self, tmp_path: Path) -> None:
+        """Guard termination retries once with a finalization-only prompt."""
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        guard_result = _make_provider_result(
+            stdout="partial noise",
+            termination_info={"reason": "rate_exceeded"},
+            termination_reason=f"{GUARD_TERMINATION_PREFIX}rate_exceeded:would_be_91/90",
+        )
+        success_result = _make_provider_result(stdout="done")
+        prompts: list[str] = []
+
+        def mock_invoke(prompt: str) -> ProviderResult:
+            prompts.append(prompt)
+            return guard_result if len(prompts) == 1 else success_result
+
+        with (
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke) as invoke_mock,
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=tmp_path / "3-2-story.md",
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            phase_result = handler.execute(state)
+
+        assert phase_result.success
+        assert invoke_mock.call_count == 2
+        assert prompts[1].endswith(_FINALIZATION_SUFFIX)
+
+    def test_rate_limit_finalization_also_fails(self, tmp_path: Path) -> None:
+        """Finalization retry fails after a second guard termination."""
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        first_result = _make_provider_result(
+            stdout="noise",
+            termination_info={"reason": "rate_exceeded"},
+            termination_reason=f"{GUARD_TERMINATION_PREFIX}rate_exceeded:would_be_91/90",
+        )
+        second_result = _make_provider_result(
+            stdout="still noise",
+            termination_info={"reason": "rate_exceeded"},
+            termination_reason=f"{GUARD_TERMINATION_PREFIX}rate_exceeded:would_be_91/90",
+        )
+
+        with (
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", side_effect=[first_result, second_result]),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            phase_result = handler.execute(state)
+
+        assert not phase_result.success
+        assert "Guard terminated on finalization retry" in phase_result.error
+        assert "termination_metadata" in phase_result.outputs
+
+
+class TestInstructionsContextFirst:
+    """Tests for create-story workflow instructions."""
+
+    def test_instructions_use_context_first_guidance(self) -> None:
+        """Workflow should prefer compiled context over broad repo exploration."""
+        instructions_path = (
+            Path(__file__).resolve().parents[3]
+            / "src"
+            / "bmad_assist"
+            / "workflows"
+            / "create-story"
+            / "instructions.xml"
+        )
+        content = instructions_path.read_text(encoding="utf-8")
+        lowered = content.lower()
+
+        assert "CONTEXT-FIRST POLICY" in content
+        assert "AUTHORITATIVE INPUTS" in content
+        assert "subagent" not in lowered
+        assert "web research" not in lowered
+        assert '<check if="web research completed">' not in content

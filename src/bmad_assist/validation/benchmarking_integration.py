@@ -50,12 +50,13 @@ from bmad_assist.benchmarking import (
     WorkflowInfo,
     extract_metrics_async,
 )
+from bmad_assist.benchmarking.collector import calculate_structure_metrics
 from bmad_assist.benchmarking.extraction import ExtractedMetrics, ExtractionContext
 from bmad_assist.core.async_utils import delayed_invoke
 from bmad_assist.core.config.loaders import parse_parallel_delay
 from bmad_assist.core.types import EpicId
 from bmad_assist.validation.anonymizer import ValidationOutput
-from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+from bmad_assist.validation.synthesis_parser import SynthesisMetrics, extract_synthesis_metrics
 
 if TYPE_CHECKING:
     from bmad_assist.core.config import Config
@@ -480,6 +481,7 @@ def create_synthesizer_record(
     input_tokens: int,
     output_tokens: int,
     validator_count: int,
+    metrics: SynthesisMetrics | None = None,
 ) -> LLMEvaluationRecord:
     """Create evaluation record for synthesizer.
 
@@ -499,13 +501,16 @@ def create_synthesizer_record(
         input_tokens: Input token count.
         output_tokens: Output token count.
         validator_count: Number of validators (for sequence_position).
+        metrics: Pre-extracted metrics (e.g. post-repair). If None, extracts
+            from synthesis_output.
 
     Returns:
         LLMEvaluationRecord for synthesizer with extracted metrics.
 
     """
-    # Extract metrics from synthesis output
-    metrics = extract_synthesis_metrics(synthesis_output)
+    # Use provided metrics or extract from synthesis output
+    if metrics is None:
+        metrics = extract_synthesis_metrics(synthesis_output)
 
     # Create evaluator info for synthesizer
     # CRITICAL: synthesizer has role_id=None per EvaluatorInfo validation
@@ -531,12 +536,13 @@ def create_synthesizer_record(
     )
 
     # Analyze output structure
+    structure = calculate_structure_metrics(synthesis_output)
     output = OutputAnalysis(
-        char_count=len(synthesis_output),
-        heading_count=synthesis_output.count("\n#"),
-        list_depth_max=0,  # Not calculated for synthesis
-        code_block_count=synthesis_output.count("```"),
-        sections_detected=[],  # Not extracted for synthesis
+        char_count=structure.char_count,
+        heading_count=structure.heading_count,
+        list_depth_max=structure.list_depth_max,
+        code_block_count=structure.code_block_count,
+        sections_detected=list(structure.sections_detected),
         anomalies=[],
     )
 

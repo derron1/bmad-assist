@@ -226,6 +226,21 @@ class TestCodeReviewSynthesisCompiler:
         compiler = CodeReviewSynthesisCompiler()
         assert compiler.workflow_name == "code-review-synthesis"
 
+    def test_synthesis_mission_requires_markers_and_metrics(self) -> None:
+        """Mission text reinforces the structured synthesis contract."""
+        from bmad_assist.compiler.workflows.code_review_synthesis import (
+            CodeReviewSynthesisCompiler,
+        )
+
+        compiler = CodeReviewSynthesisCompiler()
+        mission = compiler._build_synthesis_mission(
+            {"epic_num": 1, "story_num": 2, "reviewer_count": 2}
+        )
+
+        assert "CODE_REVIEW_SYNTHESIS_START" in mission
+        assert "METRICS_JSON_START" in mission
+        assert "SYNTHESIS_RESOLUTION_START" in mission
+
     def test_compile_basic_four_reviewers(
         self,
         tmp_project: Path,
@@ -1567,3 +1582,112 @@ class TestSkipSourceFiles:
         assert "GIT_DIFF_END" in result.context
         assert "diff --git a/src/main.py" in result.context
         assert "++" in result.context or "Hello, World!" in result.context
+
+
+class TestGraduatedStagedTrimming:
+    """Tests for staged prompt budget enforcement in code-review synthesis."""
+
+    def test_story_preserved_when_over_cap(
+        self,
+        tmp_project: Path,
+        two_reviews: list[AnonymizedValidation],
+    ) -> None:
+        """Story content survives aggressive prompt trimming."""
+        from bmad_assist.compiler.workflows.code_review_synthesis import (
+            CodeReviewSynthesisCompiler,
+        )
+
+        compiler = CodeReviewSynthesisCompiler()
+        context = create_test_context(
+            tmp_project,
+            epic_num=14,
+            story_num=9,
+            reviews=two_reviews,
+        )
+
+        with (
+            patch(
+                "bmad_assist.compiler.workflows.code_review_synthesis._capture_git_diff",
+                return_value="diff --git a/src/main.py b/src/main.py\n" + ("+x\n" * 4000),
+            ),
+            patch(
+                "bmad_assist.compiler.budget.PromptBudgetEnforcer.from_config"
+            ) as mock_enforcer_cls,
+        ):
+            from bmad_assist.compiler.budget import PromptBudgetEnforcer
+
+            mock_enforcer_cls.return_value = PromptBudgetEnforcer(
+                "code_review_synthesis", cap=3000
+            )
+            result = compiler.compile(context)
+
+        assert "Test Story" in result.context
+
+    def test_sections_categorized_correctly(
+        self,
+        tmp_project: Path,
+        two_reviews: list[AnonymizedValidation],
+    ) -> None:
+        """Compiler exposes graduated trimmable sections instead of one monolith."""
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+        from bmad_assist.compiler.workflows.code_review_synthesis import (
+            CodeReviewSynthesisCompiler,
+        )
+
+        captured_sections: list[ContextSection] = []
+        original_enforce = PromptBudgetEnforcer.enforce
+
+        def capture_enforce(self_enforcer: Any, sections: list[ContextSection]) -> Any:
+            captured_sections.extend(sections)
+            return original_enforce(self_enforcer, sections)
+
+        compiler = CodeReviewSynthesisCompiler()
+        context = create_test_context(
+            tmp_project,
+            epic_num=14,
+            story_num=9,
+            reviews=two_reviews,
+            deep_verify_findings={
+                "verdict": "REJECT",
+                "findings": [],
+            },
+            security_findings={
+                "findings": [
+                    {
+                        "severity": "HIGH",
+                        "cwe_id": "CWE-79",
+                        "title": "XSS",
+                        "file_path": "src/main.py",
+                        "line_number": 1,
+                        "description": "desc",
+                    }
+                ]
+            },
+        )
+
+        with (
+            patch(
+                "bmad_assist.compiler.workflows.code_review_synthesis._capture_git_diff",
+                return_value="diff --git a/src/main.py b/src/main.py\n+x\n",
+            ),
+            patch.object(PromptBudgetEnforcer, "enforce", capture_enforce),
+        ):
+            compiler.compile(context)
+
+        section_map = {section.key: section for section in captured_sections}
+        assert set(section_map) == {
+            "strategic",
+            "antipatterns",
+            "tea",
+            "deep_verify",
+            "security",
+            "git_diff",
+            "source",
+            "reviews",
+            "story",
+        }
+        assert section_map["story"].trimmable is False
+        assert section_map["reviews"].trimmable is True
+        assert section_map["source"].trimmable is True
+        assert section_map["git_diff"].trimmable is True
+        assert section_map["strategic"].priority < section_map["reviews"].priority

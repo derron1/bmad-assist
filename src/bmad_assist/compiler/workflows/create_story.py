@@ -374,7 +374,7 @@ class CreateStoryCompiler:
         # 2. Include story antipatterns from previous validations (if exists)
         from bmad_assist.compiler.strategic_context import load_antipatterns
 
-        files.update(load_antipatterns(context, "story"))
+        files.update(load_antipatterns(context, "story", budget_tokens=1000))
 
         # 3. Previous stories via ContextBuilder
         builder = ContextBuilder(context)

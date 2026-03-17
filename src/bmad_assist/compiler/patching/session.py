@@ -11,6 +11,7 @@ Functions:
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from bmad_assist.core.exceptions import PatchError
 from bmad_assist.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
+
+_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV = "BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION"
 
 
 def extract_workflow_from_response(response: str) -> str | None:
@@ -139,15 +142,25 @@ class PatchSession:
 
                 # Single LLM call with tools disabled and no caching
                 # (one-shot prompt, cache overhead is wasteful)
-                result = self.provider.invoke(
-                    prompt,
-                    model=self.model,
-                    display_model=self.display_model,
-                    timeout=self.timeout,
-                    settings_file=self.settings_file,
-                    disable_tools=True,
-                    no_cache=True,
+                previous_setting = os.environ.get(
+                    _DISABLE_COMPLETION_PHRASE_TERMINATION_ENV
                 )
+                os.environ[_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV] = "1"
+                try:
+                    result = self.provider.invoke(
+                        prompt,
+                        model=self.model,
+                        display_model=self.display_model,
+                        timeout=self.timeout,
+                        settings_file=self.settings_file,
+                        disable_tools=True,
+                        no_cache=True,
+                    )
+                finally:
+                    if previous_setting is None:
+                        os.environ.pop(_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV, None)
+                    else:
+                        os.environ[_DISABLE_COMPLETION_PHRASE_TERMINATION_ENV] = previous_setting
 
                 # Parse response
                 response = self.provider.parse_output(result)

@@ -1,5 +1,6 @@
 """Tests for LLM session orchestrator."""
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -30,6 +31,7 @@ class MockProvider(BaseProvider):
         self.call_index = 0
         self.prompts: list[str] = []
         self.disable_tools_calls: list[bool] = []
+        self.disable_completion_phrase_env: list[str | None] = []
 
     @property
     def provider_name(self) -> str:
@@ -49,6 +51,9 @@ class MockProvider(BaseProvider):
     ) -> ProviderResult:
         self.prompts.append(prompt)
         self.disable_tools_calls.append(disable_tools)
+        self.disable_completion_phrase_env.append(
+            os.environ.get("BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION")
+        )
         if self.call_index < len(self.responses):
             response = self.responses[self.call_index]
             self.call_index += 1
@@ -177,6 +182,7 @@ class TestPatchSession:
         assert len(provider.prompts) == 1
         assert len(results) == 2
         assert all(r.success for r in results)
+        assert provider.disable_completion_phrase_env == ["1"]
 
     def test_session_prompt_includes_all_instructions(self) -> None:
         """Test that prompt includes all instructions."""

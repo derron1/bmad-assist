@@ -3,19 +3,24 @@
   <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
   <critical>Communicate all responses in {communication_language} and generate all documents in {document_output_language}</critical>
 
-  <critical>🔥 CRITICAL MISSION: You are creating the ULTIMATE story context engine that prevents LLM developer mistakes, omissions or
-    disasters! 🔥</critical>
+  <critical>CRITICAL MISSION: You are creating the ultimate story context engine that prevents LLM developer mistakes, omissions, or
+    disasters.</critical>
   <critical>Your purpose is NOT to copy from epics - it's to create a comprehensive, optimized story file that gives the DEV agent
     EVERYTHING needed for flawless implementation</critical>
   <critical>COMMON LLM MISTAKES TO PREVENT: reinventing wheels, wrong libraries, wrong file locations, breaking regressions, ignoring UX,
     vague implementations, lying about completion, not learning from past work</critical>
-  <critical>🚨 EXHAUSTIVE ANALYSIS REQUIRED: You must thoroughly analyze ALL artifacts to extract critical context - do NOT be lazy or skim!
-    This is the most important function in the entire development process!</critical>
-  <critical>🔬 UTILIZE SUBPROCESSES AND SUBAGENTS: Use research subagents, subprocesses or parallel processing if available to thoroughly
-    analyze different artifacts simultaneously and thoroughly</critical>
-  <critical>❓ SAVE QUESTIONS: If you think of questions or clarifications during analysis, save them for the end after the complete story is
+  <critical>CONTEXT-FIRST POLICY: The compiled prompt already contains strategic docs,
+    antipatterns, previous stories, and epic files. Draft the story ENTIRELY from this
+    compiled context first. Only use Read/Glob/Grep to resolve a specific ambiguity
+    (e.g., verify a file path, check a function signature). NEVER broadly scan the
+    repository for information already provided in context.</critical>
+  <critical>AUTHORITATIVE INPUTS: Anti-patterns and previous stories in the compiled
+    context are authoritative -- do NOT re-discover them by searching the repo.
+    Architecture docs and epic files in context are the single source of truth.
+    Stop exploration once enough evidence exists to write each story section.</critical>
+  <critical>SAVE QUESTIONS: If you think of questions or clarifications during analysis, save them for the end after the complete story is
     written</critical>
-  <critical>🎯 ZERO USER INTERVENTION: Process should be fully automated except for initial epic/story selection or missing documents</critical>
+  <critical>ZERO USER INTERVENTION: Process should be fully automated except for initial epic/story selection or missing documents</critical>
 
   <step n="1" goal="Determine target story">
     <check if="{{story_path}} is provided by user or user provided the epic and story number such as 2-4 or 1.6 or epic 1 story 5">
@@ -214,7 +219,7 @@
   </step>
 
   <step n="3" goal="Architecture analysis for developer guardrails">
-    <critical>🏗️ ARCHITECTURE INTELLIGENCE - Extract everything the developer MUST follow!</critical> **ARCHITECTURE DOCUMENT ANALYSIS:** <action>Systematically
+    <critical>ARCHITECTURE INTELLIGENCE - Extract everything the developer MUST follow!</critical> **ARCHITECTURE DOCUMENT ANALYSIS:** <action>Systematically
     analyze architecture content for story-relevant requirements:</action>
 
     <!-- Load architecture - single file or sharded -->
@@ -234,30 +239,25 @@
     <action>Identify any architectural decisions that override previous patterns</action>
   </step>
 
-  <step n="4" goal="Web research for latest technical specifics">
-    <critical>🌐 ENSURE LATEST TECH KNOWLEDGE - Prevent outdated implementations!</critical> **WEB INTELLIGENCE:** <action>Identify specific
-    technical areas that require latest version knowledge:</action>
-
-    <!-- Check for libraries/frameworks mentioned in architecture -->
-    <action>From architecture analysis, identify specific libraries, APIs, or
-    frameworks</action>
-    <action>For each critical technology, research latest stable version and key changes:
-      - Latest API documentation and breaking changes
-      - Security vulnerabilities or updates
-      - Performance improvements or deprecations
-      - Best practices for current version
-    </action>
-    **EXTERNAL CONTEXT INCLUSION:** <action>Include in story any critical latest information the developer needs:
-      - Specific library versions and why chosen
-      - API endpoints with parameters and authentication
-      - Recent security patches or considerations
-      - Performance optimization techniques
-      - Migration considerations if upgrading
+  <step n="4" goal="Use provided technical context efficiently">
+    <critical>NO EXTERNAL RESEARCH REQUIRED: Use only the technical details already present in the compiled prompt, architecture, PRD,
+      and epic files. If a version or API detail is missing, note the uncertainty instead of performing broad additional discovery.</critical>
+    <critical>PHASE-LOCAL EXPANSION BUDGET: You may read at most 3 files beyond what is
+      provided in context, and only for specific verification (e.g., checking if a file
+      exists, confirming an API signature). If you have read 3 files and still have
+      unresolved questions, note the uncertainty in the story rather than continuing
+      exploration. Prefer Read, Glob, Grep over Task or Bash.</critical>
+    <action>From architecture analysis, identify specific libraries, APIs, or frameworks that materially affect implementation guidance.</action>
+    <action>Include only the critical technical specifics already established in project sources:
+      - Required library versions if explicitly documented
+      - Internal API endpoints, parameters, and authentication patterns already in the repo/docs
+      - Security or performance constraints called out in project artifacts
+      - Migration considerations explicitly documented in architecture or previous stories
     </action>
   </step>
 
   <step n="5" goal="Create comprehensive story file">
-    <critical>📝 CREATE ULTIMATE STORY FILE - The developer's master implementation guide!</critical>
+    <critical>CREATE ULTIMATE STORY FILE - The developer's master implementation guide!</critical>
 
     <action>Initialize from template.md:
     {default_output_file}</action>
@@ -290,11 +290,6 @@
       <template-output file="{default_output_file}">git_intelligence_summary</template-output>
     </check>
 
-    <!-- Latest technical specifics -->
-    <check if="web research completed">
-      <template-output file="{default_output_file}">latest_tech_information</template-output>
-    </check>
-
     <!-- Project context reference -->
     <template-output
       file="{default_output_file}">project_context_reference</template-output>
@@ -324,7 +319,7 @@
     </check>
 
     <action>Report completion</action>
-    <output>**🎯 ULTIMATE BMad Method STORY CONTEXT CREATED, {user_name}!**
+    <output>**Ultimate BMad Method story context created, {user_name}!**
 
       **Story Details:**
       - Story ID: {{story_id}}

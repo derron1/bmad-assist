@@ -305,7 +305,7 @@ class DevStoryCompiler:
         # 1b. Include code antipatterns from previous code reviews (if exists)
         from bmad_assist.compiler.strategic_context import load_antipatterns
 
-        files.update(load_antipatterns(context, "code"))
+        files.update(load_antipatterns(context, "code", budget_tokens=1500))
 
         # 2. Epic file (current epic)
         epic_num = resolved.get("epic_num")
@@ -353,6 +353,48 @@ class DevStoryCompiler:
             content = safe_read_file(story_path, project_root)
             if content:
                 files[str(story_path)] = content
+
+        # 6. Staged prompt budget enforcement
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+
+        enforcer = PromptBudgetEnforcer.from_config("dev_story")
+        if enforcer.cap > 0:
+            strategic_keys = {
+                k for k in files
+                if k.startswith("[project-context") or k.startswith("[antipattern")
+            }
+            tea_keys = {k for k in files if k.startswith("[tea-") or "atdd" in k.lower()}
+            other_keys = [k for k in files if k not in strategic_keys and k not in tea_keys]
+
+            sections = [
+                ContextSection(
+                    "strategic",
+                    {k: files[k] for k in files if k in strategic_keys},
+                    priority=1,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "tea",
+                    {k: files[k] for k in files if k in tea_keys},
+                    priority=2,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "other",
+                    {k: files[k] for k in other_keys},
+                    priority=99,
+                    trimmable=False,
+                ),
+            ]
+
+            result = enforcer.enforce(sections)
+            if result.trimmed_sections:
+                trimmed_files: dict[str, str] = {}
+                rebuilt = {**result.sections["strategic"], **result.sections["tea"], **result.sections["other"]}
+                for key in files:
+                    if key in rebuilt:
+                        trimmed_files[key] = rebuilt[key]
+                files = trimmed_files
 
         return files
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -36,6 +37,28 @@ logger = logging.getLogger(__name__)
 _SECURITY_PLACEHOLDER_TOKENS = 2000
 _DV_PLACEHOLDER_TOKENS = 2000
 _GIT_DIFF_CAP_TOKENS = 5000
+
+
+@dataclass(frozen=True)
+class SynthesisBudgetLimits:
+    """Resolved synthesis budgeting inputs for a workflow."""
+
+    synthesis_budget: int
+    prompt_cap: int
+    effective_budget: int
+
+
+def resolve_synthesis_budget_limits(config: Any, workflow_name: str) -> SynthesisBudgetLimits:
+    """Resolve the tighter active limit across synthesis and prompt-cap config."""
+    synthesis_budget = int(getattr(config.compiler.synthesis, "token_budget", 0) or 0)
+    prompt_cap = int(config.compiler.prompt_budget.get_cap(workflow_name) or 0)
+    active_limits = [limit for limit in (synthesis_budget, prompt_cap) if limit > 0]
+    effective_budget = min(active_limits) if active_limits else 0
+    return SynthesisBudgetLimits(
+        synthesis_budget=synthesis_budget,
+        prompt_cap=prompt_cap,
+        effective_budget=effective_budget,
+    )
 
 
 def estimate_base_context_tokens(project_path: Path, config: Any, phase_name: str) -> int:

@@ -24,6 +24,7 @@ import pytest
 
 from bmad_assist.benchmarking import (
     CollectorContext,
+    ConsensusData,
     DeterministicMetrics,
     EnvironmentInfo,
     EvaluatorInfo,
@@ -32,6 +33,7 @@ from bmad_assist.benchmarking import (
     LLMEvaluationRecord,
     MetricsExtractionError,
     PatchInfo,
+    QualitySignals,
     StoryInfo,
     WorkflowInfo,
 )
@@ -41,6 +43,9 @@ from bmad_assist.benchmarking.collector import (
     StructureMetrics,
 )
 from bmad_assist.validation.anonymizer import ValidationOutput
+from bmad_assist.validation.synthesis_parser import SynthesisMetrics
+
+_SENTINEL = object()  # distinguishes "not passed" from "passed as None"
 
 
 class TestHelperFunctions:
@@ -89,6 +94,60 @@ class TestHelperFunctions:
             reasoning=reasoning,
             collected_at=datetime.now(UTC),
         )
+
+
+class TestSynthesizerOutputAnalysis:
+    def test_synthesizer_record_populates_sections_detected(self) -> None:
+        """Synthesizer record output uses deterministic structure metrics."""
+        from bmad_assist.benchmarking import PatchInfo, StoryInfo, WorkflowInfo
+        from bmad_assist.validation.benchmarking_integration import (
+            create_synthesizer_record,
+        )
+
+        synthesis_output = """## Synthesis Summary
+
+5 issues verified, 2 false positives dismissed, 3 changes applied.
+
+## Issues Verified
+
+### Critical
+- **Issue**: Missing idempotency guard
+
+## Changes Applied
+
+**Location**: story.md - Acceptance Criteria
+"""
+
+        record = create_synthesizer_record(
+            synthesis_output=synthesis_output,
+            workflow_info=WorkflowInfo(
+                id="validate-story-synthesis",
+                version="1.0.0",
+                variant="default",
+                patch=PatchInfo(applied=True),
+            ),
+            story_info=StoryInfo(
+                epic_num=5,
+                story_num=5,
+                title="Send booking confirmation",
+                complexity_flags={},
+            ),
+            provider="claude",
+            model="sonnet",
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC),
+            input_tokens=100,
+            output_tokens=50,
+            validator_count=2,
+        )
+
+        assert record.output.sections_detected == [
+            "Synthesis Summary",
+            "Issues Verified",
+            "Critical",
+            "Changes Applied",
+        ]
+        assert record.output.heading_count == 4
 
 
 class TestCreateCollectorContext:
@@ -920,3 +979,78 @@ class TestBenchmarkingDisabled:
         mock_config.benchmarking.enabled = True
 
         assert should_collect_benchmarking(mock_config) is True
+
+
+class TestCreateSynthesizerRecordMetricsParam:
+    """Test create_synthesizer_record with optional metrics parameter."""
+
+    def _make_record(
+        self,
+        synthesis_output: str = "test output",
+        metrics: SynthesisMetrics | None = _SENTINEL,
+    ) -> LLMEvaluationRecord:
+        from bmad_assist.benchmarking import PatchInfo, StoryInfo, WorkflowInfo
+        from bmad_assist.validation.benchmarking_integration import (
+            create_synthesizer_record,
+        )
+
+        kwargs: dict = dict(
+            synthesis_output=synthesis_output,
+            workflow_info=WorkflowInfo(
+                id="validate-story-synthesis",
+                version="1.0.0",
+                variant="default",
+                patch=PatchInfo(applied=True),
+            ),
+            story_info=StoryInfo(
+                epic_num=1,
+                story_num=1,
+                title="test",
+                complexity_flags={},
+            ),
+            provider="claude",
+            model="sonnet",
+            start_time=datetime.now(UTC),
+            end_time=datetime.now(UTC),
+            input_tokens=0,
+            output_tokens=50,
+            validator_count=2,
+        )
+        if metrics is not _SENTINEL:
+            kwargs["metrics"] = metrics
+        return create_synthesizer_record(**kwargs)
+
+    def test_uses_provided_metrics(self) -> None:
+        """When metrics kwarg is passed, record uses those values."""
+        quality = QualitySignals(
+            actionable_ratio=0.9,
+            specificity_score=0.8,
+            evidence_quality=0.7,
+            follows_template=True,
+            internal_consistency=0.95,
+        )
+        consensus = ConsensusData(
+            agreed_findings=5,
+            unique_findings=2,
+            disputed_findings=1,
+            missed_findings=0,
+            agreement_score=0.85,
+            false_positive_count=0,
+        )
+        provided = SynthesisMetrics(quality=quality, consensus=consensus)
+
+        record = self._make_record(
+            synthesis_output="no metrics json here",
+            metrics=provided,
+        )
+
+        assert record.quality == quality
+        assert record.consensus == consensus
+
+    def test_extracts_when_no_metrics_provided(self) -> None:
+        """When metrics is not passed, extracts from synthesis_output."""
+        # Output with no metrics JSON → extraction returns None → record has None
+        record = self._make_record(synthesis_output="plain text, no json")
+
+        assert record.quality is None
+        assert record.consensus is None

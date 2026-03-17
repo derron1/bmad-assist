@@ -233,6 +233,8 @@ class ValidateStorySynthesisCompiler:
 
         """
         files: dict[str, str] = {}
+        source_file_keys: set[str] = set()
+        story_key: str = ""
         project_root = context.project_root
         epic_num = resolved.get("epic_num")
         story_num = resolved.get("story_num")
@@ -308,6 +310,7 @@ class ValidateStorySynthesisCompiler:
                         )
                         source_files = limited_files
 
+                    source_file_keys.update(source_files.keys())
                     files.update(source_files)
                     if source_files:
                         logger.debug(
@@ -329,7 +332,8 @@ class ValidateStorySynthesisCompiler:
             logger.info("Step 0 compression: skipping source files (base context exceeds limit)")
 
         # 2b. Story file
-        files[str(story_path)] = story_content
+        story_key = str(story_path)
+        files[story_key] = story_content
         # Log mtime at compile time for debugging content freshness (Story 22.4 AC3)
         logger.debug(
             "Added story file to synthesis context: %s (mtime=%d, size=%d bytes)",
@@ -376,6 +380,58 @@ class ValidateStorySynthesisCompiler:
             epic_num,
             story_num,
         )
+
+        # Staged prompt budget enforcement with graduated trimmability
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+
+        enforcer = PromptBudgetEnforcer.from_config("validate_story_synthesis")
+        if enforcer.cap > 0:
+            # Categorize keys by section
+            strategic_keys = {k for k in files if k.startswith("[project-context")}
+            validation_keys = {k for k in files if k.startswith("[Validator ") or k.startswith("[RAW]")}
+            dv_keys = {k for k in files if k == "[Deep Verify Findings]"}
+            # story_key and source_file_keys tracked during construction above
+
+            sections = [
+                ContextSection(
+                    "strategic",
+                    {k: files[k] for k in files if k in strategic_keys},
+                    priority=1,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "source",
+                    {k: files[k] for k in files if k in source_file_keys},
+                    priority=2,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "deep_verify",
+                    {k: files[k] for k in files if k in dv_keys},
+                    priority=3,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "validations",
+                    {k: files[k] for k in files if k in validation_keys},
+                    priority=4,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "story",
+                    {story_key: files[story_key]} if story_key in files else {},
+                    priority=99,
+                    trimmable=False,
+                ),
+            ]
+
+            result = enforcer.enforce(sections)
+            if result.trimmed_sections:
+                trimmed_files: dict[str, str] = {}
+                for section_key in result.sections:
+                    trimmed_files.update(result.sections[section_key])
+                # Preserve original insertion order
+                files = {k: trimmed_files[k] for k in files if k in trimmed_files}
 
         return files
 

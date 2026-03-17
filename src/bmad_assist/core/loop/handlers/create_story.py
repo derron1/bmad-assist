@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from bmad_assist.core.loop.handlers.base import BaseHandler
 from bmad_assist.core.loop.types import PhaseResult
 from bmad_assist.core.paths import get_paths
 from bmad_assist.core.state import State
+from bmad_assist.providers.tool_guard import GUARD_TERMINATION_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,14 @@ _STORY_END_PATTERNS = (
     "<tool_call>",
     "<invoke",
     "</result>",
+)
+
+_FINALIZATION_SUFFIX = (
+    "\n\n--- RATE LIMIT RECOVERY ---\n"
+    "The previous attempt was interrupted by a rate limit. "
+    "Finalize the story NOW from the context already analyzed. "
+    "Do NOT start new exploration or file reads. "
+    "Write the story file immediately from what you know."
 )
 
 
@@ -210,9 +220,11 @@ class CreateStoryHandler(BaseHandler):
     def execute(self, state: State) -> PhaseResult:
         """Execute create_story with file verification and rescue.
 
-        After each LLM invocation, checks if the story file was created.
-        If not, attempts to extract story content from stdout and write it.
-        Retries up to MAX_RETRIES times on rescue failure.
+        Renders the prompt directly, then invokes the provider with story-specific
+        recovery logic:
+        - guard/rate-limit termination: rescue from partial output or retry once
+          with a finalization-only suffix
+        - missing story file: preserve existing retry/rescue behavior
 
         Args:
             state: Current loop state.
@@ -221,33 +233,136 @@ class CreateStoryHandler(BaseHandler):
             PhaseResult from story creation.
 
         """
-        for attempt in range(MAX_RETRIES + 1):
-            result = super().execute(state)
+        from bmad_assist.core.io import save_prompt
 
-            if not result.success:
-                return result
+        self._compile_ms = None
+        self._invoke_ms = None
+        start_time = datetime.now(UTC) if self.track_timing else None
 
-            if _find_story_file(state):
-                return result
+        try:
+            prompt = self.render_prompt(state)
+        except Exception as e:
+            logger.error("Handler execution failed during prompt render: %s", e, exc_info=True)
+            return PhaseResult.fail(f"Prompt compilation failed: {e}")
 
-            # Story file missing — attempt rescue from stdout
-            raw_output = result.outputs.get("response", "")
-            content, title = _extract_story_content(raw_output)
+        epic = state.current_epic or "unknown"
+        story = state.current_story or "unknown"
+        save_prompt(self.project_path, epic, story, self.phase_name, prompt)
 
-            if content and _validate_story_content(content):
-                rescued_path = _write_rescued_story(state, content, title)
-                result.outputs["rescued_file"] = str(rescued_path)
-                logger.info(
-                    "Story rescued from LLM output on attempt %d", attempt + 1
+        finalization_attempted = False
+
+        try:
+            for attempt in range(MAX_RETRIES + 1):
+                result = self.invoke_provider(prompt)
+
+                term_metadata = None
+                if result.termination_info:
+                    term_metadata = {
+                        "termination_info": result.termination_info,
+                        "termination_reason": result.termination_reason,
+                    }
+
+                is_guard_term = bool(
+                    result.termination_reason
+                    and result.termination_reason.startswith(GUARD_TERMINATION_PREFIX)
                 )
-                return result
 
-            if attempt < MAX_RETRIES:
-                logger.warning(
-                    "Story file not found and rescue failed (attempt %d/%d), retrying...",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                )
+                if is_guard_term:
+                    content, title = _extract_story_content(result.stdout or "")
+                    if content and _validate_story_content(content):
+                        rescued_path = _write_rescued_story(state, content, title)
+                        outputs: dict[str, Any] = {
+                            "response": result.stdout,
+                            "model": result.model,
+                            "duration_ms": result.duration_ms,
+                            "rescued_file": str(rescued_path),
+                            "rate_limit_rescued": True,
+                            **self._timing_outputs(),
+                        }
+                        if term_metadata:
+                            outputs["termination_metadata"] = term_metadata
+                        if start_time and self.config.benchmarking.enabled:
+                            self._save_timing_record(
+                                state, start_time, datetime.now(UTC), result.stdout
+                            )
+                        return PhaseResult.ok(outputs)
+
+                    if not finalization_attempted:
+                        finalization_attempted = True
+                        logger.warning(
+                            "Guard terminated with no rescuable content "
+                            "(attempt %d), retrying with finalization prompt",
+                            attempt + 1,
+                        )
+                        prompt = prompt + _FINALIZATION_SUFFIX
+                        save_prompt(
+                            self.project_path,
+                            epic,
+                            story,
+                            f"{self.phase_name}_finalization",
+                            prompt,
+                        )
+                        continue
+
+                    fail_outputs: dict[str, Any] = {}
+                    if term_metadata:
+                        fail_outputs["termination_metadata"] = term_metadata
+                    return PhaseResult(
+                        success=False,
+                        error="Guard terminated on finalization retry with no rescuable story content",
+                        outputs=fail_outputs,
+                    )
+
+                if result.exit_code != 0:
+                    error_msg = result.stderr or f"Provider exited with code {result.exit_code}"
+                    fail_outputs: dict[str, Any] = {}
+                    if term_metadata:
+                        fail_outputs["termination_metadata"] = term_metadata
+                    return PhaseResult(success=False, error=error_msg, outputs=fail_outputs)
+
+                if _find_story_file(state):
+                    outputs: dict[str, Any] = {
+                        "response": result.stdout,
+                        "model": result.model,
+                        "duration_ms": result.duration_ms,
+                        **self._timing_outputs(),
+                    }
+                    if term_metadata:
+                        outputs["termination_metadata"] = term_metadata
+                    if start_time and self.config.benchmarking.enabled:
+                        self._save_timing_record(
+                            state, start_time, datetime.now(UTC), result.stdout
+                        )
+                    return PhaseResult.ok(outputs)
+
+                content, title = _extract_story_content(result.stdout or "")
+                if content and _validate_story_content(content):
+                    rescued_path = _write_rescued_story(state, content, title)
+                    outputs = {
+                        "response": result.stdout,
+                        "model": result.model,
+                        "duration_ms": result.duration_ms,
+                        "rescued_file": str(rescued_path),
+                        **self._timing_outputs(),
+                    }
+                    if term_metadata:
+                        outputs["termination_metadata"] = term_metadata
+                    if start_time and self.config.benchmarking.enabled:
+                        self._save_timing_record(
+                            state, start_time, datetime.now(UTC), result.stdout
+                        )
+                    logger.info("Story rescued from LLM output on attempt %d", attempt + 1)
+                    return PhaseResult.ok(outputs)
+
+                if attempt < MAX_RETRIES:
+                    logger.warning(
+                        "Story file not found and rescue failed (attempt %d/%d), retrying...",
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                    )
+        except Exception as e:
+            logger.error("Handler execution failed: %s", e, exc_info=True)
+            return PhaseResult.fail(f"Handler error: {e}")
 
         return PhaseResult.fail(
             f"Story file not created after {MAX_RETRIES + 1} attempts and rescue extraction failed"

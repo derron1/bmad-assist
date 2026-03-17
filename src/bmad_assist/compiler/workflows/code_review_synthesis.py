@@ -245,6 +245,8 @@ class CodeReviewSynthesisCompiler:
 
         """
         files: dict[str, str] = {}
+        source_file_keys: set[str] = set()
+        story_key = ""
         project_root = context.project_root
         epic_num = resolved.get("epic_num")
         story_num = resolved.get("story_num")
@@ -255,15 +257,20 @@ class CodeReviewSynthesisCompiler:
         strategic_service = StrategicContextService(context, "code_review_synthesis")
         strategic_files = strategic_service.collect()
         files.update(strategic_files)
+        strategic_keys = set(strategic_files)
         logger.debug("Added %d strategic docs to synthesis context", len(strategic_files))
 
         # 1b. Include code antipatterns - synthesis should reference known issues
         from bmad_assist.compiler.strategic_context import load_antipatterns
 
-        files.update(load_antipatterns(context, "code"))
+        antipattern_files = load_antipatterns(context, "code", budget_tokens=1000)
+        files.update(antipattern_files)
+        antipattern_keys = set(antipattern_files)
 
         # 1c. TEA Context (test-review findings) for synthesis decisions
-        files.update(collect_tea_context(context, "code_review_synthesis", resolved))
+        tea_files = collect_tea_context(context, "code_review_synthesis", resolved)
+        files.update(tea_files)
+        tea_keys = set(tea_files)
 
         # 1d. Deep Verify findings (if available) - high priority technical validation
         dv_findings = context.resolved_variables.get("deep_verify_findings")
@@ -374,6 +381,7 @@ class CodeReviewSynthesisCompiler:
                 source_files = limited_files
 
             files.update(source_files)
+            source_file_keys.update(source_files)
             if source_files:
                 logger.debug("Added %d source files to synthesis context", len(source_files))
         else:
@@ -418,7 +426,8 @@ class CodeReviewSynthesisCompiler:
                 f"Suggestion: Check file permissions and encoding (UTF-8 required)"
             )
 
-        files[str(story_path)] = story_content
+        story_key = str(story_path)
+        files[story_key] = story_content
         # Log mtime at compile time for debugging content freshness (Story 22.4 AC3)
         logger.debug(
             "Added story file to synthesis context: %s (mtime=%d, size=%d bytes)",
@@ -437,6 +446,81 @@ class CodeReviewSynthesisCompiler:
             epic_num,
             story_num,
         )
+
+        from bmad_assist.compiler.budget import ContextSection, PromptBudgetEnforcer
+
+        enforcer = PromptBudgetEnforcer.from_config("code_review_synthesis")
+        if enforcer.cap > 0:
+            review_keys = {
+                key for key in files if key.startswith("[Reviewer ") or key.startswith("[RAW]")
+            }
+            dv_keys = {key for key in files if key == "[Deep Verify Findings]"}
+            security_keys = {key for key in files if key == "[Security Findings]"}
+            diff_keys = {key for key in files if key == "[git-diff]"}
+
+            sections = [
+                ContextSection(
+                    "strategic",
+                    {key: files[key] for key in files if key in strategic_keys},
+                    priority=1,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "antipatterns",
+                    {key: files[key] for key in files if key in antipattern_keys},
+                    priority=2,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "tea",
+                    {key: files[key] for key in files if key in tea_keys},
+                    priority=3,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "deep_verify",
+                    {key: files[key] for key in files if key in dv_keys},
+                    priority=4,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "security",
+                    {key: files[key] for key in files if key in security_keys},
+                    priority=5,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "git_diff",
+                    {key: files[key] for key in files if key in diff_keys},
+                    priority=6,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "source",
+                    {key: files[key] for key in files if key in source_file_keys},
+                    priority=7,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "reviews",
+                    {key: files[key] for key in files if key in review_keys},
+                    priority=8,
+                    trimmable=True,
+                ),
+                ContextSection(
+                    "story",
+                    {story_key: files[story_key]} if story_key in files else {},
+                    priority=99,
+                    trimmable=False,
+                ),
+            ]
+
+            result = enforcer.enforce(sections)
+            if result.trimmed_sections:
+                trimmed_files: dict[str, str] = {}
+                for section_key in result.sections:
+                    trimmed_files.update(result.sections[section_key])
+                files = {key: trimmed_files[key] for key in files if key in trimmed_files}
 
         return files
 
@@ -488,10 +572,24 @@ Your mission:
    - Document what you changed and why
 
 Output format:
+<!-- CODE_REVIEW_SYNTHESIS_START -->
 ## Synthesis Summary
 ## Issues Verified (by severity)
 ## Issues Dismissed (false positives with reasoning)
-## Source Code Fixes Applied"""
+## Source Code Fixes Applied
+<!-- METRICS_JSON_START -->
+[valid JSON with "quality" and "consensus" objects]
+<!-- METRICS_JSON_END -->
+<!-- SYNTHESIS_RESOLUTION_START -->
+resolution: [resolved|rework|halt]
+verified_critical: [N]
+verified_high: [N]
+fixed_critical: [N]
+fixed_high: [N]
+remaining_critical: [N]
+remaining_high: [N]
+<!-- SYNTHESIS_RESOLUTION_END -->
+<!-- CODE_REVIEW_SYNTHESIS_END -->"""
 
     def compile(self, context: CompilerContext) -> CompiledWorkflow:
         """Compile synthesis workflow with given context.

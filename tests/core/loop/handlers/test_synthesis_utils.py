@@ -23,6 +23,7 @@ from bmad_assist.core.loop.handlers.synthesis_utils import (
     estimate_synthesis_tokens,
     pre_extract_reviews,
     progressive_synthesize,
+    resolve_synthesis_budget_limits,
     validate_extraction_completeness,
 )
 from bmad_assist.validation.anonymizer import AnonymizedValidation
@@ -283,6 +284,32 @@ class TestEstimateBaseContextTokens:
         # Difference should be security (2000) + git_diff (5000) = 7000
         assert cr_result > vs_result
         assert cr_result - vs_result == 7000
+
+
+class TestResolveSynthesisBudgetLimits:
+    """Tests for shared synthesis budget resolution."""
+
+    def test_uses_tighter_prompt_cap_when_present(self) -> None:
+        config = MagicMock()
+        config.compiler.synthesis.token_budget = 120_000
+        config.compiler.prompt_budget.get_cap.return_value = 60_000
+
+        limits = resolve_synthesis_budget_limits(config, "code_review_synthesis")
+
+        assert limits.synthesis_budget == 120_000
+        assert limits.prompt_cap == 60_000
+        assert limits.effective_budget == 60_000
+
+    def test_falls_back_to_synthesis_budget_when_prompt_cap_disabled(self) -> None:
+        config = MagicMock()
+        config.compiler.synthesis.token_budget = 80_000
+        config.compiler.prompt_budget.get_cap.return_value = 0
+
+        limits = resolve_synthesis_budget_limits(config, "validate_story_synthesis")
+
+        assert limits.synthesis_budget == 80_000
+        assert limits.prompt_cap == 0
+        assert limits.effective_budget == 80_000
 
 
 # =============================================================================
