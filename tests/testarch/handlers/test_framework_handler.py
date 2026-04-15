@@ -369,7 +369,7 @@ class TestEpicTracking:
         # Mock get_paths and _invoke_generic_workflow so the full path
         # through _invoke_framework_workflow runs including state update
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with (
             patch("bmad_assist.testarch.handlers.framework.get_paths", return_value=mock_paths),

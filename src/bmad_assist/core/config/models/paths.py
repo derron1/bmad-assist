@@ -102,6 +102,11 @@ class ProjectPathsConfig(BaseModel):
         description="Folder for implementation artifacts (validations, reviews, benchmarks)",
         json_schema_extra={"security": "dangerous"},
     )
+    test_artifacts: str = Field(
+        default="{project-root}/_bmad-output/test-artifacts",
+        description="Folder for TEA test artifacts (test designs, framework setup, traceability)",
+        json_schema_extra={"security": "dangerous"},
+    )
     project_knowledge: str | None = Field(
         default=None,
         description="Folder for project documentation (PRD, architecture). Defaults to planning_artifacts path, with docs/ as fallback.",

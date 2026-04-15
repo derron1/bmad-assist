@@ -238,7 +238,7 @@ class TestLevelDetection:
         # Mock get_paths to return path without sprint-status
         mock_paths = MagicMock()
         mock_paths.implementation_artifacts = tmp_path / "artifacts"
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -264,7 +264,7 @@ class TestLevelDetection:
 
         mock_paths = MagicMock()
         mock_paths.implementation_artifacts = artifacts_dir
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -318,7 +318,7 @@ class TestSystemLevelOutputDetection:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -340,7 +340,7 @@ class TestSystemLevelOutputDetection:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -368,7 +368,7 @@ class TestEpicLevelOutputDetection:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -391,7 +391,7 @@ class TestEpicLevelOutputDetection:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -414,7 +414,7 @@ class TestEpicLevelOutputDetection:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -449,7 +449,7 @@ class TestSkipWhenSystemOutputExists:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -479,7 +479,7 @@ class TestSkipWhenSystemOutputExists:
 
         mock_paths = MagicMock()
         mock_paths.implementation_artifacts = tmp_path / "artifacts"  # Does not exist
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -516,7 +516,7 @@ class TestSkipWhenEpicOutputExists:
 
         mock_paths = MagicMock()
         mock_paths.implementation_artifacts = artifacts_dir
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch(
             "bmad_assist.testarch.handlers.test_design.get_paths",
@@ -550,13 +550,13 @@ class TestWorkflowInvocation:
     def test_invoke_system_level_uses_correct_report_dir(
         self, mock_config: MagicMock, tmp_path: Path, state_epic_1: State
     ) -> None:
-        """System-level invocation uses output_folder as report dir."""
+        """System-level invocation uses test_artifacts as report dir."""
         from bmad_assist.testarch.handlers import TestDesignHandler
 
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with (
             patch(
@@ -569,7 +569,7 @@ class TestWorkflowInvocation:
 
             handler._invoke_test_design_workflow(state_epic_1, "system")
 
-        # Verify report_dir is output_folder (not test-designs subdir)
+        # Verify report_dir is test_artifacts (not test-designs subdir)
         call_args = mock_invoke.call_args
         assert call_args.kwargs["report_dir"] == tmp_path
         assert call_args.kwargs["story_id"] == "architecture"
@@ -583,7 +583,7 @@ class TestWorkflowInvocation:
         handler = TestDesignHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with (
             patch(
@@ -622,7 +622,7 @@ class TestStateFlagUpdates:
         assert state_epic_25.test_design_ran_in_epic is False
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_paths.implementation_artifacts = tmp_path / "artifacts"
 
         with (

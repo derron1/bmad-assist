@@ -555,7 +555,7 @@ class TestarchBaseHandler(BaseHandler):
         paths = get_paths()
         context = CompilerContext(
             project_root=self.project_path,
-            output_folder=paths.output_folder,
+            output_folder=paths.test_artifacts,
             project_knowledge=paths.project_knowledge,
             cwd=get_original_cwd(),
         )

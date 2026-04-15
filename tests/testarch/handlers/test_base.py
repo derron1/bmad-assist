@@ -304,7 +304,7 @@ class TestInvokeGenericWorkflow:
     def test_invoke_generic_workflow_success(self, mock_get_paths, handler, tmp_path):
         """Generic workflow invocation succeeds and returns PhaseResult with standardized keys."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         state = State(current_epic=1, current_story="1.1")
@@ -348,7 +348,7 @@ class TestInvokeGenericWorkflow:
     def test_invoke_generic_workflow_provider_error(self, mock_get_paths, handler, tmp_path):
         """Generic workflow returns fail PhaseResult on provider error (exit_code != 0)."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         state = State(current_epic=1, current_story="1.1")
@@ -383,7 +383,7 @@ class TestInvokeGenericWorkflow:
     def test_invoke_generic_workflow_phase_result_failure(self, mock_get_paths, handler, tmp_path):
         """Generic workflow returns failure when _invoke_workflow returns PhaseResult.fail()."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         state = State(current_epic=1, current_story="1.1")
@@ -412,7 +412,7 @@ class TestInvokeGenericWorkflow:
     def test_invoke_generic_workflow_exception(self, mock_get_paths, handler, tmp_path):
         """Generic workflow handles exceptions gracefully."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         state = State(current_epic=1, current_story="1.1")
@@ -435,7 +435,7 @@ class TestInvokeGenericWorkflow:
     def test_invoke_generic_workflow_with_story_id(self, mock_get_paths, handler, tmp_path):
         """Generic workflow uses provided story_id for report filename."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         state = State(current_epic=1, current_story="1.1")

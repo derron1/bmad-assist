@@ -110,7 +110,7 @@ class TestReviewHandler(TestarchBaseHandler):
 
         try:
             paths = get_paths()
-            report_dir = paths.output_folder / "test-reviews"
+            report_dir = paths.test_artifacts / "test-reviews"
         except RuntimeError:
             logger.error("Paths not initialized")
             return PhaseResult.fail("Paths not initialized")

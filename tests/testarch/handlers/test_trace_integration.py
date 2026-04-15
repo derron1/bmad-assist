@@ -125,7 +125,7 @@ default_output_file: "{output_folder}/traceability-matrix.md"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_trace_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -171,7 +171,7 @@ default_output_file: "{output_folder}/traceability-matrix.md"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_trace_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -217,8 +217,8 @@ default_output_file: "{output_folder}/traceability-matrix.md"
             patch("bmad_assist.testarch.handlers.trace.get_paths") as mock_trace_paths,
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_paths,
         ):
-            mock_paths.return_value.output_folder = project_path / "_bmad-output"
-            mock_trace_paths.return_value.output_folder = project_path / "_bmad-output"
+            mock_paths.return_value.test_artifacts = project_path / "_bmad-output"
+            mock_trace_paths.return_value.test_artifacts = project_path / "_bmad-output"
 
             result = handler._invoke_trace_workflow(state)
 
@@ -267,8 +267,8 @@ default_output_file: "{output_folder}/traceability-matrix.md"
             patch("bmad_assist.testarch.handlers.trace.get_paths") as mock_trace_paths,
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_paths,
         ):
-            mock_paths.return_value.output_folder = project_path / "_bmad-output"
-            mock_trace_paths.return_value.output_folder = project_path / "_bmad-output"
+            mock_paths.return_value.test_artifacts = project_path / "_bmad-output"
+            mock_trace_paths.return_value.test_artifacts = project_path / "_bmad-output"
 
             result = handler._invoke_trace_workflow(state)
 
@@ -308,8 +308,8 @@ default_output_file: "{output_folder}/traceability-matrix.md"
             patch("bmad_assist.testarch.handlers.trace.get_paths") as mock_trace_paths,
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_paths,
         ):
-            mock_paths.return_value.output_folder = project_path / "_bmad-output"
-            mock_trace_paths.return_value.output_folder = project_path / "_bmad-output"
+            mock_paths.return_value.test_artifacts = project_path / "_bmad-output"
+            mock_trace_paths.return_value.test_artifacts = project_path / "_bmad-output"
 
             result = handler._invoke_trace_workflow(state)
 
@@ -358,7 +358,7 @@ class TestTraceHandlerInvokeWorkflowErrorHandling:
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_trace_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -400,7 +400,7 @@ class TestTraceHandlerInvokeWorkflowErrorHandling:
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_trace_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 

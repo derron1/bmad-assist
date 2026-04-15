@@ -279,6 +279,7 @@ class StandaloneRunner:
             "output_folder": str(self.output_dir),
             "planning_artifacts": str(docs_dir),
             "implementation_artifacts": str(self.output_dir),
+            "test_artifacts": str(self.output_dir),
             "project_knowledge": str(docs_dir),
         }
 

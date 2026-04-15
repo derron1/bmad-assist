@@ -134,8 +134,8 @@ class TestDesignHandler(TestarchBaseHandler):
         """
         try:
             paths = get_paths()
-            arch_path = paths.output_folder / "test-design-architecture.md"
-            qa_path = paths.output_folder / "test-design-qa.md"
+            arch_path = paths.test_artifacts / "test-design-architecture.md"
+            qa_path = paths.test_artifacts / "test-design-qa.md"
             return arch_path.exists() and qa_path.exists()
         except RuntimeError:
             logger.warning("Paths not initialized when checking system-level output")
@@ -157,7 +157,7 @@ class TestDesignHandler(TestarchBaseHandler):
             paths = get_paths()
             # Sanitize epic_num for filename (remove Windows/Unix invalid chars)
             safe_epic = re.sub(r'[\\/:*?"<>|]', "-", str(epic_num))
-            epic_path = paths.output_folder / "test-designs" / f"test-design-epic-{safe_epic}.md"
+            epic_path = paths.test_artifacts / "test-designs" / f"test-design-epic-{safe_epic}.md"
             return epic_path.exists()
         except RuntimeError:
             return False
@@ -201,9 +201,9 @@ class TestDesignHandler(TestarchBaseHandler):
         try:
             paths = get_paths()
             if level == "system":
-                report_dir = paths.output_folder
+                report_dir = paths.test_artifacts
             else:
-                report_dir = paths.output_folder / "test-designs"
+                report_dir = paths.test_artifacts / "test-designs"
         except RuntimeError:
             logger.error("Paths not initialized")
             return PhaseResult.fail("Paths not initialized")
@@ -277,8 +277,8 @@ class TestDesignHandler(TestarchBaseHandler):
         # Check if output already exists for this level
         if level == "system" and self._has_system_level_output():
             paths = get_paths()
-            arch_path = paths.output_folder / "test-design-architecture.md"
-            qa_path = paths.output_folder / "test-design-qa.md"
+            arch_path = paths.test_artifacts / "test-design-architecture.md"
+            qa_path = paths.test_artifacts / "test-design-qa.md"
             files_str = f"{arch_path}, {qa_path}"
             logger.info("System-level test-design already exists, skipping")
             return PhaseResult.ok(
@@ -296,7 +296,7 @@ class TestDesignHandler(TestarchBaseHandler):
                 paths = get_paths()
                 safe_epic = re.sub(r'[\\/:*?"<>|]', "-", str(epic_id))
                 epic_path = (
-                    paths.output_folder / "test-designs" / f"test-design-epic-{safe_epic}.md"
+                    paths.test_artifacts / "test-designs" / f"test-design-epic-{safe_epic}.md"
                 )
                 logger.info("Epic-level test-design already exists for epic %s, skipping", epic_id)
                 return PhaseResult.ok(

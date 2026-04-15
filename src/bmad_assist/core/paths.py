@@ -44,6 +44,7 @@ class ProjectPaths:
     DEFAULT_OUTPUT_FOLDER = "{project-root}/_bmad-output"
     DEFAULT_PLANNING_ARTIFACTS = "{project-root}/_bmad-output/planning-artifacts"
     DEFAULT_IMPLEMENTATION_ARTIFACTS = "{project-root}/_bmad-output/implementation-artifacts"
+    DEFAULT_TEST_ARTIFACTS = "{project-root}/_bmad-output/test-artifacts"
     DOCS_FALLBACK = "{project-root}/docs"
 
     def __init__(self, project_root: Path, config: dict[str, Any] | None = None):
@@ -56,6 +57,7 @@ class ProjectPaths:
                 - output_folder: Base output folder
                 - planning_artifacts: Planning phase artifacts
                 - implementation_artifacts: Implementation phase artifacts
+                - test_artifacts: TEA test artifacts
                 - project_knowledge: Project documentation folder
 
         """
@@ -134,6 +136,11 @@ class ProjectPaths:
         return self._get_config_path(
             "implementation_artifacts", self.DEFAULT_IMPLEMENTATION_ARTIFACTS
         )
+
+    @cached_property
+    def test_artifacts(self) -> Path:
+        """Root folder for TEA test artifacts (test designs, framework setup, traceability)."""
+        return self._get_config_path("test_artifacts", self.DEFAULT_TEST_ARTIFACTS)
 
     @cached_property
     def project_knowledge(self) -> Path:

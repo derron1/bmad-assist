@@ -367,7 +367,7 @@ class TestWorkflowInvocation:
 
         # Setup mocks
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         # Return same paths for both calls
         mock_base_get_paths.return_value = mock_paths
         mock_handler_get_paths.return_value = mock_paths
@@ -418,7 +418,7 @@ class TestWorkflowInvocation:
 
         # Setup mocks
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_base_get_paths.return_value = mock_paths
         mock_handler_get_paths.return_value = mock_paths
 

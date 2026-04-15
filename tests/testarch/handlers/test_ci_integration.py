@@ -125,7 +125,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -171,7 +171,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -216,7 +216,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -263,7 +263,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -313,7 +313,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -359,7 +359,7 @@ class TestCIHandlerInvokeWorkflowErrorHandling:
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_ci_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 

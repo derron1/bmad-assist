@@ -108,7 +108,7 @@ class TraceHandler(TestarchBaseHandler):
 
         try:
             paths = get_paths()
-            report_dir = paths.output_folder / "traceability"
+            report_dir = paths.test_artifacts / "traceability"
         except RuntimeError:
             logger.error("Paths not initialized")
             return PhaseResult.fail("Paths not initialized")

@@ -130,7 +130,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -177,7 +177,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -223,7 +223,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -271,7 +271,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -316,7 +316,7 @@ instructions: "{installed_path}/instructions.xml"
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -364,7 +364,7 @@ class TestTestDesignHandlerErrorHandling:
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = project_path / "_bmad-output"
+            mock_paths.test_artifacts = project_path / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 
@@ -419,12 +419,12 @@ class TestTestDesignHandlerExecuteMethod:
         self, setup_project: Path
     ) -> None:
         """Test execute skips when system-level test design already exists."""
-        # Create existing system-level output files in output_folder root
-        # (handler checks paths.output_folder / "test-design-architecture.md")
-        output_folder = setup_project / "_bmad-output"
-        output_folder.mkdir(parents=True, exist_ok=True)
-        (output_folder / "test-design-architecture.md").write_text("# Test Design")
-        (output_folder / "test-design-qa.md").write_text("# QA Plan")
+        # Create existing system-level output files in test_artifacts root
+        # (handler checks paths.test_artifacts / "test-design-architecture.md")
+        test_artifacts = setup_project / "_bmad-output"
+        test_artifacts.mkdir(parents=True, exist_ok=True)
+        (test_artifacts / "test-design-architecture.md").write_text("# Test Design")
+        (test_artifacts / "test-design-qa.md").write_text("# QA Plan")
 
         # Configure to force system-level detection
         config = FakeConfig()
@@ -442,7 +442,7 @@ class TestTestDesignHandlerExecuteMethod:
             patch("bmad_assist.testarch.handlers.base.get_paths") as mock_base_paths,
         ):
             mock_paths = MagicMock()
-            mock_paths.output_folder = setup_project / "_bmad-output"
+            mock_paths.test_artifacts = setup_project / "_bmad-output"
             mock_td_paths.return_value = mock_paths
             mock_base_paths.return_value = mock_paths
 

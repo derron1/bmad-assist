@@ -263,7 +263,7 @@ class TEAVariableResolver:
         else:
             resolved["test_dir"] = "tests/"
 
-        # implementation_artifacts from context
+        # implementation_artifacts from context (points to test_artifacts for TEA)
         resolved["implementation_artifacts"] = str(context.output_folder)
 
         # TEA feature flags from TestarchConfig.knowledge or defaults

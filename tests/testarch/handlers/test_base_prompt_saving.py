@@ -63,7 +63,7 @@ class TestPromptSaving:
     ):
         """save_prompt should be called with extracted epic and story_num."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         mock_save_prompt.return_value = tmp_path / "prompt.md"
@@ -110,7 +110,7 @@ class TestPromptSaving:
     ):
         """state.current_story="25.1" should extract story_num="1"."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         mock_save_prompt.return_value = tmp_path / "prompt.md"
@@ -151,7 +151,7 @@ class TestPromptSaving:
     ):
         """epic=None should use "unknown" fallback."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         mock_save_prompt.return_value = tmp_path / "prompt.md"
@@ -192,7 +192,7 @@ class TestPromptSaving:
     ):
         """save_prompt() failure should log warning, not crash."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         # Simulate disk full error
@@ -234,7 +234,7 @@ class TestPromptSaving:
     ):
         """IOError should also be caught and logged."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         mock_save_prompt.side_effect = IOError("Permission denied")
@@ -306,7 +306,7 @@ class TestPromptContent:
     ):
         """save_prompt should receive compiled.context (the XML prompt)."""
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
         mock_get_paths.return_value = mock_paths
 
         mock_save_prompt.return_value = tmp_path / "prompt.md"

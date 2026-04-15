@@ -146,7 +146,7 @@ class TEAContextService:
         """Get base path for TEA artifacts.
 
         Returns:
-            Path to implementation_artifacts (output_folder).
+            Path to test_artifacts directory.
             Resolvers handle subdirectory navigation themselves.
 
         """
@@ -154,7 +154,7 @@ class TEAContextService:
         try:
             from bmad_assist.core.paths import get_paths
 
-            path = get_paths().implementation_artifacts
+            path = get_paths().test_artifacts
             logger.debug("TEA base path (from paths singleton): %s", path)
             return path
         except RuntimeError:

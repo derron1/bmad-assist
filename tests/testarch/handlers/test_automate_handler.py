@@ -184,7 +184,7 @@ class TestAutomationDetection:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths):
             exists, path = handler._detect_existing_automation()
@@ -202,7 +202,7 @@ class TestAutomationDetection:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths):
             exists, path = handler._detect_existing_automation()
@@ -248,7 +248,7 @@ class TestSkipWhenExists:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths):
             result = handler.execute(state_epic_25)
@@ -300,7 +300,7 @@ class TestModeOn:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths):
             result = handler.execute(state_epic_25)
@@ -337,7 +337,7 @@ class TestWorkflowInvocation:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with (
             patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths),
@@ -373,7 +373,7 @@ class TestEpicTracking:
         assert state_epic_25.automate_ran_in_epic is False
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with (
             patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths),
@@ -413,7 +413,7 @@ class TestEpicTracking:
         handler = AutomateHandler(mock_config, tmp_path)
 
         mock_paths = MagicMock()
-        mock_paths.output_folder = tmp_path
+        mock_paths.test_artifacts = tmp_path
 
         with patch("bmad_assist.testarch.handlers.automate.get_paths", return_value=mock_paths):
             handler.execute(state_epic_25)

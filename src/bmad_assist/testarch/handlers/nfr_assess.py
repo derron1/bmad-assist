@@ -82,7 +82,7 @@ class NFRAssessHandler(TestarchBaseHandler):
         """
         try:
             paths = get_paths()
-            report_dir = paths.output_folder / "nfr-assessments"
+            report_dir = paths.test_artifacts / "nfr-assessments"
             if not report_dir.exists():
                 return False, None
 
@@ -134,7 +134,7 @@ class NFRAssessHandler(TestarchBaseHandler):
         """
         try:
             paths = get_paths()
-            report_dir = paths.output_folder / "nfr-assessments"
+            report_dir = paths.test_artifacts / "nfr-assessments"
         except RuntimeError:
             logger.error("Paths not initialized")
             return PhaseResult.fail("Paths not initialized")
