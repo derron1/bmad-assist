@@ -2,6 +2,24 @@
 
 All notable changes to bmad-assist are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **BMAD v6.4+ Skill Layout** — bmad-assist now compiles workflows via BMAD's new `SKILL.md` + `customize.toml` format (Phases 1-5). All 13 in-scope workflows migrated: `bmad-create-story`, `bmad-dev-story`, `bmad-code-review`, `bmad-retrospective`, `bmad-testarch-{atdd,automate,ci,framework,nfr,test-design,test-review,trace}`. The new layout is now the default; the legacy `workflow.yaml` + `instructions.xml` path remains as a fallback for unmigrated workflows (`validate-story*`, `qa-plan-*`, `code-review-synthesis`).
+- **`--skill-layout {auto,new,old}` CLI flag** on `init` and `run` commands to override layout detection. `auto` (default) detects via `_bmad/scripts/resolve_customization.py` presence or bootstrapped `.claude/skills/bmad-*/customize.toml`.
+- **`--reset-skills-force` flag** on `init` for destructive customization reset. The default `--reset-workflows` flow now PRESERVES per-skill `customize.toml` overrides; use `--reset-skills-force` only when you want a completely clean slate.
+- **`bmad-assist init` bootstrap** — on a fresh project, copies bundled v6.4+ skills to `.claude/skills/<id>/` and `.agents/skills/<id>/` automatically.
+
+### Changed
+- **Default workflow layout** flipped to BMAD v6.4+ skill layout. The legacy path emits a `DeprecationWarning` per workflow per process. Legacy support will be removed in a future release.
+- **TEA `tea-index.csv`** path resolution is now layout-aware. The bundled fallback was refreshed to the v6.4+ schema (51 fragments, 6 columns including `tier`). The parser tolerates both 5-col legacy and 6-col v6.4+ schemas.
+- **`bmad-assist init`** is now layout-aware. Detects an existing v6.4+ install (no-clobber), an existing legacy install (preserves), or a fresh project (bootstraps the new layout).
+
+### Migration
+- **Existing v6.4+ users**: no action needed. Layout is auto-detected.
+- **Existing legacy users**: continue working unchanged but will see a `DeprecationWarning` per migrated workflow per process. Run `bmad-assist init` to bootstrap the new layout when ready (no-clobber).
+- **Fresh installs**: get the new layout by default.
+
 ## [0.4.34] - 2026-03-07
 
 ### Added

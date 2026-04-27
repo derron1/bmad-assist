@@ -23,11 +23,40 @@ flag selects between them.
 import importlib
 import logging
 import re
+import warnings
 from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext
 from bmad_assist.core.exceptions import CompilerError
+
+# Per-process dedup set for the legacy DeprecationWarning. We emit at
+# most one warning per workflow per process so chatty loops don't spam.
+_LEGACY_DEPRECATION_EMITTED: set[str] = set()
+
+
+def _emit_legacy_deprecation(workflow_name: str) -> None:
+    """Warn (once per workflow per process) that the legacy path is in use.
+
+    Called from :func:`get_workflow_compiler` when a workflow that has a
+    v6.4+ skill-layout port is being compiled via the legacy
+    ``workflow.yaml`` + ``instructions.xml`` pipeline. Workflows that
+    don't have a skill-layout port (the 5 orphans + ``security-review``)
+    never trigger this warning — they only have a legacy path, so the
+    deprecation isn't actionable.
+    """
+    if workflow_name in _LEGACY_DEPRECATION_EMITTED:
+        return
+    _LEGACY_DEPRECATION_EMITTED.add(workflow_name)
+    warnings.warn(
+        f"Compiling '{workflow_name}' via legacy workflow.yaml + "
+        f"instructions.xml.\nThe v6.4+ skill layout is now the default. "
+        f"Run `bmad-assist init` to bootstrap the new layout, or set "
+        f"`skill_layout: \"new\"` in bmad-assist.yaml. Legacy support "
+        f"will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
 # Skill-layout-port registry. Maps the *legacy* workflow name and the
 # new bmad-prefixed skill id to the canonical skill id. Phase 2 shipped
@@ -301,6 +330,13 @@ def get_workflow_compiler(
         skill_id = _SKILL_LAYOUT_COMPILERS[normalized_name]
         logger.debug("Routing '%s' through skill-layout compiler '%s'", normalized_name, skill_id)
         return _build_skill_layout_compiler(skill_id)
+
+    # Phase 5: emit a DeprecationWarning when we fall through to the
+    # legacy compiler for a workflow that *does* have a skill-layout
+    # port. Workflows without a port (orphans / security-review) skip
+    # the warning since they have no migration target yet.
+    if normalized_name in _SKILL_LAYOUT_COMPILERS:
+        _emit_legacy_deprecation(normalized_name)
 
     # Convert to Python module naming: hyphens to underscores
     module_name = normalized_name.replace("-", "_")

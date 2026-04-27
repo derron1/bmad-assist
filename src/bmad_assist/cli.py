@@ -349,8 +349,10 @@ def run(
     skill_layout: str = typer.Option(
         "auto",
         "--skill-layout",
-        help="Skill layout mode: 'auto' (detect), 'new' (force v6.4+), 'old' (force legacy). "
-        "Overrides config.skill_layout. Phase 1: wired through but not yet consumed.",
+        help="Skill layout mode: 'auto' (detect; default), 'new' (force v6.4+), "
+        "'old' (force legacy workflow.yaml + instructions.xml). Overrides "
+        "config.skill_layout. Auto detects via _bmad/scripts/resolve_customization.py "
+        "or bootstrapped .claude/skills/bmad-*/customize.toml.",
     ),
 ) -> None:
     """Execute the main BMAD development loop.
@@ -505,16 +507,17 @@ def run(
         # Implicit project setup (without gitignore modification)
         from bmad_assist.core.project_setup import check_gitignore_warning, ensure_project_setup
 
-        # Phase 4: keep ``run`` on the legacy setup path. The new-layout
-        # bootstrap is initiated explicitly via ``bmad-assist init
-        # --skill-layout new`` (or auto-detected on init for fresh
-        # projects). Phase 5 will flip the default once we're ready.
+        # Phase 5: ``run`` defaults to ``skill_layout="auto"`` so projects
+        # with bootstrapped ``.claude/skills/bmad-*`` skills (or a v6.4+
+        # BMAD install) automatically use the new layout. Legacy projects
+        # remain on the old path. The user's ``--skill-layout`` flag (and
+        # the per-project ``skill_layout`` config) still override.
         setup_result = ensure_project_setup(
             project_path,
             include_gitignore=False,  # run never modifies gitignore
             force=no_interactive,  # In non-interactive, skip differing files silently
             console=console if not quiet else None,
-            skill_layout="old",
+            skill_layout="auto",
         )
 
         # Show gitignore warning (respects config)

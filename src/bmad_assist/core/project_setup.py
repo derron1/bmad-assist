@@ -582,7 +582,13 @@ def copy_bundled_workflows(
     return result
 
 
-def _copy_skill_tree(src_dir: Path, dst_dir: Path, _is_root: bool = True) -> None:
+def _copy_skill_tree(
+    src_dir: Path,
+    dst_dir: Path,
+    _is_root: bool = True,
+    *,
+    preserve_customizations: bool = True,
+) -> None:
     """Copy a bundled skill directory tree.
 
     Mirrors :func:`_copy_workflow_tree` but is named separately so the
@@ -593,6 +599,12 @@ def _copy_skill_tree(src_dir: Path, dst_dir: Path, _is_root: bool = True) -> Non
         src_dir: Source skill directory (under ``bmad_assist.skills``).
         dst_dir: Destination skill directory.
         _is_root: Internal flag - True for top-level call (enables rollback).
+        preserve_customizations: When True (default), skip copying
+            ``customize.toml`` files when the destination already exists.
+            ``customize.toml`` is the v6.4+ user-override surface; the
+            non-destructive ``--reset-workflows`` flow must not clobber
+            it. Set False for the destructive ``--reset-skills-force``
+            path.
 
     Raises:
         SetupError: If any copy operation fails. Cleans up partial copy.
@@ -613,9 +625,27 @@ def _copy_skill_tree(src_dir: Path, dst_dir: Path, _is_root: bool = True) -> Non
             if item.name == "__pycache__" or item.name.endswith(".pyc"):
                 continue
             if item.is_dir():
-                _copy_skill_tree(item, dst_dir / item.name, _is_root=False)
+                _copy_skill_tree(
+                    item,
+                    dst_dir / item.name,
+                    _is_root=False,
+                    preserve_customizations=preserve_customizations,
+                )
             else:
-                _atomic_copy_file(item, dst_dir / item.name)
+                target = dst_dir / item.name
+                # Preserve user customize.toml overrides on non-destructive
+                # re-copies (Phase 5 --reset-workflows semantics).
+                if (
+                    preserve_customizations
+                    and item.name == "customize.toml"
+                    and target.exists()
+                ):
+                    logger.debug(
+                        "Preserving user customize.toml override at %s",
+                        target,
+                    )
+                    continue
+                _atomic_copy_file(item, target)
     except (SetupError, OSError) as e:
         if _is_root and created_dst and dst_dir.exists():
             logger.warning("Rolling back partial skill copy: %s", dst_dir)
@@ -627,6 +657,8 @@ def bootstrap_new_layout(
     project_path: Path,
     force: bool,
     console: Console,
+    *,
+    preserve_customizations: bool = True,
 ) -> tuple[list[str], list[str]]:
     """Bootstrap the BMAD v6.4+ skill layout from bundled sources.
 
@@ -639,16 +671,20 @@ def bootstrap_new_layout(
 
     Args:
         project_path: Project root directory.
-        force: If True, overwrite existing skill directories with the
+        force: If True, re-copy existing skill directories from the
             bundled versions. If False, skip already-present skills.
         console: Rich console for progress output.
+        preserve_customizations: When True (default), per-skill
+            ``customize.toml`` files are preserved during re-copy. The
+            destructive ``--reset-skills-force`` path passes False to
+            also overwrite ``customize.toml``. Only meaningful when
+            ``force=True`` (no-clobber mode never copies over existing
+            files anyway).
 
     Returns:
         Tuple of ``(bootstrapped_skill_ids, skipped_skill_ids)``.
 
     """
-    import shutil
-
     from bmad_assist.skills import get_bundled_skill_dir, list_bundled_skills
 
     skills = list_bundled_skills()
@@ -657,6 +693,14 @@ def bootstrap_new_layout(
         return [], []
 
     console.print(f"\n[bold]Bootstrapping {len(skills)} bundled skills...[/bold]")
+    if force and preserve_customizations:
+        console.print(
+            "  [dim]Re-copy mode: preserving any existing customize.toml overrides.[/dim]"
+        )
+    elif force and not preserve_customizations:
+        console.print(
+            "  [yellow]Destructive reset: customize.toml overrides will be replaced.[/yellow]"
+        )
 
     bootstrapped: list[str] = []
     skipped: list[str] = []
@@ -677,12 +721,25 @@ def bootstrap_new_layout(
                 continue
             if dst_dir.exists():
                 if force:
-                    shutil.rmtree(dst_dir)
-                    _copy_skill_tree(src_dir, dst_dir)
+                    # Re-copy in place rather than rmtree → copy. The
+                    # _copy_skill_tree call honours preserve_customizations
+                    # (which we want to keep customize.toml intact for the
+                    # default --reset-workflows UX). For the destructive
+                    # --reset-skills-force path, preserve=False allows
+                    # customize.toml to be overwritten too.
+                    _copy_skill_tree(
+                        src_dir,
+                        dst_dir,
+                        preserve_customizations=preserve_customizations,
+                    )
                     any_action = True
                 # else: no-clobber — leave it alone
             else:
-                _copy_skill_tree(src_dir, dst_dir)
+                _copy_skill_tree(
+                    src_dir,
+                    dst_dir,
+                    preserve_customizations=preserve_customizations,
+                )
                 any_action = True
 
         if any_action:
@@ -840,6 +897,8 @@ def ensure_project_setup(
     force: bool = False,
     console: Console | None = None,
     skill_layout: str = "auto",
+    *,
+    preserve_customizations: bool = True,
 ) -> SetupResult:
     """Ensure project is set up for bmad-assist.
 
@@ -864,6 +923,12 @@ def ensure_project_setup(
         skill_layout: ``"auto"`` (detect), ``"new"`` (force bootstrap),
             or ``"old"`` (force legacy workflow copy). Defaults to
             ``"auto"``.
+        preserve_customizations: When True (Phase 5 default), the
+            new-layout re-copy preserves any per-skill ``customize.toml``
+            overrides. The destructive ``--reset-skills-force`` path
+            wires this to False to also overwrite ``customize.toml``.
+            Has no effect on the legacy path (which has no per-user
+            override surface in the same way).
 
     Returns:
         SetupResult with status and details (including which layout
@@ -916,12 +981,22 @@ def ensure_project_setup(
         # Bundled skills act as fallback for anything not installed; nothing to copy.
         # Still respect --force by re-bootstrapping (overwrite installed skills).
         if force:
-            bootstrapped, skipped = bootstrap_new_layout(project_path, force=True, console=console)
+            bootstrapped, skipped = bootstrap_new_layout(
+                project_path,
+                force=True,
+                console=console,
+                preserve_customizations=preserve_customizations,
+            )
             result.skills_bootstrapped = bootstrapped
             result.skills_skipped = skipped
     elif mode == "fresh":
         result.layout = "new"
-        bootstrapped, skipped = bootstrap_new_layout(project_path, force=force, console=console)
+        bootstrapped, skipped = bootstrap_new_layout(
+            project_path,
+            force=force,
+            console=console,
+            preserve_customizations=preserve_customizations,
+        )
         result.skills_bootstrapped = bootstrapped
         result.skills_skipped = skipped
     else:

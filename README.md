@@ -73,6 +73,8 @@ bmad-assist init --project /path/to/your/project
 bmad-assist run --project /path/to/your/project
 ```
 
+`bmad-assist init` bootstraps the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml` under `.claude/skills/bmad-*/`) by default on fresh projects. Existing v6.4+ or legacy installs are detected and preserved. See [Skill Layout](docs/configuration.md#skill-layout-bmad-v64) for the `--skill-layout` flag and `--reset-workflows` vs `--reset-skills-force` semantics.
+
 **Recommended:** Customize `bmad-assist.yaml` for your provider and model configuration before running. See [Configuration Reference](docs/configuration.md) for available options.
 
 Your project needs documentation in `docs/`:

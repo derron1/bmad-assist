@@ -68,7 +68,21 @@ def init_command(
     reset_workflows: bool = typer.Option(
         False,
         "--reset-workflows",
-        help="Overwrite all workflows with bundled versions (destructive!)",
+        help=(
+            "Re-copy bundled workflow files. In the v6.4+ skill layout, "
+            "preserves any per-skill customize.toml overrides. In the "
+            "legacy layout, overwrites local workflow customizations."
+        ),
+    ),
+    reset_skills_force: bool = typer.Option(
+        False,
+        "--reset-skills-force",
+        help=(
+            "Re-copy ALL bundled skill files including customize.toml "
+            "(destroys any user customize.toml overrides). v6.4+ layout "
+            "only — implies --reset-workflows. Use only when you want a "
+            "completely clean slate."
+        ),
     ),
     wizard: bool = typer.Option(
         False,
@@ -98,11 +112,13 @@ def init_command(
     This command is idempotent - safe to run multiple times.
 
     Examples:
-        bmad-assist init                    # Initialize current directory
-        bmad-assist init -p ./my-project    # Initialize specific project
-        bmad-assist init --wizard           # Initialize and configure interactively
-        bmad-assist init --dry-run          # Preview changes without applying
-        bmad-assist init --reset-workflows  # Restore bundled workflow versions
+        bmad-assist init                       # Initialize current directory
+        bmad-assist init -p ./my-project       # Initialize specific project
+        bmad-assist init --wizard              # Initialize and configure interactively
+        bmad-assist init --dry-run             # Preview changes without applying
+        bmad-assist init --reset-workflows     # Re-copy bundled workflows
+                                               # (preserves customize.toml in v6.4+ layout)
+        bmad-assist init --reset-skills-force  # Destructive reset including customize.toml
 
     """
     from rich.prompt import Confirm
@@ -139,11 +155,25 @@ def init_command(
 
         console.print()
 
-    # Confirm destructive reset operation
-    if reset_workflows:
+    # --reset-skills-force implies --reset-workflows (force-copy from bundled).
+    if reset_skills_force and not reset_workflows:
+        reset_workflows = True
+
+    # Confirm destructive reset operations.
+    if reset_skills_force:
         console.print(
-            "[yellow]⚠️  WARNING: --reset-workflows will overwrite ALL local workflow customizations![/yellow]"
-        )  # noqa: E501
+            "[red]⚠️  WARNING: --reset-skills-force will overwrite EVERY bundled skill "
+            "file including customize.toml — your per-skill overrides will be lost![/red]"
+        )
+        if not Confirm.ask("Continue?", default=False):
+            console.print("[dim]Cancelled.[/dim]")
+            raise typer.Exit(code=0)
+    elif reset_workflows:
+        console.print(
+            "[yellow]⚠️  --reset-workflows will re-copy bundled workflow files. "
+            "In the v6.4+ skill layout, customize.toml overrides are PRESERVED. "
+            "In the legacy layout, this overwrites ALL local workflow customizations.[/yellow]"
+        )
         if not Confirm.ask("Continue?", default=False):
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(code=0)
@@ -211,13 +241,20 @@ def init_command(
         console.print("[yellow]Dry run - no changes made. Run without --dry-run to apply.[/yellow]")
         return
 
-    # Run the actual setup
+    # Run the actual setup.
+    #
+    # --reset-workflows: force=True, preserve_customizations=True
+    #   (re-copy SKILL.md / template.md / etc. but keep user customize.toml)
+    # --reset-skills-force: force=True, preserve_customizations=False
+    #   (destructive — overwrite customize.toml too)
+    # neither: force=False (no-clobber bootstrap only)
     result = ensure_project_setup(
         project_path,
         include_gitignore=True,
         force=reset_workflows,
         console=console,
         skill_layout=skill_layout,
+        preserve_customizations=not reset_skills_force,
     )
 
     # Verify bundled workflows (legacy validation — only meaningful when
