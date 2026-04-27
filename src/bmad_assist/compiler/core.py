@@ -44,6 +44,26 @@ _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     "bmad-dev-story": "bmad-dev-story",
     "retrospective": "bmad-retrospective",
     "bmad-retrospective": "bmad-retrospective",
+    "testarch-atdd": "bmad-testarch-atdd",
+    "bmad-testarch-atdd": "bmad-testarch-atdd",
+    "testarch-automate": "bmad-testarch-automate",
+    "bmad-testarch-automate": "bmad-testarch-automate",
+    "testarch-ci": "bmad-testarch-ci",
+    "bmad-testarch-ci": "bmad-testarch-ci",
+    "testarch-framework": "bmad-testarch-framework",
+    "bmad-testarch-framework": "bmad-testarch-framework",
+    # Phase 3.2-B rename: legacy ``testarch-nfr-assess`` collapses into
+    # the canonical ``bmad-testarch-nfr`` skill id (the v6.4+ install
+    # drops the ``-assess`` suffix). The patch file still uses the
+    # legacy name.
+    "testarch-nfr-assess": "bmad-testarch-nfr",
+    "bmad-testarch-nfr": "bmad-testarch-nfr",
+    "testarch-test-design": "bmad-testarch-test-design",
+    "bmad-testarch-test-design": "bmad-testarch-test-design",
+    "testarch-test-review": "bmad-testarch-test-review",
+    "bmad-testarch-test-review": "bmad-testarch-test-review",
+    "testarch-trace": "bmad-testarch-trace",
+    "bmad-testarch-trace": "bmad-testarch-trace",
 }
 
 
@@ -77,6 +97,54 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadRetrospectiveCompiler()
+    if skill_id == "bmad-testarch-atdd":
+        from bmad_assist.compiler.skills.bmad_testarch_atdd import (
+            BmadTestarchAtddCompiler,
+        )
+
+        return BmadTestarchAtddCompiler()
+    if skill_id == "bmad-testarch-automate":
+        from bmad_assist.compiler.skills.bmad_testarch_automate import (
+            BmadTestarchAutomateCompiler,
+        )
+
+        return BmadTestarchAutomateCompiler()
+    if skill_id == "bmad-testarch-ci":
+        from bmad_assist.compiler.skills.bmad_testarch_ci import (
+            BmadTestarchCiCompiler,
+        )
+
+        return BmadTestarchCiCompiler()
+    if skill_id == "bmad-testarch-framework":
+        from bmad_assist.compiler.skills.bmad_testarch_framework import (
+            BmadTestarchFrameworkCompiler,
+        )
+
+        return BmadTestarchFrameworkCompiler()
+    if skill_id == "bmad-testarch-nfr":
+        from bmad_assist.compiler.skills.bmad_testarch_nfr import (
+            BmadTestarchNfrCompiler,
+        )
+
+        return BmadTestarchNfrCompiler()
+    if skill_id == "bmad-testarch-test-design":
+        from bmad_assist.compiler.skills.bmad_testarch_test_design import (
+            BmadTestarchTestDesignCompiler,
+        )
+
+        return BmadTestarchTestDesignCompiler()
+    if skill_id == "bmad-testarch-test-review":
+        from bmad_assist.compiler.skills.bmad_testarch_test_review import (
+            BmadTestarchTestReviewCompiler,
+        )
+
+        return BmadTestarchTestReviewCompiler()
+    if skill_id == "bmad-testarch-trace":
+        from bmad_assist.compiler.skills.bmad_testarch_trace import (
+            BmadTestarchTraceCompiler,
+        )
+
+        return BmadTestarchTraceCompiler()
     raise CompilerError(
         f"No skill-layout compiler registered for '{skill_id}'.\n"
         f"  Suggestion: register the compiler in "

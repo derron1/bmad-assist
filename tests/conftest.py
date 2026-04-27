@@ -17,6 +17,14 @@ _SKILL_COMPILER_MODULES: tuple[str, ...] = (
     "bmad_assist.compiler.skills.bmad_create_story",
     "bmad_assist.compiler.skills.bmad_dev_story",
     "bmad_assist.compiler.skills.bmad_retrospective",
+    "bmad_assist.compiler.skills.bmad_testarch_atdd",
+    "bmad_assist.compiler.skills.bmad_testarch_automate",
+    "bmad_assist.compiler.skills.bmad_testarch_ci",
+    "bmad_assist.compiler.skills.bmad_testarch_framework",
+    "bmad_assist.compiler.skills.bmad_testarch_nfr",
+    "bmad_assist.compiler.skills.bmad_testarch_test_design",
+    "bmad_assist.compiler.skills.bmad_testarch_test_review",
+    "bmad_assist.compiler.skills.bmad_testarch_trace",
 )
 
 
