@@ -1,0 +1,15 @@
+[core]
+project_name = "sample"
+edition = "team-default"
+languages = ["en"]
+
+[agents]
+default = "amelia"
+
+[[agents.menu]]
+code = "amelia"
+description = "Senior dev"
+
+[[agents.menu]]
+code = "winston"
+description = "Architect"

@@ -1,0 +1,7 @@
+[core]
+edition = "team-custom"
+
+[[agents.menu]]
+code = "amelia"
+description = "Senior dev (team override)"
+seniority = "principal"

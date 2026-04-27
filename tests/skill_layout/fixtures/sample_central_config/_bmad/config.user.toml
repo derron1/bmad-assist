@@ -1,0 +1,3 @@
+[core]
+edition = "user-base"
+languages = ["fr"]

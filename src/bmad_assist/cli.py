@@ -346,6 +346,12 @@ def run(
         "--plain",
         help="Force plain text output (no interactive TUI)",
     ),
+    skill_layout: str = typer.Option(
+        "auto",
+        "--skill-layout",
+        help="Skill layout mode: 'auto' (detect), 'new' (force v6.4+), 'old' (force legacy). "
+        "Overrides config.skill_layout. Phase 1: wired through but not yet consumed.",
+    ),
 ) -> None:
     """Execute the main BMAD development loop.
 
@@ -461,6 +467,18 @@ def run(
             cwd_config_path=False if config is not None else None,
         )
         logger.debug("Configuration loaded successfully")
+
+        # Validate and apply --skill-layout override (Phase 1: stored only,
+        # no consumer reads this yet — Phase 2 will wire consumption).
+        if skill_layout not in ("auto", "new", "old"):
+            _error(
+                f"Invalid --skill-layout value '{skill_layout}'. "
+                "Expected one of: auto, new, old."
+            )
+            raise typer.Exit(code=EXIT_CONFIG_ERROR)
+        if skill_layout != loaded_config.skill_layout:
+            loaded_config = loaded_config.model_copy(update={"skill_layout": skill_layout})
+            logger.debug("skill_layout overridden via CLI: %s", skill_layout)
 
         # Initialize project paths singleton
         paths_config: dict[str, str | None] = {

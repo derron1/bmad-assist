@@ -150,6 +150,14 @@ class Config(BaseModel):
         default_factory=ToolGuardConfig,
         description="ToolCallGuard watchdog thresholds (optional)",
     )
+    skill_layout: Literal["auto", "new", "old"] = Field(
+        default="auto",
+        description="Skill layout mode for BMAD v6.4+. 'auto' detects via "
+        "_bmad/scripts/resolve_customization.py presence; 'new' forces the "
+        "v6.4+ skill layout; 'old' forces the legacy workflow layout. "
+        "Phase 1: wired through but not yet consumed.",
+        json_schema_extra={"security": "safe"},
+    )
 
     @model_validator(mode="before")
     @classmethod

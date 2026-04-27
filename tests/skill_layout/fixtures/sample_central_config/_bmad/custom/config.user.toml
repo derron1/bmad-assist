@@ -1,0 +1,6 @@
+[core]
+edition = "user-custom"
+languages = ["jp"]
+
+[user_prefs]
+theme = "dark"

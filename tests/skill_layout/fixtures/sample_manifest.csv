@@ -1,0 +1,4 @@
+canonicalId,name,description,module,path
+"skill-alpha","skill-alpha","First sample skill","sample","_bmad/sample/skill-alpha/SKILL.md"
+"skill-beta","skill-beta","Second sample skill","sample","_bmad/sample/skill-beta/SKILL.md"
+"skill-gamma","skill-gamma","Third sample skill, comma in description","sample","_bmad/sample/skill-gamma/SKILL.md"
