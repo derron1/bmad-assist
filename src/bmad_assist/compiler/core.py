@@ -30,12 +30,15 @@ from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext
 from bmad_assist.core.exceptions import CompilerError
 
 # Skill-layout-port registry. Maps the *legacy* workflow name and the
-# new bmad-prefixed skill id to a callable returning a fresh compiler
-# instance. Phase 2 ships exactly one entry; Phase 3 will fan out.
+# new bmad-prefixed skill id to the canonical skill id. Phase 2 shipped
+# bmad-create-story; Phase 3.1 added bmad-dev-story. Phase 3.2 fans
+# out to the remaining workflows.
 _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     # legacy_name → bmad-prefixed skill id (canonical)
     "create-story": "bmad-create-story",
     "bmad-create-story": "bmad-create-story",
+    "dev-story": "bmad-dev-story",
+    "bmad-dev-story": "bmad-dev-story",
 }
 
 
@@ -51,10 +54,17 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadCreateStoryCompiler()
+    if skill_id == "bmad-dev-story":
+        from bmad_assist.compiler.skills.bmad_dev_story import (
+            BmadDevStoryCompiler,
+        )
+
+        return BmadDevStoryCompiler()
     raise CompilerError(
         f"No skill-layout compiler registered for '{skill_id}'.\n"
-        f"  Suggestion: Phase 2 only ships bmad-create-story; other "
-        f"workflows still use the legacy compiler path."
+        f"  Suggestion: register the compiler in "
+        f"`_SKILL_LAYOUT_COMPILERS` and `_build_skill_layout_compiler` "
+        f"in compiler/core.py."
     )
 
 
@@ -204,9 +214,7 @@ def get_workflow_compiler(
     use_new_path = _resolve_skill_layout(skill_layout, project_root) == "new"
     if use_new_path and normalized_name in _SKILL_LAYOUT_COMPILERS:
         skill_id = _SKILL_LAYOUT_COMPILERS[normalized_name]
-        logger.debug(
-            "Routing '%s' through skill-layout compiler '%s'", normalized_name, skill_id
-        )
+        logger.debug("Routing '%s' through skill-layout compiler '%s'", normalized_name, skill_id)
         return _build_skill_layout_compiler(skill_id)
 
     # Convert to Python module naming: hyphens to underscores
@@ -402,9 +410,7 @@ def compile_workflow(
     # Skip the legacy load_workflow_ir step for them — that pipeline
     # assumes workflow.yaml + instructions.xml on disk, which the
     # new path doesn't have.
-    is_skill_layout = type(compiler).__module__.startswith(
-        "bmad_assist.compiler.skills."
-    )
+    is_skill_layout = type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
 
     if not is_skill_layout:
         # Step 4: Load WorkflowIR (auto-compiles patch if needed)
@@ -424,9 +430,7 @@ def compile_workflow(
         context.patch_path = patch_path
 
         # Step 5.1: Check for interactive elements without patch
-        _check_interactive_elements(
-            workflow_name, workflow_ir.raw_instructions, patch_path
-        )
+        _check_interactive_elements(workflow_name, workflow_ir.raw_instructions, patch_path)
 
         logger.debug(
             "Prepared workflow %s: ir=%s, patch=%s",

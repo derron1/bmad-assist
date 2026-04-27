@@ -1,9 +1,21 @@
 """Pytest configuration and fixtures for bmad-assist tests."""
 
+import contextlib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Skill-layout compiler modules whose ``apply_llm_transforms`` import
+# must be stubbed by ``disable_patch_compilation``. Each module
+# re-exports the function at top level so existing tests can also
+# monkeypatch it directly via ``setattr(skill_mod, "apply_llm_transforms", ...)``.
+# Phase 3.2 should append new entries here when adding more skill
+# compilers.
+_SKILL_COMPILER_MODULES: tuple[str, ...] = (
+    "bmad_assist.compiler.skills.bmad_create_story",
+    "bmad_assist.compiler.skills.bmad_dev_story",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -157,21 +169,47 @@ def disable_patch_compilation(request):
         raise PatchError("Patch compilation disabled in tests")
 
     # Disable BOTH the legacy compile_patch entry-point AND the
-    # extracted apply_llm_transforms shared by the new skill-layout
-    # compiler. Without the second mock, Phase 2.5+ tests would issue
-    # real LLM calls (the skill compiler bypasses compile_patch and
-    # talks to apply_llm_transforms directly).
-    with (
-        patch("bmad_assist.compiler.patching.compiler.compile_patch") as mock,
-        patch(
-            "bmad_assist.compiler.skills.bmad_create_story.apply_llm_transforms",
-            side_effect=_raise,
-        ) as mock_apply,
-    ):
+    # extracted apply_llm_transforms shared by every skill-layout
+    # compiler. Without the second set of mocks, Phase 2.5+ tests
+    # would issue real LLM calls (skill compilers bypass compile_patch
+    # and talk to apply_llm_transforms directly).
+    #
+    # Phase 3.1: replaced the hardcoded bmad_create_story patch with a
+    # registry sweep over every skill-compiler module. Adding a new
+    # skill compiler is now a one-line change in
+    # ``_SKILL_COMPILER_MODULES`` above. Each module is patched
+    # individually because tests reach into the subclass module
+    # directly (``monkeypatch.setattr(skill_mod, "apply_llm_transforms",
+    # fake)``) and the base class re-resolves the attribute on every
+    # call from the subclass's own module.
+    with contextlib.ExitStack() as stack:
+        mock = stack.enter_context(patch("bmad_assist.compiler.patching.compiler.compile_patch"))
         mock.side_effect = _raise
-        # Expose the apply_llm_transforms stub on the primary mock so
-        # tests that need to assert against it can find it.
-        mock.apply_llm_transforms = mock_apply
+
+        skill_mocks: dict[str, object] = {}
+        for module_name in _SKILL_COMPILER_MODULES:
+            try:
+                skill_mock = stack.enter_context(
+                    patch(
+                        f"{module_name}.apply_llm_transforms",
+                        side_effect=_raise,
+                    )
+                )
+            except (AttributeError, ImportError):
+                # Defensive: if a registered skill compiler hasn't been
+                # imported yet (or doesn't re-export apply_llm_transforms)
+                # we skip it rather than fail the whole test session.
+                continue
+            skill_mocks[module_name] = skill_mock
+
+        # Expose the per-module apply_llm_transforms stubs on the
+        # primary mock for tests that want to assert against them.
+        # Backwards-compat alias — tests previously checked
+        # ``mock.apply_llm_transforms`` (the bmad_create_story stub).
+        mock.skill_apply_llm_transforms = skill_mocks
+        legacy_alias = skill_mocks.get("bmad_assist.compiler.skills.bmad_create_story")
+        if legacy_alias is not None:
+            mock.apply_llm_transforms = legacy_alias
         yield mock
 
 
