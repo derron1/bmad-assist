@@ -1,0 +1,307 @@
+---
+name: bmad-validate-story-synthesis
+description: 'Master synthesis of multiple validate-story validator outputs. Verifies findings, dismisses false positives, and emits STORY_PATCH blocks plus a machine-readable contract block for downstream automation. Use after running validate-story across multiple LLM providers.'
+---
+
+# Validate Story Synthesis Workflow
+
+**Goal:** Synthesize 2+ independent validator reviews of a story file into a single authoritative synthesis report. Verify, prioritize, and dismiss findings; express story changes as `STORY_PATCH` blocks; emit a machine-readable resolution contract.
+
+**Your Role:** Master synthesis agent.
+
+- All inputs (story file, project context, anonymized validator outputs, optional Deep Verify findings) are EMBEDDED in the CONTEXT section — do NOT attempt to read files.
+- Communicate all responses in `{communication_language}`; emit the synthesis report in `{document_output_language}`.
+- DO NOT use Edit / Write tools to modify the story file directly. ALL story changes are expressed as `STORY_PATCH` blocks; the automation layer applies them after your synthesis completes.
+
+## Conventions
+
+- Bare paths resolve from the skill root.
+- `{skill-root}` resolves to this skill's installed directory (where `customize.toml` lives).
+- `{project-root}`-prefixed paths resolve from the project working directory.
+- `{skill-name}` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 {project-root}/_bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `{skill-root}/customize.toml` — defaults
+2. `{project-root}/_bmad/custom/{skill-name}.toml` — team overrides
+3. `{project-root}/_bmad/custom/{skill-name}.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `{workflow.activation_steps_prepend}` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `{workflow.persistent_facts}` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `{project-root}` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `planning_artifacts`, `implementation_artifacts`
+- `date` as system-generated current datetime
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `{communication_language}`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `{workflow.activation_steps_append}` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Input Files
+
+| Input | Description | Path Pattern(s) | Load Strategy |
+|-------|-------------|------------------|---------------|
+| story | Story file under synthesis (PRIMARY TARGET) | `{implementation_artifacts}/{epic_num}-{story_num}-*.md` | EMBEDDED |
+| project_context | Ground-truth conventions for verifying claims | `{project-root}/**/project-context.md` | EMBEDDED |
+| validations | Anonymized validator outputs (Validator A, B, C, D, ...) | injected via `[Validator X]` virtual paths | EMBEDDED |
+| deep_verify | Optional Deep Verify technical findings | injected as `[Deep Verify Findings]` | EMBEDDED_IF_PRESENT |
+
+## Execution
+
+<workflow>
+
+<critical>You are the MASTER SYNTHESIS agent. Evaluate validator findings against the embedded story + project context and produce a definitive synthesis. Express ALL story updates as STORY_PATCH blocks (see step 3). Do NOT modify files yourself.</critical>
+
+<critical>All context (project_context.md, story file, anonymized validations, optional Deep Verify findings) is EMBEDDED below — do NOT attempt to read files.</critical>
+
+<step n="1" goal="Analyze validator findings">
+  <action>Read every embedded `[Validator X]` block.</action>
+  <action>For each issue raised by any validator:
+    - Cross-reference against the embedded story content and project_context.md.
+    - Note validator consensus: 3+ validators agreeing = high-confidence; 1-2 validators = requires extra scrutiny.
+    - Group related findings that address the same underlying issue.
+  </action>
+</step>
+
+<step n="1.5" goal="Review Deep Verify technical findings (when present)">
+  <check if="[Deep Verify Findings] section present">
+    <critical>Deep Verify provides automated technical analysis covering patterns, boundary cases, assumptions, temporal issues, security, and worst-case scenarios. Treat pattern-matched findings (CC-*, SEC-*, DB-*, DT-*, GEN-*) as higher confidence.</critical>
+    <action>Triage by severity:
+      - **CRITICAL** — must address; serious technical issue.
+      - **ERROR** — address unless clearly false positive.
+      - **WARNING** — consider; document if dismissed.
+    </action>
+    <action>Cross-reference with validator findings:
+      - Validators + DV agree → high-confidence; prioritize fix.
+      - DV-only → verify technical validity; may be edge case validators missed.
+      - Validators-only → process per step 1.
+    </action>
+  </check>
+</step>
+
+<step n="2" goal="Verify and prioritize">
+  <action>For each verified issue, assign severity:
+    - **Critical** — blocks implementation or causes major problems.
+    - **High** — significant gaps or ambiguities needing attention.
+    - **Medium** — improvements that would help quality.
+    - **Low** — nice-to-have suggestions.
+  </action>
+  <action>Document false positives with explicit reasoning: why the validator was wrong, what evidence contradicts the finding, references to specific story content or project_context.md.</action>
+</step>
+
+<step n="3" goal="Express story changes as STORY_PATCH blocks">
+  <critical>DO NOT use Edit or Write tools. Express ALL story-file changes as STORY_PATCH blocks in your synthesis output.</critical>
+
+  <action>For each verified Critical and High issue requiring a story change:
+    - Identify the EXACT Markdown heading of the section to update (e.g. `## Acceptance Criteria`).
+    - Emit a single STORY_PATCH block with the COMPLETE replacement content for that section (heading line included).
+  </action>
+
+  <action>STORY_PATCH block format (exact):
+    ```
+    &lt;!-- STORY_PATCH_START heading="## exact heading text here" --&gt;
+    [Complete replacement content for the heading and its body — including the heading line itself]
+    &lt;!-- STORY_PATCH_END --&gt;
+    ```
+  </action>
+
+  <action>STORY_PATCH rules:
+    - Use the EXACT Markdown heading text from the story (case sensitivity preserved).
+    - Include the heading line itself inside the patch content.
+    - Include ALL content for that section, not just the changed lines.
+    - Each section may appear in AT MOST ONE STORY_PATCH block.
+    - DO NOT patch the same section more than once.
+    - Changes must read as natural improvements — no review metadata, no synthesis commentary, no references to the validation process.
+  </action>
+
+  <action>Log each patch in the "Changes Applied" section of your synthesis report: section heading, brief description of what changed, 2-3-line before/after snippet for context.</action>
+</step>
+
+<step n="3.5" goal="Compute contract values before writing output">
+  <critical>Compute these counts BEFORE generating any output. They will be emitted FIRST in your output, before any prose.</critical>
+  <action>From your verified findings:
+    - `verified_critical` — Critical issues you VERIFIED (not dismissed) across validators.
+    - `verified_high` — High issues you VERIFIED.
+    - `fixed_critical` — Critical issues addressed by a STORY_PATCH in this round.
+    - `fixed_high` — High issues addressed by a STORY_PATCH in this round.
+    - `remaining_critical` = `verified_critical - fixed_critical` (must be ≥ 0).
+    - `remaining_high` = `verified_high - fixed_high` (must be ≥ 0).
+    - `resolution`:
+      - `resolved` when `remaining_critical == 0 AND remaining_high == 0`
+      - `rework` when any Critical or High remains unaddressed
+      - `halt` when you cannot reliably determine the validation outcome
+  </action>
+  <critical>Contract key rules — copy these EXACTLY:
+    - Field names: `resolution`, `verified_critical`, `verified_high`, `fixed_critical`, `fixed_high`, `remaining_critical`, `remaining_high`. Do NOT rename. Do NOT add extras (no `story_id` / `story_key` / `validators_count`).
+    - METRICS_JSON top-level keys must be exactly `quality` and `consensus` — no other keys.
+    - METRICS_JSON must NOT be wrapped in fenced code blocks (no ` ```json `).
+    - When uncertain, use 0 for counts and `halt` for resolution — never invent fields.
+  </critical>
+</step>
+
+<step n="4" goal="Emit synthesis report">
+  <critical>You MUST emit the VALIDATION_CONTRACT_START/END block AND the METRICS_JSON_START/END block BEFORE any prose. Omitting the contract block makes the entire response invalid.</critical>
+
+  <action>Emit the report in this EXACT structure between the two outer markers:</action>
+
+  <output-format>
+&lt;!-- VALIDATION_SYNTHESIS_START --&gt;
+&lt;!-- VALIDATION_CONTRACT_START --&gt;
+resolution: {resolved|rework|halt}
+verified_critical: {N}
+verified_high: {N}
+fixed_critical: {N}
+fixed_high: {N}
+remaining_critical: {N}
+remaining_high: {N}
+&lt;!-- VALIDATION_CONTRACT_END --&gt;
+
+&lt;!-- METRICS_JSON_START --&gt;
+{
+  "quality": {
+    "actionable_ratio": 0.0,
+    "specificity_score": 0.0,
+    "evidence_quality": 0.0,
+    "follows_template": true,
+    "internal_consistency": 0.0
+  },
+  "consensus": {
+    "agreed_findings": 0,
+    "unique_findings": 0,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.0,
+    "false_positive_count": 0
+  }
+}
+&lt;!-- METRICS_JSON_END --&gt;
+
+## Synthesis Summary
+[Brief overview: X issues verified, Y false positives dismissed, Z changes applied to story file]
+
+## Validations Quality
+[Per validator: id (A, B, C, ...), 1-10 quality score, brief assessment. Do NOT attempt to identify providers.]
+
+## Issues Verified (by severity)
+
+### Critical
+[Format per item: "- **Issue**: Description | **Source**: Validator(s) | **Fix**: What was changed"]
+
+### High
+[Same format]
+
+### Medium
+[Same format]
+
+### Low
+[Same format; may be deferred]
+
+## Issues Dismissed
+[Format per item: "- **Claimed Issue**: Description | **Raised by**: Validator(s) | **Dismissal Reason**: Why this is incorrect"]
+
+## Deep Verify Integration
+[Only if [Deep Verify Findings] was present.]
+
+### DV Findings Addressed
+[Format: "- **{ID}** [{SEVERITY}]: {Title} | **Action**: {What was changed}"]
+
+### DV Findings Dismissed
+[Format: "- **{ID}** [{SEVERITY}]: {Title} | **Reason**: {Why dismissed}"]
+
+### DV-Validator Overlap
+[Findings flagged by both DV and validators — highest confidence.]
+[If no DV findings: "Deep Verify did not produce findings for this story."]
+
+## Changes Applied
+[For each STORY_PATCH emitted below:
+  **Location**: [section heading]
+  **Change**: [Brief description]
+  **Before**:
+  ```
+  [2-3 lines of original content]
+  ```
+  **After**:
+  ```
+  [2-3 lines of updated content]
+  ```
+]
+
+[Emit any STORY_PATCH blocks here — after the prose, before the end marker.]
+
+&lt;!-- VALIDATION_SYNTHESIS_END --&gt;
+  </output-format>
+
+  <example title="Canonical contract and metrics blocks">
+&lt;!-- VALIDATION_CONTRACT_START --&gt;
+resolution: rework
+verified_critical: 1
+verified_high: 2
+fixed_critical: 1
+fixed_high: 1
+remaining_critical: 0
+remaining_high: 1
+&lt;!-- VALIDATION_CONTRACT_END --&gt;
+
+&lt;!-- METRICS_JSON_START --&gt;
+{
+  "quality": {
+    "actionable_ratio": 0.85,
+    "specificity_score": 0.78,
+    "evidence_quality": 0.80,
+    "follows_template": true,
+    "internal_consistency": 0.90
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.75,
+    "false_positive_count": 1
+  }
+}
+&lt;!-- METRICS_JSON_END --&gt;
+  </example>
+
+  <critical title="Invalid output patterns — these will cause extraction failure">
+INVALID contract keys: story_id, story_key, validators_count, critical_verified, high_remaining
+INVALID metrics format: ```json { "quality": ... } ``` (NEVER fenced code blocks for METRICS_JSON)
+INVALID metrics keys: any top-level key other than "quality" and "consensus"
+  </critical>
+</step>
+
+<step n="5" goal="Final verification">
+  <action>Re-read your output and confirm:
+    - The contract block is present and uses the exact key names above.
+    - The METRICS_JSON block is valid JSON with only `quality` and `consensus` at the top level.
+    - Every Critical and High verified issue is either fixed (counted in `fixed_*`) or remaining (counted in `remaining_*`); the arithmetic balances.
+    - Each STORY_PATCH heading appears at most once.
+    - The synthesis report sits between `VALIDATION_SYNTHESIS_START` / `VALIDATION_SYNTHESIS_END` markers.
+  </action>
+</step>
+
+</workflow>

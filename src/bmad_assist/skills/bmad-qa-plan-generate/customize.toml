@@ -1,0 +1,31 @@
+# DO NOT EDIT -- overwritten on every update.
+#
+# Workflow customization surface for bmad-qa-plan-generate. Mirrors
+# the agent customization shape under the [workflow] namespace.
+
+[workflow]
+
+# --- Configurable below. Overrides merge per BMad structural rules: ---
+#   scalars: override wins • arrays: append (with replace-by-id semantics where applicable)
+
+# Steps to run before the standard activation.
+# Override appends.
+
+activation_steps_prepend = []
+
+# Steps to run after greet but before the workflow begins.
+# Override appends.
+
+activation_steps_append = []
+
+# Persistent facts the workflow keeps in mind for the whole run.
+# Each entry is a literal sentence, or a `file:` reference (glob-supported).
+
+persistent_facts = [
+  "file:{project-root}/**/project-context.md",
+]
+
+# Scalar: executed at the end of step 5 (Report summary), after the
+# plan is written. Override wins. Leave empty for no custom hook.
+
+on_complete = ""

@@ -385,6 +385,16 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
                     patch_path.name,
                     exc,
                 )
+        else:
+            # No patch on disk — orphan-style skills (Phase 3.5) ship
+            # outcome-based SKILL.md authored without a patch. The body
+            # we substituted is the final body: no LLM transforms, no
+            # regex post-process, no must_contain assertions to enforce.
+            logger.debug(
+                "No patch found for %s; using substituted SKILL.md body verbatim "
+                "(no LLM transforms, no regex post-process)",
+                self.skill_id,
+            )
 
         body_after_llm, transforms_ran = self._apply_llm_transforms(
             body, patch, context, transform_mode

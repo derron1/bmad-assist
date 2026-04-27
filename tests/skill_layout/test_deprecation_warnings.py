@@ -72,14 +72,29 @@ def test_legacy_path_for_dev_story_emits_deprecation(tmp_path: Path) -> None:
     assert "dev-story" in str(deps[0].message)
 
 
-def test_orphan_workflow_does_not_emit_deprecation(tmp_path: Path) -> None:
-    """``validate-story`` has no skill-layout port → no warning."""
+def test_phase_3_5_orphan_validate_story_emits_deprecation(tmp_path: Path) -> None:
+    """Phase 3.5 added a skill-layout port for ``validate-story`` → now warns on legacy."""
     deps = _record_warnings("validate-story", tmp_path, layout="old")
-    assert deps == []
+    assert len(deps) == 1
+    assert "validate-story" in str(deps[0].message)
+
+
+def test_phase_3_5_orphan_validate_story_synthesis_emits_deprecation(tmp_path: Path) -> None:
+    """Phase 3.5 added a skill-layout port for ``validate-story-synthesis``."""
+    deps = _record_warnings("validate-story-synthesis", tmp_path, layout="old")
+    assert len(deps) == 1
+    assert "validate-story-synthesis" in str(deps[0].message)
+
+
+def test_phase_3_5_orphan_code_review_synthesis_emits_deprecation(tmp_path: Path) -> None:
+    """Phase 3.5 added a skill-layout port for ``code-review-synthesis``."""
+    deps = _record_warnings("code-review-synthesis", tmp_path, layout="old")
+    assert len(deps) == 1
+    assert "code-review-synthesis" in str(deps[0].message)
 
 
 def test_security_review_does_not_emit_deprecation(tmp_path: Path) -> None:
-    """``security-review`` is legacy-only too — no warning."""
+    """``security-review`` remains the only legacy-only orphan after Phase 3.5 — no warning."""
     # Some installs may not have a security-review compiler module; if
     # the loader raises, the test still proves no warning was emitted.
     try:
@@ -91,14 +106,15 @@ def test_security_review_does_not_emit_deprecation(tmp_path: Path) -> None:
     assert deps == []
 
 
-def test_qa_plan_orphans_do_not_emit_deprecation(tmp_path: Path) -> None:
-    """``qa-plan-generate`` and ``qa-plan-execute`` are orphans — no warning."""
+def test_phase_3_5_qa_plan_orphans_emit_deprecation(tmp_path: Path) -> None:
+    """``qa-plan-generate`` and ``qa-plan-execute`` are now Phase 3.5 ports — they DO warn."""
     for name in ("qa-plan-generate", "qa-plan-execute"):
         try:
             deps = _record_warnings(name, tmp_path, layout="old")
         except Exception:
             continue
-        assert deps == [], f"{name} should not emit a deprecation"
+        assert len(deps) == 1, f"{name} should emit one deprecation warning"
+        assert name in str(deps[0].message)
 
 
 def test_new_layout_path_does_not_emit_deprecation(tmp_path: Path) -> None:

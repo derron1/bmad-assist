@@ -14,8 +14,11 @@ import pytest
 # compilers.
 _SKILL_COMPILER_MODULES: tuple[str, ...] = (
     "bmad_assist.compiler.skills.bmad_code_review",
+    "bmad_assist.compiler.skills.bmad_code_review_synthesis",
     "bmad_assist.compiler.skills.bmad_create_story",
     "bmad_assist.compiler.skills.bmad_dev_story",
+    "bmad_assist.compiler.skills.bmad_qa_plan_execute",
+    "bmad_assist.compiler.skills.bmad_qa_plan_generate",
     "bmad_assist.compiler.skills.bmad_retrospective",
     "bmad_assist.compiler.skills.bmad_testarch_atdd",
     "bmad_assist.compiler.skills.bmad_testarch_automate",
@@ -25,6 +28,8 @@ _SKILL_COMPILER_MODULES: tuple[str, ...] = (
     "bmad_assist.compiler.skills.bmad_testarch_test_design",
     "bmad_assist.compiler.skills.bmad_testarch_test_review",
     "bmad_assist.compiler.skills.bmad_testarch_trace",
+    "bmad_assist.compiler.skills.bmad_validate_story",
+    "bmad_assist.compiler.skills.bmad_validate_story_synthesis",
 )
 
 

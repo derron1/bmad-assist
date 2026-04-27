@@ -232,3 +232,162 @@ class TestSubclassLogger:
 
         instance = BmadCreateStoryCompiler()
         assert instance._subclass_logger().name == ("bmad_assist.compiler.skills.bmad_create_story")
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3.5 — no-patch path                                                   #
+# --------------------------------------------------------------------------- #
+
+
+class TestNoPatchPath:
+    """Phase 3.5 enhancement: skills without a patch file compile cleanly.
+
+    Three of the Phase 3.5 orphans (``bmad-validate-story-synthesis``,
+    ``bmad-code-review-synthesis``) ship without a patch on disk. The
+    base class must:
+
+    * Skip ``apply_llm_transforms`` (patch is None → no transforms).
+    * Skip the regex post-process (no patch → no rules to load).
+    * Skip the ``must_contain`` / ``must_not_contain`` validation
+      (no patch → no assertions to evaluate).
+    * Emit a debug log so the no-patch decision is observable.
+    """
+
+    def test_no_patch_logs_decision(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The base class logs a one-line debug entry when no patch is found."""
+        import logging
+
+        from bmad_assist.compiler import compile_workflow
+        from bmad_assist.compiler.skills import _base as base_mod
+
+        # validate-story-synthesis ships WITHOUT a patch file; this
+        # exercises the no-patch path on the base class.
+        bundled_synth = (
+            REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-validate-story-synthesis"
+        )
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        target = proj / ".claude" / "skills" / "bmad-validate-story-synthesis"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(bundled_synth, target)
+
+        scripts = proj / "_bmad" / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        (scripts / "resolve_customization.py").write_text("# marker\n")
+
+        docs = proj / "docs"
+        docs.mkdir()
+        (docs / "project_context.md").write_text("# Project Context\n")
+        sprint = docs / "sprint-artifacts"
+        sprint.mkdir()
+        (sprint / "10-1-x.md").write_text("# Story 10.1\n")
+
+        from bmad_assist.validation.anonymizer import AnonymizedValidation
+
+        ctx = CompilerContext(
+            project_root=proj,
+            output_folder=docs,
+            project_knowledge=docs,
+            resolved_variables={
+                "epic_num": 10,
+                "story_num": 1,
+                "session_id": "x",
+                "anonymized_validations": [
+                    AnonymizedValidation(
+                        validator_id="Validator A",
+                        content="A",
+                        original_ref="a",
+                    ),
+                    AnonymizedValidation(
+                        validator_id="Validator B",
+                        content="B",
+                        original_ref="b",
+                    ),
+                ],
+            },
+        )
+
+        caplog.set_level(logging.DEBUG, logger=base_mod.logger.name)
+        compile_workflow("bmad-validate-story-synthesis", ctx, skill_layout="new")
+
+        no_patch_logs = [
+            rec for rec in caplog.records
+            if rec.name == base_mod.logger.name
+            and "No patch found for bmad-validate-story-synthesis" in rec.message
+        ]
+        assert no_patch_logs, (
+            "expected the base class to log a debug entry when no patch is found"
+        )
+
+    def test_no_patch_returns_substituted_body_verbatim(self, tmp_path: Path) -> None:
+        """No patch → no LLM transforms, no regex post-process, no patch validation.
+
+        The compiled body equals the SKILL.md body after variable
+        substitution (modulo the ``<workflow>`` envelope wrapping the
+        legacy compiler adds via ``generate_output``).
+        """
+        from bmad_assist.compiler import compile_workflow
+        from bmad_assist.validation.anonymizer import AnonymizedValidation
+
+        bundled_synth = (
+            REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-code-review-synthesis"
+        )
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        target = proj / ".claude" / "skills" / "bmad-code-review-synthesis"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(bundled_synth, target)
+
+        scripts = proj / "_bmad" / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        (scripts / "resolve_customization.py").write_text("# marker\n")
+
+        docs = proj / "docs"
+        docs.mkdir()
+        (docs / "project_context.md").write_text("# Project Context\n")
+        sprint = docs / "sprint-artifacts"
+        sprint.mkdir()
+        (sprint / "10-1-x.md").write_text("# Story 10.1\n")
+
+        ctx = CompilerContext(
+            project_root=proj,
+            output_folder=docs,
+            project_knowledge=docs,
+            resolved_variables={
+                "epic_num": 10,
+                "story_num": 1,
+                "session_id": "x",
+                "anonymized_reviews": [
+                    AnonymizedValidation(
+                        validator_id="Reviewer A",
+                        content="A",
+                        original_ref="a",
+                    ),
+                    AnonymizedValidation(
+                        validator_id="Reviewer B",
+                        content="B",
+                        original_ref="b",
+                    ),
+                ],
+            },
+        )
+
+        result = compile_workflow("bmad-code-review-synthesis", ctx, skill_layout="new")
+
+        # The cache should record an EMPTY patch_hash (no patch file
+        # discovered → empty hash).
+        meta_path = (
+            proj / ".bmad-assist" / "cache" / "skills"
+            / "bmad-code-review-synthesis.tpl.xml.meta.yaml"
+        )
+        assert meta_path.is_file()
+        meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+        assert meta["patch_hash"] == "", (
+            f"no-patch path should record empty patch_hash; got {meta['patch_hash']!r}"
+        )
+        # Compile should succeed (no patch validation to fail).
+        assert result.context

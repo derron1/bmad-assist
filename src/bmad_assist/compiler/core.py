@@ -67,10 +67,19 @@ _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     # Entries grouped by canonical skill id, alphabetical.
     "code-review": "bmad-code-review",
     "bmad-code-review": "bmad-code-review",
+    # Phase 3.5 orphan: code-review synthesis (multi-LLM aggregation).
+    "code-review-synthesis": "bmad-code-review-synthesis",
+    "bmad-code-review-synthesis": "bmad-code-review-synthesis",
     "create-story": "bmad-create-story",
     "bmad-create-story": "bmad-create-story",
     "dev-story": "bmad-dev-story",
     "bmad-dev-story": "bmad-dev-story",
+    # Phase 3.5 orphan: qa-plan-execute (E2E test runner).
+    "qa-plan-execute": "bmad-qa-plan-execute",
+    "bmad-qa-plan-execute": "bmad-qa-plan-execute",
+    # Phase 3.5 orphan: qa-plan-generate (E2E test plan generator).
+    "qa-plan-generate": "bmad-qa-plan-generate",
+    "bmad-qa-plan-generate": "bmad-qa-plan-generate",
     "retrospective": "bmad-retrospective",
     "bmad-retrospective": "bmad-retrospective",
     "testarch-atdd": "bmad-testarch-atdd",
@@ -93,6 +102,12 @@ _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     "bmad-testarch-test-review": "bmad-testarch-test-review",
     "testarch-trace": "bmad-testarch-trace",
     "bmad-testarch-trace": "bmad-testarch-trace",
+    # Phase 3.5 orphan: validate-story (adversarial story validator).
+    "validate-story": "bmad-validate-story",
+    "bmad-validate-story": "bmad-validate-story",
+    # Phase 3.5 orphan: validate-story-synthesis (multi-LLM aggregation).
+    "validate-story-synthesis": "bmad-validate-story-synthesis",
+    "bmad-validate-story-synthesis": "bmad-validate-story-synthesis",
 }
 
 
@@ -108,6 +123,12 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadCodeReviewCompiler()
+    if skill_id == "bmad-code-review-synthesis":
+        from bmad_assist.compiler.skills.bmad_code_review_synthesis import (
+            BmadCodeReviewSynthesisCompiler,
+        )
+
+        return BmadCodeReviewSynthesisCompiler()
     if skill_id == "bmad-create-story":
         from bmad_assist.compiler.skills.bmad_create_story import (
             BmadCreateStoryCompiler,
@@ -120,6 +141,18 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadDevStoryCompiler()
+    if skill_id == "bmad-qa-plan-execute":
+        from bmad_assist.compiler.skills.bmad_qa_plan_execute import (
+            BmadQaPlanExecuteCompiler,
+        )
+
+        return BmadQaPlanExecuteCompiler()
+    if skill_id == "bmad-qa-plan-generate":
+        from bmad_assist.compiler.skills.bmad_qa_plan_generate import (
+            BmadQaPlanGenerateCompiler,
+        )
+
+        return BmadQaPlanGenerateCompiler()
     if skill_id == "bmad-retrospective":
         from bmad_assist.compiler.skills.bmad_retrospective import (
             BmadRetrospectiveCompiler,
@@ -174,6 +207,18 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadTestarchTraceCompiler()
+    if skill_id == "bmad-validate-story":
+        from bmad_assist.compiler.skills.bmad_validate_story import (
+            BmadValidateStoryCompiler,
+        )
+
+        return BmadValidateStoryCompiler()
+    if skill_id == "bmad-validate-story-synthesis":
+        from bmad_assist.compiler.skills.bmad_validate_story_synthesis import (
+            BmadValidateStorySynthesisCompiler,
+        )
+
+        return BmadValidateStorySynthesisCompiler()
     raise CompilerError(
         f"No skill-layout compiler registered for '{skill_id}'.\n"
         f"  Suggestion: register the compiler in "

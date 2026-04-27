@@ -1,0 +1,25 @@
+# DO NOT EDIT -- overwritten on every update.
+#
+# Workflow customization surface for bmad-validate-story-synthesis.
+# Mirrors the agent customization shape under the [workflow] namespace.
+
+[workflow]
+
+# --- Configurable below. Overrides merge per BMad structural rules: ---
+#   scalars: override wins • arrays: append (with replace-by-id semantics where applicable)
+
+activation_steps_prepend = []
+activation_steps_append = []
+
+# Persistent facts the workflow keeps in mind for the whole run.
+# Each entry is a literal sentence, or a `file:` reference (glob-supported).
+
+persistent_facts = [
+  "file:{project-root}/**/project-context.md",
+]
+
+# Scalar: executed at the end of step 5 (Final verification), after
+# the synthesis report is emitted. Override wins. Leave empty for no
+# custom hook.
+
+on_complete = ""

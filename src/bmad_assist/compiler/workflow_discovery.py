@@ -89,6 +89,12 @@ WORKFLOW_TO_SKILL_ID = {
     "testarch-framework": "bmad-testarch-framework",
     "testarch-nfr-assess": "bmad-testarch-nfr",
     "testarch-test-design": "bmad-testarch-test-design",
+    # Phase 3.5 orphans — bmad-assist-authored skill-layout ports.
+    "validate-story": "bmad-validate-story",
+    "validate-story-synthesis": "bmad-validate-story-synthesis",
+    "qa-plan-generate": "bmad-qa-plan-generate",
+    "qa-plan-execute": "bmad-qa-plan-execute",
+    "code-review-synthesis": "bmad-code-review-synthesis",
 }
 
 # Search prefixes for v6.4+ skill mirrors (relative to project root).
