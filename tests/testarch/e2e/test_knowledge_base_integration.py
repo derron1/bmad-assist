@@ -137,7 +137,7 @@ Basic Playwright test setup and configuration.
         loader = get_knowledge_loader(tmp_path)
         fragments = loader.load_index()
 
-        # Should fall back to bundled knowledge base (34 fragments)
+        # Should fall back to bundled knowledge base (51 fragments after Phase 4 refresh)
         assert fragments is not None
         assert len(fragments) > 0
         # Verify bundled fragments are loaded

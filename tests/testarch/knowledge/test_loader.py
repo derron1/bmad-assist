@@ -67,7 +67,7 @@ class TestKnowledgeBaseLoader:
         """Test loading index with no project index falls back to bundled."""
         loader = KnowledgeBaseLoader(empty_knowledge_dir)
         fragments = loader.load_index()
-        # Falls back to bundled knowledge base (34 fragments)
+        # Falls back to bundled knowledge base (51 fragments after Phase 4 refresh)
         assert len(fragments) > 0
         # Verify it's using bundled by checking for known fragment
         fragment_ids = {f.id for f in fragments}
