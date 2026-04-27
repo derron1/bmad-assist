@@ -5,7 +5,11 @@ All notable changes to bmad-assist are documented in this file.
 ## [Unreleased]
 
 ### Added
-- **BMAD v6.4+ Skill Layout** — bmad-assist now compiles workflows via BMAD's new `SKILL.md` + `customize.toml` format (Phases 1-5). All 13 in-scope workflows migrated: `bmad-create-story`, `bmad-dev-story`, `bmad-code-review`, `bmad-retrospective`, `bmad-testarch-{atdd,automate,ci,framework,nfr,test-design,test-review,trace}`. The new layout is now the default; the legacy `workflow.yaml` + `instructions.xml` path remains as a fallback for unmigrated workflows (`validate-story*`, `qa-plan-*`, `code-review-synthesis`).
+- **BMAD v6.4+ Skill Layout** — bmad-assist now compiles workflows via BMAD's new `SKILL.md` + `customize.toml` format. All 18 BMAD-aligned workflows migrated:
+  - **BMM** (4): `bmad-create-story`, `bmad-dev-story`, `bmad-code-review`, `bmad-retrospective`
+  - **TEA** (8): `bmad-testarch-{atdd,automate,ci,framework,nfr,test-design,test-review,trace}` (note: `testarch-nfr-assess` renamed to `bmad-testarch-nfr` upstream)
+  - **bmad-assist internal** (5, no BMAD upstream): `bmad-validate-story`, `bmad-validate-story-synthesis`, `bmad-qa-plan-execute`, `bmad-qa-plan-generate`, `bmad-code-review-synthesis` — authored as outcome-based SKILL.md
+  - The new layout is now the default. The legacy `workflow.yaml` + `instructions.xml` path remains as a fallback (e.g. for `security-review`, the only remaining legacy-only workflow).
 - **`--skill-layout {auto,new,old}` CLI flag** on `init` and `run` commands to override layout detection. `auto` (default) detects via `_bmad/scripts/resolve_customization.py` presence or bootstrapped `.claude/skills/bmad-*/customize.toml`.
 - **`--reset-skills-force` flag** on `init` for destructive customization reset. The default `--reset-workflows` flow now PRESERVES per-skill `customize.toml` overrides; use `--reset-skills-force` only when you want a completely clean slate.
 - **`bmad-assist init` bootstrap** — on a fresh project, copies bundled v6.4+ skills to `.claude/skills/<id>/` and `.agents/skills/<id>/` automatically.
