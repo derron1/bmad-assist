@@ -45,12 +45,12 @@ def extract_retrospective_report(raw_output: str) -> str:
         Extracted report content. Never returns empty string.
 
     Example:
-        >>> output = '''Bob (Scrum Master): "Starting retro..."
+        >>> output = '''Amelia (Developer): "Starting retro..."
         ... <!-- RETROSPECTIVE_REPORT_START -->
         ... # Epic 21 Retrospective: Notification Format Enhancement
         ... ...report content...
         ... <!-- RETROSPECTIVE_REPORT_END -->
-        ... Bob: "Meeting adjourned!"'''
+        ... Amelia: "Meeting adjourned!"'''
         >>> extract_retrospective_report(output)
         '# Epic 21 Retrospective: Notification Format Enhancement\\n...report content...'
 

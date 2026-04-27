@@ -1,7 +1,7 @@
 # Epic 1 Retrospective: Project Foundation & CLI Infrastructure
 
 **Data:** 2025-12-10
-**Facilitator:** Bob (SM)
+**Facilitator:** Amelia (Dev)
 **Uczestnik:** Pawel
 
 ---

@@ -19,7 +19,7 @@ class TestExtractRetrospectiveReport:
 
     def test_extracts_between_markers(self):
         """AC1: Primary extraction using markers."""
-        raw_output = '''Bob (Scrum Master): "Starting the retro..."
+        raw_output = '''Amelia (Developer): "Starting the retro..."
 
 <!-- RETROSPECTIVE_REPORT_START -->
 # Epic 21 Retrospective: Notification Format Enhancement
@@ -32,7 +32,7 @@ Great work everyone!
 2. Time formatting works
 <!-- RETROSPECTIVE_REPORT_END -->
 
-Bob: "Meeting adjourned!"'''
+Amelia: "Meeting adjourned!"'''
 
         result = extract_retrospective_report(raw_output)
 
@@ -239,7 +239,7 @@ class TestIntegration:
 
     def test_full_extraction_and_save_flow(self, tmp_path: Path):
         """Full flow: extract from LLM output and save."""
-        raw_llm_output = '''Bob (Scrum Master): "Let's begin the retrospective..."
+        raw_llm_output = '''Amelia (Developer): "Let's begin the retrospective..."
 
 <!-- RETROSPECTIVE_REPORT_START -->
 # Epic 21 Retrospective: Notification Format Enhancement
@@ -265,7 +265,7 @@ Epic 21 delivered 5 stories implementing notification formatting improvements.
 - Velocity: 12 SP
 <!-- RETROSPECTIVE_REPORT_END -->
 
-Bob: "Great session everyone!"'''
+Amelia: "Great session everyone!"'''
 
         # Extract
         extracted = extract_retrospective_report(raw_llm_output)
@@ -290,7 +290,7 @@ Bob: "Great session everyone!"'''
         assert "Action Items" in saved_content
         assert "Metrics" in saved_content
         assert "RETROSPECTIVE_REPORT_START" not in saved_content
-        assert "Bob (Scrum Master)" not in saved_content
+        assert "Amelia (Developer)" not in saved_content
 
 
 class TestRetrospectiveHandlerIntegration:

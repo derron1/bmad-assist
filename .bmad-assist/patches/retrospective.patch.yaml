@@ -74,12 +74,12 @@ post_process:
 
   # === REMOVE PARTY-MODE DIALOGUE BLOCKS ===
   # Remove <output> blocks with party-mode dialogue (Name (Role):)
-  - pattern: '<output>\s*(?:Bob|Alice|Charlie|Dana|Elena|Frank)[^<]*\([^)]+\):[^<]*</output>'
+  - pattern: '<output>\s*(?:Amelia|Alice|Charlie|Dana|Elena)[^<]*\([^)]+\):[^<]*</output>'
     replacement: "<!-- party-mode output removed for automation -->"
     flags: "DOTALL"
 
   # Remove multi-line party-mode outputs (more aggressive)
-  - pattern: '<output>[^<]*(?:Bob|Alice|Charlie|Dana|Elena)\s*\([^)]+\):[^<]*</output>'
+  - pattern: '<output>[^<]*(?:Amelia|Alice|Charlie|Dana|Elena)\s*\([^)]+\):[^<]*</output>'
     replacement: ""
     flags: "DOTALL"
 
