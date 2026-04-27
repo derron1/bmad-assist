@@ -50,10 +50,15 @@ class TestResolveSettingsFile:
         assert result == expected.resolve()
 
     def test_absolute_path_used_as_is(self, tmp_path: Path) -> None:
-        """AC1: Absolute path is used directly, ignoring base_dir."""
+        """AC1: Absolute path is used directly, ignoring base_dir.
+
+        Note: production calls .resolve() which dereferences symlinks
+        (e.g. macOS /etc -> /private/etc). Compare against the resolved
+        form to keep the assertion portable across macOS and Linux.
+        """
         absolute_path = "/etc/provider-settings.json"
         result = resolve_settings_file(absolute_path, tmp_path)
-        assert result == Path(absolute_path)
+        assert result == Path(absolute_path).resolve()
 
     def test_tilde_expansion(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """AC8: Tilde (~) is expanded to user home directory."""

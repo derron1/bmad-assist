@@ -97,8 +97,10 @@ class TestServerLifecycle:
         from bmad_assist.core.loop.runner import _start_ipc_server
 
         # Use a short temp dir to stay under 107-byte sun_path limit.
-        # tmp_path from pytest can be too long for Unix domain sockets.
-        with tempfile.TemporaryDirectory(prefix="ipc") as short_tmp:
+        # On macOS, tempfile.gettempdir() resolves to /var/folders/<long>/T/
+        # (~95 bytes), blowing the budget once we add the socket filename.
+        # Pin to /tmp explicitly. POSIX-only project, so /tmp is safe.
+        with tempfile.TemporaryDirectory(prefix="ipc", dir="/tmp") as short_tmp:
             sock_dir = Path(short_tmp) / "s"
             sock_dir.mkdir(mode=0o700)
             # Patch get_socket_dir in BOTH server and protocol modules — _start_ipc_server

@@ -736,9 +736,14 @@ class TestRealProjectIntegration:
 
     def test_scan_real_project(self, real_project_root: Path) -> None:
         """Test scanning the real bmad-assist project."""
-        # Skip if not in the real project
+        # Skip if not in the real project, or if the project hasn't run any
+        # stories yet (e.g. fresh dev checkout — _bmad-output exists but
+        # contains only the empty planning-artifacts/ implementation-artifacts/
+        # scaffold directories).
         if not (real_project_root / "_bmad-output").exists():
             pytest.skip("Real project artifacts not available")
+        if not list((real_project_root / "_bmad-output").rglob("*.md")):
+            pytest.skip("Real project has no story artifacts yet")
 
         index = ArtifactIndex.scan(real_project_root)
 
