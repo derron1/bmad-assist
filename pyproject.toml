@@ -103,7 +103,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 # Default: skip slow tests for fast feedback (run slow with: pytest -m slow)
-addopts = "-v --tb=short --ignore=tests/fixtures -m \"not slow\""
+addopts = "-v --tb=short --ignore=tests/fixtures --basetemp=/tmp/pytest-bmad -m \"not slow\""
 # LLM-optimized (token-saving): pytest -q --tb=line --no-header
 markers = [
     "real_debug_logger: mark test to use real DebugJsonLogger instead of mock",
