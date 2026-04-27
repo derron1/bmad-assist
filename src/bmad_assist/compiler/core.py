@@ -35,10 +35,15 @@ from bmad_assist.core.exceptions import CompilerError
 # out to the remaining workflows.
 _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     # legacy_name → bmad-prefixed skill id (canonical)
+    # Entries grouped by canonical skill id, alphabetical.
+    "code-review": "bmad-code-review",
+    "bmad-code-review": "bmad-code-review",
     "create-story": "bmad-create-story",
     "bmad-create-story": "bmad-create-story",
     "dev-story": "bmad-dev-story",
     "bmad-dev-story": "bmad-dev-story",
+    "retrospective": "bmad-retrospective",
+    "bmad-retrospective": "bmad-retrospective",
 }
 
 
@@ -48,6 +53,12 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
     Imports lazily to avoid pulling skill-layout deps into the import
     graph for callers that never opt into the new path.
     """
+    if skill_id == "bmad-code-review":
+        from bmad_assist.compiler.skills.bmad_code_review import (
+            BmadCodeReviewCompiler,
+        )
+
+        return BmadCodeReviewCompiler()
     if skill_id == "bmad-create-story":
         from bmad_assist.compiler.skills.bmad_create_story import (
             BmadCreateStoryCompiler,
@@ -60,6 +71,12 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadDevStoryCompiler()
+    if skill_id == "bmad-retrospective":
+        from bmad_assist.compiler.skills.bmad_retrospective import (
+            BmadRetrospectiveCompiler,
+        )
+
+        return BmadRetrospectiveCompiler()
     raise CompilerError(
         f"No skill-layout compiler registered for '{skill_id}'.\n"
         f"  Suggestion: register the compiler in "

@@ -13,8 +13,10 @@ import pytest
 # Phase 3.2 should append new entries here when adding more skill
 # compilers.
 _SKILL_COMPILER_MODULES: tuple[str, ...] = (
+    "bmad_assist.compiler.skills.bmad_code_review",
     "bmad_assist.compiler.skills.bmad_create_story",
     "bmad_assist.compiler.skills.bmad_dev_story",
+    "bmad_assist.compiler.skills.bmad_retrospective",
 )
 
 
