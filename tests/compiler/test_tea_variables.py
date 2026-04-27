@@ -7,10 +7,7 @@ Tests the TEA-specific variable resolution including:
 - Integration with step chain compilation
 """
 
-import tempfile
 from pathlib import Path
-
-import pytest
 
 
 class TestResolveKnowledgeIndex:
@@ -66,13 +63,17 @@ class TestResolveKnowledgeIndex:
 
         assert result is None
 
-    def test_no_index_found(self, tmp_path: Path) -> None:
-        """Should return None when no index found anywhere."""
+    def test_no_project_index_falls_back_to_bundled(self, tmp_path: Path) -> None:
+        """Phase 4: with no project install, the bundled fallback is returned."""
         from bmad_assist.compiler.variables.tea import resolve_knowledge_index
 
         result = resolve_knowledge_index(tmp_path)
 
-        assert result is None
+        # The bundled tea-index.csv ships with the package and is now the
+        # final fallback (previously this returned None — see Phase 4
+        # for the bundled-self-contained rationale).
+        assert result is not None
+        assert result.endswith("tea-index.csv")
 
 
 class TestResolveTeaConfigFlags:

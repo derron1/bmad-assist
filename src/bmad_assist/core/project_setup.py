@@ -64,6 +64,9 @@ class SetupResult:
     workflows_copied: list[str] = field(default_factory=list)
     workflows_skipped: list[str] = field(default_factory=list)
     gitignore_updated: bool = False
+    layout: str = "old"  # "new" | "old"
+    skills_bootstrapped: list[str] = field(default_factory=list)
+    skills_skipped: list[str] = field(default_factory=list)
 
     @property
     def has_skipped(self) -> bool:
@@ -579,6 +582,119 @@ def copy_bundled_workflows(
     return result
 
 
+def _copy_skill_tree(src_dir: Path, dst_dir: Path, _is_root: bool = True) -> None:
+    """Copy a bundled skill directory tree.
+
+    Mirrors :func:`_copy_workflow_tree` but is named separately so the
+    intent is clear at the call site (skill bootstrap vs workflow
+    install). Performs the same atomic-write + rollback discipline.
+
+    Args:
+        src_dir: Source skill directory (under ``bmad_assist.skills``).
+        dst_dir: Destination skill directory.
+        _is_root: Internal flag - True for top-level call (enables rollback).
+
+    Raises:
+        SetupError: If any copy operation fails. Cleans up partial copy.
+
+    """
+    import shutil
+
+    created_dst = not dst_dir.exists()
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        for item in src_dir.iterdir():
+            if item.is_symlink():
+                logger.warning("Skipping symlink in skill: %s", item)
+                continue
+            # Skip Python bytecode artefacts that may be co-located
+            # under the bundled skills package.
+            if item.name == "__pycache__" or item.name.endswith(".pyc"):
+                continue
+            if item.is_dir():
+                _copy_skill_tree(item, dst_dir / item.name, _is_root=False)
+            else:
+                _atomic_copy_file(item, dst_dir / item.name)
+    except (SetupError, OSError) as e:
+        if _is_root and created_dst and dst_dir.exists():
+            logger.warning("Rolling back partial skill copy: %s", dst_dir)
+            shutil.rmtree(dst_dir, ignore_errors=True)
+        raise SetupError(f"Failed to copy skill tree {src_dir}: {e}") from e
+
+
+def bootstrap_new_layout(
+    project_path: Path,
+    force: bool,
+    console: Console,
+) -> tuple[list[str], list[str]]:
+    """Bootstrap the BMAD v6.4+ skill layout from bundled sources.
+
+    Copies each bundled skill (under :mod:`bmad_assist.skills`) into
+    both ``<project>/.claude/skills/<id>/`` and
+    ``<project>/.agents/skills/<id>/`` (byte-identical mirrors).
+
+    No-clobber semantics: existing destination directories are left
+    untouched unless ``force=True``.
+
+    Args:
+        project_path: Project root directory.
+        force: If True, overwrite existing skill directories with the
+            bundled versions. If False, skip already-present skills.
+        console: Rich console for progress output.
+
+    Returns:
+        Tuple of ``(bootstrapped_skill_ids, skipped_skill_ids)``.
+
+    """
+    import shutil
+
+    from bmad_assist.skills import get_bundled_skill_dir, list_bundled_skills
+
+    skills = list_bundled_skills()
+    if not skills:
+        console.print("  [yellow]No bundled skills available to bootstrap[/yellow]")
+        return [], []
+
+    console.print(f"\n[bold]Bootstrapping {len(skills)} bundled skills...[/bold]")
+
+    bootstrapped: list[str] = []
+    skipped: list[str] = []
+
+    for i, skill_id in enumerate(skills, 1):
+        src_dir = get_bundled_skill_dir(skill_id)
+        if src_dir is None:
+            console.print(f"  [{i}/{len(skills)}] {skill_id}... [red]NOT FOUND[/red]")
+            continue
+
+        console.print(f"  [{i}/{len(skills)}] {skill_id}...", end=" ")
+
+        any_action = False
+        for mirror_prefix in (".claude/skills", ".agents/skills"):
+            dst_dir = project_path / mirror_prefix / skill_id
+            if not _validate_path_safe(project_path, dst_dir):
+                console.print(f"[red]SKIPPED {mirror_prefix} (invalid path)[/red]", end=" ")
+                continue
+            if dst_dir.exists():
+                if force:
+                    shutil.rmtree(dst_dir)
+                    _copy_skill_tree(src_dir, dst_dir)
+                    any_action = True
+                # else: no-clobber — leave it alone
+            else:
+                _copy_skill_tree(src_dir, dst_dir)
+                any_action = True
+
+        if any_action:
+            console.print("[green]ok[/green]")
+            bootstrapped.append(skill_id)
+        else:
+            console.print("[dim]exists[/dim]")
+            skipped.append(skill_id)
+
+    return bootstrapped, skipped
+
+
 def reset_project_cache(project_path: Path, console: Console) -> None:
     """Clear project template cache and install bundled pre-compiled templates.
 
@@ -712,25 +828,50 @@ def sync_bundled_cache(
     return installed
 
 
+def _has_legacy_install(project_path: Path) -> bool:
+    """Return True if any legacy ``_bmad/bmm/workflows/...`` dir exists."""
+    legacy_root = project_path / "_bmad" / "bmm" / "workflows"
+    return legacy_root.is_dir()
+
+
 def ensure_project_setup(
     project_path: Path,
     include_gitignore: bool = False,
     force: bool = False,
     console: Console | None = None,
+    skill_layout: str = "auto",
 ) -> SetupResult:
     """Ensure project is set up for bmad-assist.
+
+    Layout-aware (Phase 4) — chooses between three setup modes:
+
+    * **Existing v6.4+ install** (``detect_layout == "new"``): leaves
+      ``.claude/skills/`` and ``.agents/skills/`` alone (no-clobber);
+      our bundled skills act as fallbacks for anything not yet
+      installed. Skips legacy workflow copying entirely.
+    * **Existing legacy install**: keeps the existing behaviour of
+      copying bundled workflows into
+      ``_bmad/bmm/workflows/4-implementation/...``.
+    * **Fresh project** (neither layout detected): bootstraps the new
+      layout by copying bundled skills into
+      ``.claude/skills/<id>/`` and ``.agents/skills/<id>/``.
 
     Args:
         project_path: Project root directory.
         include_gitignore: If True, also update .gitignore (init only).
-        force: If True, overwrite differing files without prompts.
+        force: If True, overwrite differing files / re-bootstrap skills.
         console: Rich console for output (None = no output).
+        skill_layout: ``"auto"`` (detect), ``"new"`` (force bootstrap),
+            or ``"old"`` (force legacy workflow copy). Defaults to
+            ``"auto"``.
 
     Returns:
-        SetupResult with status and details.
+        SetupResult with status and details (including which layout
+        path was taken).
 
     """
     from bmad_assist.git import setup_gitignore
+    from bmad_assist.skill_layout import detect_layout
 
     console = console or Console(quiet=True)
     result = SetupResult()
@@ -748,16 +889,55 @@ def ensure_project_setup(
         if not cache_dir.exists():
             cache_dir.mkdir()
 
-    # 2. Create BMAD config if missing
-    if _create_bmad_config(project_path, console):
-        result.config_created = True
+    # 2. Decide which layout path we're on.
+    if skill_layout == "auto":
+        detected = detect_layout(project_path)
+        if detected == "new":
+            mode = "existing-new"
+        elif _has_legacy_install(project_path):
+            mode = "existing-old"
+        else:
+            mode = "fresh"
+    elif skill_layout == "new":
+        mode = "fresh"  # Force bootstrap path even if neither signal is present.
+    elif skill_layout == "old":
+        mode = "existing-old"
+    else:
+        raise SetupError(
+            f"Invalid skill_layout '{skill_layout}'. Expected 'auto', 'new', or 'old'."
+        )
 
-    # 3. Copy bundled workflows
-    copy_result = copy_bundled_workflows(project_path, force, console)
-    result.workflows_copied = copy_result.copied
-    result.workflows_skipped = copy_result.skipped
+    if mode == "existing-new":
+        result.layout = "new"
+        console.print(
+            "  [dim]Detected existing BMAD v6.4+ skill layout — "
+            "leaving installed skills alone.[/dim]"
+        )
+        # Bundled skills act as fallback for anything not installed; nothing to copy.
+        # Still respect --force by re-bootstrapping (overwrite installed skills).
+        if force:
+            bootstrapped, skipped = bootstrap_new_layout(project_path, force=True, console=console)
+            result.skills_bootstrapped = bootstrapped
+            result.skills_skipped = skipped
+    elif mode == "fresh":
+        result.layout = "new"
+        bootstrapped, skipped = bootstrap_new_layout(project_path, force=force, console=console)
+        result.skills_bootstrapped = bootstrapped
+        result.skills_skipped = skipped
+    else:
+        # Legacy / "existing-old" path.
+        result.layout = "old"
+        # 3a. Create BMAD config if missing.
+        if _create_bmad_config(project_path, console):
+            result.config_created = True
 
-    # 4. Sync or reset bundled cache templates
+        # 3b. Copy bundled workflows.
+        copy_result = copy_bundled_workflows(project_path, force, console)
+        result.workflows_copied = copy_result.copied
+        result.workflows_skipped = copy_result.skipped
+
+    # 4. Sync or reset bundled cache templates (applies to all modes — the
+    #    cache is independent of which skill mirror is installed).
     if force:
         reset_project_cache(project_path, console)
     else:

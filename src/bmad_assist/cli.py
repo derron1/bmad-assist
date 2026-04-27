@@ -505,11 +505,16 @@ def run(
         # Implicit project setup (without gitignore modification)
         from bmad_assist.core.project_setup import check_gitignore_warning, ensure_project_setup
 
+        # Phase 4: keep ``run`` on the legacy setup path. The new-layout
+        # bootstrap is initiated explicitly via ``bmad-assist init
+        # --skill-layout new`` (or auto-detected on init for fresh
+        # projects). Phase 5 will flip the default once we're ready.
         setup_result = ensure_project_setup(
             project_path,
             include_gitignore=False,  # run never modifies gitignore
             force=no_interactive,  # In non-interactive, skip differing files silently
             console=console if not quiet else None,
+            skill_layout="old",
         )
 
         # Show gitignore warning (respects config)

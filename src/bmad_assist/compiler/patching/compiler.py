@@ -275,14 +275,30 @@ _WORKFLOW_TO_BMAD_DIR = {
 }
 
 
+def _select_instructions(workflow_dir: Path) -> Path | None:
+    """Return the instructions file in ``workflow_dir`` (xml first, then md)."""
+    instructions_xml = workflow_dir / "instructions.xml"
+    if instructions_xml.exists():
+        return instructions_xml
+    instructions_md = workflow_dir / "instructions.md"
+    if instructions_md.exists():
+        return instructions_md
+    return None
+
+
 def _find_workflow_files(
     workflow: str,
     project_root: Path,
 ) -> tuple[Path, Path]:
     """Find workflow.yaml and instructions file for a workflow.
 
-    Searches in standard BMAD locations within the project.
-    Supports both .xml and .md instruction file formats.
+    Phase 4: consults :func:`discover_workflow_source` first so the
+    layout-aware probe ordering (new-layout skills → legacy ``_bmad/...``
+    → bundled) is shared with the rest of the compiler. Falls back to
+    the legacy ``_bmad/...`` and ``~/.bmad/...`` walks for the cases
+    where the unified discovery doesn't find a usable
+    ``workflow.yaml`` (e.g. discovered hit was a v6.4+ skill that
+    doesn't ship ``workflow.yaml``).
 
     Args:
         workflow: Workflow name (e.g., 'create-story').
@@ -296,6 +312,20 @@ def _find_workflow_files(
         PatchError: If workflow files not found.
 
     """
+    from bmad_assist.compiler.workflow_discovery import discover_workflow_source
+
+    # Phase 4: prefer the unified, layout-aware discovery API. The
+    # legacy patching pipeline always wants a workflow.yaml on disk, so
+    # we explicitly request layout="old" to avoid being routed to a
+    # v6.4+ skill directory (which lacks workflow.yaml).
+    source = discover_workflow_source(workflow, project_root, layout="old")
+    if source is not None:
+        workflow_yaml = source.path / "workflow.yaml"
+        if workflow_yaml.exists():
+            instructions = _select_instructions(source.path)
+            if instructions is not None:
+                return workflow_yaml, instructions
+
     # Use mapping for testarch workflows (testarch-ci -> ci)
     # Try both the mapped name and the full prefixed name
     bmad_dir_name = _WORKFLOW_TO_BMAD_DIR.get(workflow, workflow)
@@ -307,35 +337,22 @@ def _find_workflow_files(
         for candidate_name in candidates:
             workflow_dir = project_root / location / candidate_name
             workflow_yaml = workflow_dir / "workflow.yaml"
-
             if not workflow_yaml.exists():
                 continue
-
-            # Try instructions.xml first, then .md as fallback
-            instructions_xml = workflow_dir / "instructions.xml"
-            if instructions_xml.exists():
-                return workflow_yaml, instructions_xml
-
-            instructions_md = workflow_dir / "instructions.md"
-            if instructions_md.exists():
-                return workflow_yaml, instructions_md
+            instructions = _select_instructions(workflow_dir)
+            if instructions is not None:
+                return workflow_yaml, instructions
 
     # Not found in project - try global ~/.bmad/
     for location in _WORKFLOW_LOCATIONS:
         for candidate_name in candidates:
             workflow_dir = Path.home() / location / candidate_name
             workflow_yaml = workflow_dir / "workflow.yaml"
-
             if not workflow_yaml.exists():
                 continue
-
-            instructions_xml = workflow_dir / "instructions.xml"
-            if instructions_xml.exists():
-                return workflow_yaml, instructions_xml
-
-            instructions_md = workflow_dir / "instructions.md"
-            if instructions_md.exists():
-                return workflow_yaml, instructions_md
+            instructions = _select_instructions(workflow_dir)
+            if instructions is not None:
+                return workflow_yaml, instructions
 
     # Not found in project or global - try bundled workflows
     from bmad_assist.workflows import get_bundled_workflow_dir
@@ -344,13 +361,9 @@ def _find_workflow_files(
     if bundled_dir is not None:
         workflow_yaml = bundled_dir / "workflow.yaml"
         if workflow_yaml.exists():
-            instructions_xml = bundled_dir / "instructions.xml"
-            if instructions_xml.exists():
-                return workflow_yaml, instructions_xml
-
-            instructions_md = bundled_dir / "instructions.md"
-            if instructions_md.exists():
-                return workflow_yaml, instructions_md
+            instructions = _select_instructions(bundled_dir)
+            if instructions is not None:
+                return workflow_yaml, instructions
 
     raise PatchError(
         f"Workflow not found: {workflow}\n"

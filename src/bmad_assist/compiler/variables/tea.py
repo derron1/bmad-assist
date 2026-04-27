@@ -16,10 +16,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Default TEA knowledge index location (relative to project root)
+# Legacy constants retained for backwards-compat imports. New callers
+# should use :func:`resolve_tea_index_path` from
+# :mod:`bmad_assist.testarch.knowledge.loader` (re-exported below).
 DEFAULT_KNOWLEDGE_INDEX_PATH = "_bmad/tea/testarch/tea-index.csv"
-
-# Fallback location for knowledge index
 FALLBACK_KNOWLEDGE_INDEX_PATH = "_bmad/bmm/testarch/tea-index.csv"
 
 
@@ -29,10 +29,12 @@ def resolve_knowledge_index(
 ) -> str | None:
     """Resolve knowledgeIndex to actual file path.
 
-    Searches for the TEA knowledge index file in order:
-    1. If explicit_path provided, resolve relative to project root
-    2. Default location: _bmad/tea/testarch/tea-index.csv
-    3. Fallback location: _bmad/bmm/testarch/tea-index.csv
+    Searches for the TEA knowledge index file. When ``explicit_path`` is
+    provided it is honoured (subject to security validation). Otherwise
+    delegates to :func:`resolve_tea_index_path` which probes both the
+    v6.4+ skill layout (``.claude/skills/bmad-tea/resources/...``) and
+    the legacy ``_bmad/tea/...`` / ``_bmad/bmm/...`` locations before
+    falling back to the bundled copy.
 
     Args:
         project_root: Project root directory.
@@ -42,7 +44,11 @@ def resolve_knowledge_index(
         Absolute path to knowledge index file as string, or None if not found.
 
     """
-    # If explicit path provided, resolve it
+    from bmad_assist.testarch.knowledge.loader import resolve_tea_index_path
+
+    # If explicit path provided, resolve it (preserving the existing
+    # security checks — these are stricter than what the shared
+    # resolver does because explicit paths come from step frontmatter).
     if explicit_path:
         # Security: Reject absolute paths
         if Path(explicit_path).is_absolute():
@@ -82,20 +88,11 @@ def resolve_knowledge_index(
             )
             return None
 
-    # Check default location
-    default_path = project_root / DEFAULT_KNOWLEDGE_INDEX_PATH
-    if default_path.exists():
-        logger.debug("Using default knowledge index: %s", default_path)
-        return str(default_path)
-
-    # Check fallback location
-    fallback_path = project_root / FALLBACK_KNOWLEDGE_INDEX_PATH
-    if fallback_path.exists():
-        logger.debug("Using fallback knowledge index: %s", fallback_path)
-        return str(fallback_path)
-
-    logger.debug("No knowledge index found (not a blocker)")
-    return None
+    resolved = resolve_tea_index_path(project_root)
+    if resolved is None:
+        logger.debug("No knowledge index found (not a blocker)")
+        return None
+    return str(resolved)
 
 
 def resolve_tea_config_flags(
@@ -244,11 +241,17 @@ def resolve_tea_variables(
         Updated resolved variables dict with TEA variables.
 
     """
-    # Resolve knowledge index
-    ki_path = resolve_knowledge_index(project_root, knowledge_index_path)
-    if ki_path:
-        resolved["knowledgeIndex"] = ki_path
-        logger.debug("Set knowledgeIndex: %s", ki_path)
+    # Resolve knowledge index. Don't clobber a value the caller has
+    # already set (e.g. step_chain pre-resolves the per-step explicit
+    # path before this function runs); previously the implicit None
+    # call would only overwrite if no project install existed, but
+    # Phase 4's bundled fallback means the resolver always returns a
+    # path. Preserve an existing value to keep that contract.
+    if "knowledgeIndex" not in resolved:
+        ki_path = resolve_knowledge_index(project_root, knowledge_index_path)
+        if ki_path:
+            resolved["knowledgeIndex"] = ki_path
+            logger.debug("Set knowledgeIndex: %s", ki_path)
 
     # Resolve TEA config flags
     tea_flags = resolve_tea_config_flags(project_root)

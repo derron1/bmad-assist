@@ -26,13 +26,66 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default knowledge index locations (relative to project root)
+# Default knowledge index locations (relative to project root).
+# Retained for backwards-compat imports; new code should call
+# :func:`resolve_tea_index_path` instead.
 DEFAULT_INDEX_PATH = "_bmad/tea/testarch/tea-index.csv"
 FALLBACK_INDEX_PATH = "_bmad/bmm/testarch/tea-index.csv"
+
+# v6.4+ skill-layout locations (relative to project root).
+NEW_LAYOUT_CLAUDE_INDEX_PATH = ".claude/skills/bmad-tea/resources/tea-index.csv"
+NEW_LAYOUT_AGENTS_INDEX_PATH = ".agents/skills/bmad-tea/resources/tea-index.csv"
 
 # Singleton storage for loaders (per project root)
 _loaders: dict[Path, "KnowledgeBaseLoader"] = {}
 _loader_lock = Lock()
+
+
+def resolve_tea_index_path(project_root: Path) -> Path | None:
+    """Resolve ``tea-index.csv`` location based on installed BMAD layout.
+
+    Probe order (first existing path wins):
+
+    1. ``.claude/skills/bmad-tea/resources/tea-index.csv`` — v6.4+ Claude mirror.
+    2. ``.agents/skills/bmad-tea/resources/tea-index.csv`` — v6.4+ agents mirror.
+    3. ``_bmad/tea/testarch/tea-index.csv`` — legacy v6 layout.
+    4. ``_bmad/bmm/testarch/tea-index.csv`` — legacy v6 fallback.
+    5. The bundled fallback shipped under
+       ``bmad_assist.testarch.knowledge_base``.
+
+    The function does **not** require :func:`detect_layout` because both
+    layouts are probed unconditionally. This means the resolver works
+    correctly during the transition (e.g. a project bootstrapped by
+    ``bmad-assist init`` that doesn't yet have a full BMAD install).
+
+    Args:
+        project_root: Project root directory.
+
+    Returns:
+        Absolute path to the resolved ``tea-index.csv``, or ``None`` if
+        no installed or bundled copy can be located.
+
+    """
+    candidates = [
+        project_root / NEW_LAYOUT_CLAUDE_INDEX_PATH,
+        project_root / NEW_LAYOUT_AGENTS_INDEX_PATH,
+        project_root / DEFAULT_INDEX_PATH,
+        project_root / FALLBACK_INDEX_PATH,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            logger.debug("resolve_tea_index_path: using %s", candidate)
+            return candidate
+
+    # Bundled fallback (last resort).
+    from bmad_assist.testarch.knowledge_base import get_bundled_index_path
+
+    bundled = get_bundled_index_path()
+    if bundled is not None:
+        logger.debug("resolve_tea_index_path: using bundled %s", bundled)
+        return bundled
+
+    return None
 
 
 def get_knowledge_loader(project_root: Path) -> "KnowledgeBaseLoader":
@@ -139,36 +192,20 @@ class KnowledgeBaseLoader:
             Path to index file, or None if not found.
 
         """
-        # If configured, use the configured index path
+        # If configured, use the configured index path.
         if self._config is not None:
             config_path = self._project_root / self._config.index_path
             if config_path.exists():
                 return config_path
-            # Fall through to defaults if configured path doesn't exist
+            # Fall through to defaults if configured path doesn't exist.
             logger.debug(
                 "Configured index path %s does not exist, checking defaults",
                 config_path,
             )
 
-        # Check default location first
-        default_path = self._project_root / DEFAULT_INDEX_PATH
-        if default_path.exists():
-            return default_path
-
-        # Check fallback location
-        fallback_path = self._project_root / FALLBACK_INDEX_PATH
-        if fallback_path.exists():
-            return fallback_path
-
-        # Check bundled knowledge base (last resort)
-        from bmad_assist.testarch.knowledge_base import get_bundled_index_path
-
-        bundled_path = get_bundled_index_path()
-        if bundled_path is not None:
-            logger.debug("Using bundled knowledge base: %s", bundled_path)
-            return bundled_path
-
-        return None
+        # Layout-aware shared resolver handles all standard probe paths
+        # (new + old layouts) plus the bundled fallback.
+        return resolve_tea_index_path(self._project_root)
 
     def _get_knowledge_dir(self, index_path: Path) -> Path:
         """Get knowledge directory (same dir as index file)."""

@@ -33,6 +33,9 @@ class KnowledgeFragment:
         description: 1-sentence summary.
         tags: List of metadata tags (frameworks, domains, patterns).
         fragment_file: Relative path to markdown file.
+        tier: Tier classification ("core", "extended", "specialized").
+            Added in v6.4+ schema. Defaults to ``"core"`` for fragments
+            parsed from a legacy 5-column index.
 
     """
 
@@ -41,6 +44,7 @@ class KnowledgeFragment:
     description: str
     tags: tuple[str, ...]  # Tuple for immutability
     fragment_file: str
+    tier: str = "core"
 
     def __post_init__(self) -> None:
         """Validate fragment data."""
@@ -62,6 +66,7 @@ class KnowledgeFragment:
             "description": self.description,
             "tags": list(self.tags),
             "fragment_file": self.fragment_file,
+            "tier": self.tier,
         }
 
 

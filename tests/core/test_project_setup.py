@@ -7,7 +7,7 @@ Mocking strategy for Rich prompts:
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from rich.console import Console
@@ -156,50 +156,73 @@ class TestGitignoreWarning:
 
 
 class TestEnsureProjectSetup:
-    """Tests for ensure_project_setup orchestration."""
+    """Tests for ensure_project_setup orchestration.
+
+    Phase 4: most legacy-path assertions explicitly request
+    ``skill_layout="old"`` so ``auto`` mode (which now bootstraps the
+    new layout on fresh projects) doesn't change their semantics.
+    """
 
     def test_creates_bmad_assist_dir(self, tmp_path: Path) -> None:
         """Creates .bmad-assist directory on fresh project."""
-        result = ensure_project_setup(tmp_path, console=Console(quiet=True))
+        ensure_project_setup(tmp_path, console=Console(quiet=True))
         assert (tmp_path / ".bmad-assist").exists()
         assert (tmp_path / ".bmad-assist" / "cache").exists()
 
     def test_creates_bmad_config(self, tmp_path: Path) -> None:
-        """Creates BMAD config if missing."""
-        result = ensure_project_setup(tmp_path, console=Console(quiet=True))
+        """Creates BMAD config if missing (legacy layout)."""
+        result = ensure_project_setup(
+            tmp_path, console=Console(quiet=True), skill_layout="old"
+        )
         config_file = tmp_path / "_bmad" / "bmm" / "config.yaml"
         assert config_file.exists()
         assert result.config_created is True
 
     def test_skips_existing_bmad_config(self, tmp_path: Path) -> None:
-        """Does not overwrite existing BMAD config."""
+        """Does not overwrite existing BMAD config (legacy layout)."""
         config_dir = tmp_path / "_bmad" / "bmm"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config.yaml"
         config_file.write_text("existing: true\n")
 
-        result = ensure_project_setup(tmp_path, console=Console(quiet=True))
+        result = ensure_project_setup(
+            tmp_path, console=Console(quiet=True), skill_layout="old"
+        )
         assert result.config_created is False
         assert config_file.read_text() == "existing: true\n"
 
     def test_gitignore_not_updated_by_default(self, tmp_path: Path) -> None:
         """Gitignore not modified unless include_gitignore=True."""
-        result = ensure_project_setup(tmp_path, include_gitignore=False, console=Console(quiet=True))
+        result = ensure_project_setup(
+            tmp_path, include_gitignore=False, console=Console(quiet=True)
+        )
         assert result.gitignore_updated is False
 
     def test_gitignore_updated_when_requested(self, tmp_path: Path) -> None:
         """Gitignore updated when include_gitignore=True."""
-        result = ensure_project_setup(tmp_path, include_gitignore=True, console=Console(quiet=True))
+        result = ensure_project_setup(
+            tmp_path, include_gitignore=True, console=Console(quiet=True)
+        )
         assert (tmp_path / ".gitignore").exists()
         assert result.gitignore_updated is True
 
     def test_idempotent_second_run(self, tmp_path: Path) -> None:
-        """Second run on same project creates no new artifacts."""
+        """Second run on same project creates no new artifacts (legacy layout)."""
         # First run
-        ensure_project_setup(tmp_path, include_gitignore=True, console=Console(quiet=True))
+        ensure_project_setup(
+            tmp_path,
+            include_gitignore=True,
+            console=Console(quiet=True),
+            skill_layout="old",
+        )
 
         # Second run
-        result = ensure_project_setup(tmp_path, include_gitignore=True, console=Console(quiet=True))
+        result = ensure_project_setup(
+            tmp_path,
+            include_gitignore=True,
+            console=Console(quiet=True),
+            skill_layout="old",
+        )
         assert result.config_created is False
         assert result.gitignore_updated is False
         assert len(result.dirs_created) == 0
@@ -254,7 +277,7 @@ class TestAtomicCopyFile:
 
     def test_temp_file_cleaned_on_write_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """AC9: Temp file cleaned up when write fails."""
-        from bmad_assist.core.project_setup import _atomic_copy_file, SetupError
+        from bmad_assist.core.project_setup import SetupError, _atomic_copy_file
 
         src = tmp_path / "source.txt"
         dst = tmp_path / "dest.txt"
@@ -284,7 +307,6 @@ class TestAtomicCopyFile:
         _atomic_copy_file(src, dst)
 
         # Check permissions (masking with 0o777 to ignore setuid/setgid bits)
-        import stat
         mode = dst.stat().st_mode & 0o777
         assert mode == 0o644
 
@@ -294,7 +316,7 @@ class TestNonTTYBehavior:
 
     def test_non_tty_returns_skip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """AC4: Non-TTY mode skips differing files without prompting."""
-        from bmad_assist.core.project_setup import _prompt_overwrite_batch, OverwriteDecision
+        from bmad_assist.core.project_setup import OverwriteDecision, _prompt_overwrite_batch
 
         # Mock stdin.isatty() to return False
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)

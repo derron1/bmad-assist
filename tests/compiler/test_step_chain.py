@@ -470,12 +470,17 @@ name: 'step-01'
 
         assert "<!-- KNOWLEDGE BASE -->" not in compiled
 
-    def test_compile_logs_warning_for_missing_knowledge_index(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    def test_compile_resolves_knowledge_index_for_tea_workflow(
+        self, tmp_path: Path
     ) -> None:
-        """Should log warning when knowledge index missing for TEA workflow."""
-        import logging
+        """Phase 4: TEA workflows always resolve a knowledge index.
 
+        Previously the test asserted a missing-index warning was logged
+        when no project install existed. Phase 4 introduced a bundled
+        fallback (``src/bmad_assist/testarch/knowledge_base/``), so a
+        TEA workflow on a project without ``_bmad/...`` resolves to the
+        bundled index instead of warning.
+        """
         from bmad_assist.compiler.step_chain import compile_step_chain
 
         step_file = tmp_path / "step-01.md"
@@ -488,19 +493,16 @@ name: 'step-01'
         )
 
         resolved_vars: dict = {}
-        with caplog.at_level(logging.WARNING):
-            compile_step_chain(
-                step_file,
-                resolved_vars,
-                tmp_path,
-                workflow_id="testarch-atdd",
-            )
-
-        # Should warn about missing knowledge index
-        assert any(
-            "knowledge index" in record.message.lower()
-            for record in caplog.records
+        compile_step_chain(
+            step_file,
+            resolved_vars,
+            tmp_path,
+            workflow_id="testarch-atdd",
         )
+
+        # The bundled tea-index.csv satisfies the resolution.
+        assert "knowledgeIndex" in resolved_vars
+        assert resolved_vars["knowledgeIndex"].endswith("tea-index.csv")
 
     def test_compile_respects_tea_flags(
         self, tmp_path: Path

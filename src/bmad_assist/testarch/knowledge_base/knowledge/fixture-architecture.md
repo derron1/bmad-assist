@@ -2,7 +2,7 @@
 
 ## Principle
 
-Build test helpers as pure functions first, then wrap them in framework-specific fixtures. Compose capabilities using `mergeTests` (Playwright) or layered commands (Cypress) instead of inheritance. Each fixture should solve one isolated concern (auth, API, network).
+Build test helpers as pure functions first, then wrap them in framework-specific fixtures. Compose capabilities using `mergeTests` (Playwright) or layered commands (Cypress) instead of inheritance. Each fixture should solve one isolated concern (auth, API, logs, network).
 
 ## Rationale
 
@@ -96,10 +96,10 @@ import { test as base, mergeTests } from '@playwright/test';
 import { test as apiRequestFixture } from './api-request-fixture';
 import { test as networkFixture } from './network-fixture';
 import { test as authFixture } from './auth-fixture';
-// NOTE: Do NOT include log fixture — use direct import instead (see log.md)
+import { test as logFixture } from './log-fixture';
 
 // Compose all fixtures for comprehensive capabilities
-export const test = mergeTests(base, apiRequestFixture, networkFixture, authFixture);
+export const test = mergeTests(base, apiRequestFixture, networkFixture, authFixture, logFixture);
 
 export { expect } from '@playwright/test';
 
@@ -398,4 +398,4 @@ When deciding whether to create a fixture, follow these rules:
 - **1 use** → Keep inline (avoid premature abstraction)
 - **Complex logic** → Factory function pattern (dynamic data generation)
 
-_Source: Murat Testing Philosophy (lines 74-122), SEON production patterns, Playwright fixture docs._
+_Source: Murat Testing Philosophy (lines 74-122), enterprise production patterns, Playwright fixture docs._

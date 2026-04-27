@@ -15,7 +15,7 @@ Writing Playwright utilities from scratch for every project leads to:
 
 `@seontechnologies/playwright-utils` provides:
 
-- **Production-tested utilities**: Used at SEON Technologies in production
+- **Production-tested**: Used in enterprise production environments
 - **Functional-first design**: Core logic as pure functions, fixtures for convenience
 - **Composable fixtures**: Use `mergeTests` to combine utilities
 - **TypeScript support**: Full type safety with generic types
@@ -38,17 +38,17 @@ npm install -D @seontechnologies/playwright-utils
 
 ### Core Testing Utilities
 
-| Utility                    | Purpose                                            | Test Context       |
-| -------------------------- | -------------------------------------------------- | ------------------ |
-| **api-request**            | Typed HTTP client with schema validation and retry | **API/Backend**    |
-| **recurse**                | Polling for async operations, background jobs      | **API/Backend**    |
-| **auth-session**           | Token persistence, multi-user, service-to-service  | **API/Backend/UI** |
-| **log**                    | Playwright report-integrated logging               | **API/Backend/UI** |
-| **file-utils**             | CSV/XLSX/PDF/ZIP reading & validation              | **API/Backend/UI** |
-| **burn-in**                | Smart test selection with git diff                 | **CI/CD**          |
-| **network-recorder**       | HAR record/playback for offline testing            | UI only            |
-| **intercept-network-call** | Network spy/stub with auto JSON parsing            | UI only            |
-| **network-error-monitor**  | Automatic HTTP 4xx/5xx detection                   | UI only            |
+| Utility                    | Purpose                                                                       | Test Context       |
+| -------------------------- | ----------------------------------------------------------------------------- | ------------------ |
+| **api-request**            | Typed HTTP client with schema validation, retry, and operation-based overload | **API/Backend**    |
+| **recurse**                | Polling for async operations, background jobs                                 | **API/Backend**    |
+| **auth-session**           | Token persistence, multi-user, service-to-service                             | **API/Backend/UI** |
+| **log**                    | Playwright report-integrated logging                                          | **API/Backend/UI** |
+| **file-utils**             | CSV/XLSX/PDF/ZIP reading & validation                                         | **API/Backend/UI** |
+| **burn-in**                | Smart test selection with git diff                                            | **CI/CD**          |
+| **network-recorder**       | HAR record/playback for offline testing                                       | UI only            |
+| **intercept-network-call** | Network spy/stub with auto JSON parsing                                       | UI only            |
+| **network-error-monitor**  | Automatic HTTP 4xx/5xx detection                                              | UI only            |
 
 **Note**: 6 of 9 utilities work without a browser. Only 3 are UI-specific (network-recorder, intercept-network-call, network-error-monitor).
 
@@ -125,20 +125,19 @@ import { mergeTests } from '@playwright/test';
 import { test as apiRequestFixture } from '@seontechnologies/playwright-utils/api-request/fixtures';
 import { test as authFixture } from '@seontechnologies/playwright-utils/auth-session/fixtures';
 import { test as recurseFixture } from '@seontechnologies/playwright-utils/recurse/fixtures';
-// NOTE: Do NOT include log fixture in mergeTests — use direct import instead (see log.md)
+import { test as logFixture } from '@seontechnologies/playwright-utils/log/fixtures';
 
 // Merge all fixtures into one test object
-export const test = mergeTests(apiRequestFixture, authFixture, recurseFixture);
+export const test = mergeTests(apiRequestFixture, authFixture, recurseFixture, logFixture);
 
 export { expect } from '@playwright/test';
 ```
 
 ```typescript
 // In your tests
-import { log } from '@seontechnologies/playwright-utils';
 import { test, expect } from '../support/merged-fixtures';
 
-test('all utilities available', async ({ apiRequest, authToken, recurse }) => {
+test('all utilities available', async ({ apiRequest, authToken, recurse, log }) => {
   await log.step('Making authenticated API request');
 
   const { body } = await apiRequest({
@@ -241,17 +240,13 @@ test('bad', async ({ request, authToken }) => {
 **✅ Use consistent import style:**
 
 ```typescript
-import { log } from '@seontechnologies/playwright-utils';
 import { test } from '../support/merged-fixtures';
 
 test('good', async ({ apiRequest, authToken }) => {
-  // All from fixtures, except log which is always a direct import
-  await log.step('Fetching users');
+  // Clean - all from fixtures
   await apiRequest({ method: 'GET', path: '/api/users' });
 });
 ```
-
-> **Exception**: `log` is always a direct import. The log fixture wraps it as an incompatible callable function — do NOT include it in `mergeTests` or destructure `{ log }` from test params. See `log.md` for details.
 
 **❌ Don't import everything when you need one utility:**
 

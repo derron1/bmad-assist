@@ -5,11 +5,45 @@ This module defines the core data structures used throughout the compiler:
 - WorkflowIR: Intermediate representation of parsed workflow
 - CompiledWorkflow: Final compiled output ready for LLM consumption
 - CompilerContext: Context passed to workflow-specific compilers
+- WorkflowSource: Layout-aware discovery result (skill_id + layout + path)
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+
+@dataclass(frozen=True)
+class WorkflowSource:
+    """Result of layout-aware workflow discovery.
+
+    Carries the canonical workflow / skill identifier alongside the
+    layout flavour that produced the resolution and the absolute path
+    to the resolved directory. Callers that only need the path can
+    treat this like a thin wrapper, but the extra fields are useful
+    for logging, telemetry, and downstream branch decisions.
+
+    Attributes:
+        workflow_name: Logical workflow id used by callers (e.g.
+            ``"create-story"``, ``"testarch-atdd"``). Preserved verbatim
+            even when the underlying skill id differs (the new layout
+            stores ``"testarch-atdd"`` under ``bmad-testarch-atdd``).
+        skill_id: ``bmad-`` prefixed skill id when the source is a
+            v6.4+ skill (e.g. ``"bmad-create-story"``). For legacy or
+            bundled-only workflows this is ``None``.
+        layout: Discovery layout — ``"new"`` for a v6.4+ skill match,
+            ``"old"`` for a legacy ``_bmad/...`` match, ``"bundled"``
+            when only the bundled fallback shipped with bmad-assist
+            could satisfy the request, or ``"override"`` for the
+            project-level ``.bmad-assist/workflows/<name>/`` override.
+        path: Absolute path to the resolved workflow directory.
+
+    """
+
+    workflow_name: str
+    skill_id: str | None
+    layout: Literal["new", "old", "bundled", "override"]
+    path: Path
 
 
 @dataclass(frozen=True)
