@@ -1,12 +1,12 @@
 """Tests for the ``skill_layout`` feature flag plumbing.
 
-The flag is wired through but not yet consumed (Phase 1). These tests
-verify only that:
-
-* The :class:`bmad_assist.core.config.models.main.Config` model accepts
-  the new field with each valid value.
-* Invalid values are rejected with a clean ``ValidationError``.
-* The CLI ``--skill-layout`` flag parses without errors.
+Phase 2 consumes the flag: ``compile_workflow(..., skill_layout="new")``
+now routes ``bmad-create-story`` (and the legacy ``create-story``
+alias) through the v6.4+ skill-layout compiler. End-to-end coverage of
+that route lives in
+:mod:`tests.skill_layout.test_create_story_e2e` and
+:mod:`tests.skill_layout.test_create_story_compat`. The tests in this
+module focus on the config model surface and the CLI flag plumbing.
 """
 
 from __future__ import annotations

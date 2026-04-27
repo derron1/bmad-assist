@@ -478,6 +478,14 @@ def run(
             raise typer.Exit(code=EXIT_CONFIG_ERROR)
         if skill_layout != loaded_config.skill_layout:
             loaded_config = loaded_config.model_copy(update={"skill_layout": skill_layout})
+            # Phase 2 consumes ``config.skill_layout`` from the loaded
+            # singleton (via ``compile_workflow(skill_layout="auto")``),
+            # so push the override into the singleton as well — the
+            # ``loaded_config`` local would otherwise diverge from what
+            # downstream callers see.
+            from bmad_assist.core.config.loaders import load_config
+
+            load_config(loaded_config.model_dump())
             logger.debug("skill_layout overridden via CLI: %s", skill_layout)
 
         # Initialize project paths singleton

@@ -11,16 +11,54 @@ The compilation flow integrates patch/template discovery:
 3. Load WorkflowIR (from cache if patch exists, or original files)
 4. Set context.workflow_ir and context.patch_path
 5. Call compiler.compile() with prepared context
+
+Phase 2 of the skill-layout refactor adds parallel routing: when the
+caller (or the loaded config) requests ``skill_layout="new"`` and the
+workflow has a skill-layout port, the factory returns the new
+:mod:`bmad_assist.compiler.skills` compiler instead of the legacy
+:mod:`bmad_assist.compiler.workflows` one. Both paths coexist; the
+flag selects between them.
 """
 
 import importlib
 import logging
 import re
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext
 from bmad_assist.core.exceptions import CompilerError
+
+# Skill-layout-port registry. Maps the *legacy* workflow name and the
+# new bmad-prefixed skill id to a callable returning a fresh compiler
+# instance. Phase 2 ships exactly one entry; Phase 3 will fan out.
+_SKILL_LAYOUT_COMPILERS: dict[str, str] = {
+    # legacy_name → bmad-prefixed skill id (canonical)
+    "create-story": "bmad-create-story",
+    "bmad-create-story": "bmad-create-story",
+}
+
+
+def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
+    """Instantiate the skill-layout compiler for ``skill_id``.
+
+    Imports lazily to avoid pulling skill-layout deps into the import
+    graph for callers that never opt into the new path.
+    """
+    if skill_id == "bmad-create-story":
+        from bmad_assist.compiler.skills.bmad_create_story import (
+            BmadCreateStoryCompiler,
+        )
+
+        return BmadCreateStoryCompiler()
+    raise CompilerError(
+        f"No skill-layout compiler registered for '{skill_id}'.\n"
+        f"  Suggestion: Phase 2 only ships bmad-create-story; other "
+        f"workflows still use the legacy compiler path."
+    )
+
+
+SkillLayoutMode = Literal["auto", "new", "old"]
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +148,12 @@ class WorkflowCompiler(Protocol):
 _WORKFLOW_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
-def get_workflow_compiler(workflow_name: str) -> WorkflowCompiler:
+def get_workflow_compiler(
+    workflow_name: str,
+    *,
+    skill_layout: SkillLayoutMode = "auto",
+    project_root: Path | None = None,
+) -> WorkflowCompiler:
     """Load workflow compiler by name.
 
     Dynamically loads the appropriate workflow compiler module based on
@@ -120,6 +163,16 @@ def get_workflow_compiler(workflow_name: str) -> WorkflowCompiler:
 
     Args:
         workflow_name: Workflow identifier (e.g., 'create-story').
+        skill_layout: Routing mode. ``"auto"`` resolves the layout via
+            :func:`bmad_assist.skill_layout.detect_layout` against
+            ``project_root`` (or the loaded config's value when
+            ``project_root`` is None). ``"new"`` forces the v6.4+
+            skill-layout compiler when the workflow has one; ``"old"``
+            forces the legacy path. Defaults to ``"auto"`` for full
+            backwards compatibility with pre-Phase-2 callers.
+        project_root: Project root used by ``skill_layout="auto"`` to
+            run the layout probe. When ``None``, layout detection is
+            skipped and the routing falls back to the legacy path.
 
     Returns:
         WorkflowCompiler instance for the workflow.
@@ -145,6 +198,16 @@ def get_workflow_compiler(workflow_name: str) -> WorkflowCompiler:
             f"  Why it's needed: Valid Python identifiers needed for module loading\n"
             f"  How to fix: Use lowercase letters, digits, hyphens, underscores only"
         )
+
+    # Phase 2 routing: skill-layout port takes priority when the caller
+    # opted in (or auto-detected) AND the workflow has a port.
+    use_new_path = _resolve_skill_layout(skill_layout, project_root) == "new"
+    if use_new_path and normalized_name in _SKILL_LAYOUT_COMPILERS:
+        skill_id = _SKILL_LAYOUT_COMPILERS[normalized_name]
+        logger.debug(
+            "Routing '%s' through skill-layout compiler '%s'", normalized_name, skill_id
+        )
+        return _build_skill_layout_compiler(skill_id)
 
     # Convert to Python module naming: hyphens to underscores
     module_name = normalized_name.replace("-", "_")
@@ -245,14 +308,57 @@ def _check_interactive_elements(
         )
 
 
+def _resolve_skill_layout(
+    mode: SkillLayoutMode,
+    project_root: Path | None,
+) -> Literal["new", "old"]:
+    """Resolve a layout request to the concrete ``"new"`` or ``"old"`` flavor.
+
+    ``"auto"`` walks: explicit ``project_root`` → loaded config's
+    ``skill_layout`` → :func:`detect_layout` against ``project_root``.
+    Any failure to resolve falls back to ``"old"`` so legacy callers
+    that don't pass the new arguments keep their existing behaviour.
+    """
+    if mode == "new":
+        return "new"
+    if mode == "old":
+        return "old"
+
+    # mode == "auto" — first ask the loaded config (if any).
+    try:
+        from bmad_assist.core.config import get_config
+
+        cfg = get_config()
+        cfg_mode = getattr(cfg, "skill_layout", "auto")
+        if cfg_mode == "new":
+            return "new"
+        if cfg_mode == "old":
+            return "old"
+    except Exception:
+        # No config loaded yet (e.g. test contexts) — fall through.
+        pass
+
+    if project_root is None:
+        return "old"
+
+    try:
+        from bmad_assist.skill_layout import detect_layout
+
+        return detect_layout(project_root)
+    except Exception:
+        return "old"
+
+
 def compile_workflow(
     workflow_name: str,
     context: CompilerContext,
+    *,
+    skill_layout: SkillLayoutMode = "auto",
 ) -> CompiledWorkflow:
     """Compile a workflow by name with given context.
 
     High-level function that orchestrates the full compilation pipeline:
-    1. Load the appropriate workflow compiler
+    1. Load the appropriate workflow compiler (legacy or skill-layout)
     2. Get workflow directory from compiler
     3. Load WorkflowIR (from cached template if patch exists, or original files)
     4. Set context.workflow_ir and context.patch_path
@@ -264,6 +370,11 @@ def compile_workflow(
     Args:
         workflow_name: Workflow identifier (e.g., 'create-story').
         context: The compilation context with project paths.
+        skill_layout: Routing mode. ``"auto"`` (default) consults the
+            loaded config and the project layout probe; ``"new"`` forces
+            the v6.4+ skill compiler when one exists for the workflow;
+            ``"old"`` always uses the legacy path. Backwards-compatible
+            with pre-Phase-2 callers that don't pass the argument.
 
     Returns:
         CompiledWorkflow: The compiled workflow ready for output.
@@ -275,7 +386,11 @@ def compile_workflow(
     from bmad_assist.compiler.patching import load_workflow_ir
 
     # Step 1: Load workflow compiler
-    compiler = get_workflow_compiler(workflow_name)
+    compiler = get_workflow_compiler(
+        workflow_name,
+        skill_layout=skill_layout,
+        project_root=context.project_root,
+    )
 
     # Step 2: Validate context (basic validation before loading)
     compiler.validate_context(context)
@@ -283,31 +398,42 @@ def compile_workflow(
     # Step 3: Get workflow directory from compiler
     workflow_dir = compiler.get_workflow_dir(context)
 
-    # Step 4: Load WorkflowIR (auto-compiles patch if needed)
-    # This is the centralized logic that handles:
-    # - Checking for cached template (project → CWD → global)
-    # - Auto-compiling patch if exists but no cache
-    # - Falling back to original workflow files
-    workflow_ir, patch_path = load_workflow_ir(
-        workflow_name,
-        context.project_root,
-        cwd=context.cwd,
-        workflow_dir=workflow_dir,
+    # Skill-layout compilers manage their own IR / cache lifecycle.
+    # Skip the legacy load_workflow_ir step for them — that pipeline
+    # assumes workflow.yaml + instructions.xml on disk, which the
+    # new path doesn't have.
+    is_skill_layout = type(compiler).__module__.startswith(
+        "bmad_assist.compiler.skills."
     )
 
-    # Step 5: Set context for compiler
-    context.workflow_ir = workflow_ir
-    context.patch_path = patch_path
+    if not is_skill_layout:
+        # Step 4: Load WorkflowIR (auto-compiles patch if needed)
+        # This is the centralized logic that handles:
+        # - Checking for cached template (project → CWD → global)
+        # - Auto-compiling patch if exists but no cache
+        # - Falling back to original workflow files
+        workflow_ir, patch_path = load_workflow_ir(
+            workflow_name,
+            context.project_root,
+            cwd=context.cwd,
+            workflow_dir=workflow_dir,
+        )
 
-    # Step 5.1: Check for interactive elements without patch
-    _check_interactive_elements(workflow_name, workflow_ir.raw_instructions, patch_path)
+        # Step 5: Set context for compiler
+        context.workflow_ir = workflow_ir
+        context.patch_path = patch_path
 
-    logger.debug(
-        "Prepared workflow %s: ir=%s, patch=%s",
-        workflow_name,
-        "cached" if patch_path else "original",
-        patch_path.name if patch_path else None,
-    )
+        # Step 5.1: Check for interactive elements without patch
+        _check_interactive_elements(
+            workflow_name, workflow_ir.raw_instructions, patch_path
+        )
+
+        logger.debug(
+            "Prepared workflow %s: ir=%s, patch=%s",
+            workflow_name,
+            "cached" if patch_path else "original",
+            patch_path.name if patch_path else None,
+        )
 
     # Step 6: Compile with prepared context
     return compiler.compile(context)

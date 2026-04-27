@@ -151,13 +151,27 @@ def disable_patch_compilation(request):
         yield None
         return
 
-    with patch("bmad_assist.compiler.patching.compiler.compile_patch") as mock:
-        # Return None to signal "use original files"
-        mock.side_effect = lambda *args, **kwargs: (_ for _ in ()).throw(
-            __import__("bmad_assist.core.exceptions", fromlist=["PatchError"]).PatchError(
-                "Patch compilation disabled in tests"
-            )
-        )
+    from bmad_assist.core.exceptions import PatchError
+
+    def _raise(*args, **kwargs):
+        raise PatchError("Patch compilation disabled in tests")
+
+    # Disable BOTH the legacy compile_patch entry-point AND the
+    # extracted apply_llm_transforms shared by the new skill-layout
+    # compiler. Without the second mock, Phase 2.5+ tests would issue
+    # real LLM calls (the skill compiler bypasses compile_patch and
+    # talks to apply_llm_transforms directly).
+    with (
+        patch("bmad_assist.compiler.patching.compiler.compile_patch") as mock,
+        patch(
+            "bmad_assist.compiler.skills.bmad_create_story.apply_llm_transforms",
+            side_effect=_raise,
+        ) as mock_apply,
+    ):
+        mock.side_effect = _raise
+        # Expose the apply_llm_transforms stub on the primary mock so
+        # tests that need to assert against it can find it.
+        mock.apply_llm_transforms = mock_apply
         yield mock
 
 

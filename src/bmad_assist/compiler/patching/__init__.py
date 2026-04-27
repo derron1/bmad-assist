@@ -26,6 +26,7 @@ from bmad_assist.compiler.patching.cache import (
     compute_file_hash,
 )
 from bmad_assist.compiler.patching.compiler import (
+    apply_llm_transforms,
     compile_patch,
     ensure_template_compiled,
     load_workflow_ir,
@@ -90,6 +91,7 @@ __all__ = [
     "TransformResult",
     "Validation",
     "WorkflowPatch",
+    "apply_llm_transforms",
     "check_threshold",
     "compile_patch",
     "compute_file_hash",

@@ -30,6 +30,7 @@ def find_skill(
     skill_id: str,
     project_root: Path,
     manifest: dict[str, ManifestSkill] | None = None,
+    bundled_fallback: bool = False,
 ) -> Path:
     """Return the absolute path to the skill's ``SKILL.md``.
 
@@ -40,6 +41,11 @@ def find_skill(
         manifest: Optional manifest map (from
             :func:`bmad_assist.skill_layout.read_skill_manifest`). When
             supplied, its canonical path is used as the final fallback.
+        bundled_fallback: When ``True``, the probe additionally checks
+            the bmad-assist package's bundled ``skills/<skill_id>/``
+            directory (under :mod:`bmad_assist.skills`) as the last
+            resort before raising. Defaults to ``False`` for backwards
+            compatibility with Phase 1 callers.
 
     Returns:
         Absolute path to the resolved ``SKILL.md`` file.
@@ -82,10 +88,43 @@ def find_skill(
                 if fallback.is_file():
                     return fallback.resolve()
 
+    if bundled_fallback:
+        bundled = find_bundled_skill(skill_id)
+        if bundled is not None:
+            return bundled
+        # Track the bundled path we tried so the error message lists it.
+        try:
+            from bmad_assist import skills as _skills_pkg
+
+            probed.append(Path(_skills_pkg.__file__).parent / skill_id / "SKILL.md")
+        except Exception:  # pragma: no cover — defensive only
+            pass
+
     formatted = "\n  - ".join(str(path) for path in probed)
     raise SkillNotFound(
         f"skill '{skill_id}' not found under {project_root}; tried:\n  - {formatted}"
     )
+
+
+def find_bundled_skill(skill_id: str) -> Path | None:
+    """Return the path to a bundled ``SKILL.md`` for ``skill_id``, or ``None``.
+
+    Looks the skill up under :mod:`bmad_assist.skills` (the bundled
+    sources shipped with bmad-assist). Returns ``None`` when the skill
+    is not bundled, when the package's resources cannot be exposed as
+    real filesystem paths (e.g. zip-installed wheels), or when the
+    expected ``SKILL.md`` is absent.
+    """
+    try:
+        from bmad_assist.skills import get_bundled_skill_md
+    except Exception:  # pragma: no cover — defensive only
+        logger.debug("bmad_assist.skills package unavailable", exc_info=True)
+        return None
+
+    bundled = get_bundled_skill_md(skill_id)
+    if bundled is None:
+        return None
+    return bundled.resolve()
 
 
 def _warn_on_checksum_mismatch(skill_id: str, claude_path: Path, agents_path: Path) -> None:

@@ -22,7 +22,7 @@ from .errors import (
 )
 from .manifest import read_skill_manifest
 from .parser import parse_skill
-from .probe import find_skill
+from .probe import find_bundled_skill, find_skill
 from .resolver import (
     deep_merge,
     extract_key,
@@ -31,6 +31,7 @@ from .resolver import (
     resolve_customization,
 )
 from .types import Layout, ManifestSkill, SkillDocument, SkillFrontmatter
+from .variable_resolver import resolve_skill_variables
 
 __all__ = [
     "Layout",
@@ -45,10 +46,12 @@ __all__ = [
     "deep_merge",
     "detect_layout",
     "extract_key",
+    "find_bundled_skill",
     "find_skill",
     "merge_arrays",
     "parse_skill",
     "read_skill_manifest",
     "resolve_central_config",
     "resolve_customization",
+    "resolve_skill_variables",
 ]

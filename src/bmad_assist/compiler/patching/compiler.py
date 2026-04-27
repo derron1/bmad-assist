@@ -4,6 +4,7 @@ This module contains the core business logic for patch compilation,
 moved from CLI to allow use from any entry point (CLI, orchestrator, etc.).
 
 Public API:
+    apply_llm_transforms: Apply patch transforms via LLM with validation retries
     compile_patch: Compile a workflow patch into a template
     ensure_template_compiled: Ensure cached template exists for a workflow
     load_workflow_ir: Load workflow IR from cache or original files
@@ -11,8 +12,10 @@ Public API:
 
 import logging
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from bmad_assist.compiler.parser import parse_workflow
 from bmad_assist.compiler.patching.cache import (
@@ -29,14 +32,177 @@ from bmad_assist.compiler.patching.discovery import (
 from bmad_assist.compiler.patching.output import TemplateMetadata, generate_template
 from bmad_assist.compiler.patching.session import PatchSession
 from bmad_assist.compiler.patching.transforms import post_process_compiled
+from bmad_assist.compiler.patching.types import TransformResult
 from bmad_assist.compiler.patching.validation import check_threshold, validate_output
 from bmad_assist.compiler.types import WorkflowIR
 from bmad_assist.core.exceptions import CompilerError, PatchError
+
+if TYPE_CHECKING:
+    from bmad_assist.core.config.models.main import Config
+    from bmad_assist.core.config.models.providers import MasterProviderConfig
 
 logger = logging.getLogger(__name__)
 
 # Regex for extracting <instructions-xml> section from compiled templates
 _INSTRUCTIONS_XML_RE = None  # Lazy-compiled
+
+# Number of validation retries for the LLM-transform loop. Mirrors the
+# legacy compile_patch() value; centralised here so the new skill-layout
+# compiler can rely on the same budget.
+_MAX_VALIDATION_RETRIES = 3
+
+
+def apply_llm_transforms(
+    content: str,
+    transforms: list[str],
+    provider_config: "MasterProviderConfig",
+    config: "Config",
+    phase_name: str,
+    workflow_label: str,
+    *,
+    per_attempt_validator: Callable[[str], list[str] | None] | None = None,
+) -> tuple[str, list[TransformResult]]:
+    """Apply patch transforms to content via LLM with validation retries.
+
+    Reusable by both :func:`compile_patch` (legacy XML-instructions
+    workflow) and the new skill-layout compiler. The function:
+
+    1. Builds a :class:`PatchSession` per attempt.
+    2. Adds a retry-hint instruction on attempts 2 and 3.
+    3. Runs ``per_attempt_validator`` (if provided) against the
+       transformed content; on validation failure, retries.
+    4. Returns the final ``(content, results)`` tuple. Raises
+       :class:`PatchError` if all attempts fail.
+
+    Args:
+        content: Workflow content to transform (any markup format).
+        transforms: List of natural-language transform instructions.
+        provider_config: Master provider configuration.
+        config: Full bmad-assist config (used for timeout lookup).
+        phase_name: Phase name for timeout lookup (e.g., ``"create_story"``).
+        workflow_label: Label used in log messages only.
+        per_attempt_validator: Optional callable invoked with the
+            transformed content after each successful LLM run. Returns
+            a list of error messages to trigger retry, or ``None`` /
+            empty list when validation passes. Callers use this to
+            interleave well-formedness checks (XML, ``must_contain``,
+            etc.) with the retry loop.
+
+    Returns:
+        ``(transformed_content, list_of_per-transform_results)``.
+        The ``results`` list always has ``len(transforms)`` entries.
+
+    Raises:
+        PatchError: If all retries fail (provider error, missing
+            ``<transformed-document>`` tag, or repeated validator
+            failures).
+
+    """
+    from bmad_assist.core.config.loaders import get_phase_timeout
+    from bmad_assist.providers.registry import get_provider
+
+    if not content or not content.strip():
+        raise PatchError("Content cannot be empty")
+    if not transforms:
+        raise PatchError("Transforms list cannot be empty")
+
+    provider = get_provider(provider_config.provider)
+    model = provider_config.model
+    display_model = provider_config.model_name
+    settings = provider_config.settings_path
+    phase_timeout = get_phase_timeout(config, phase_name)
+
+    last_validation_errors: list[str] | None = None
+    last_session_error: Exception | None = None
+    transformed: str | None = None
+    results: list[TransformResult] = []
+
+    for attempt in range(_MAX_VALIDATION_RETRIES):
+        retry_instructions = list(transforms)
+        if attempt > 0:
+            retry_hint = (
+                f"RETRY ATTEMPT {attempt + 1}: Previous attempt failed validation. "
+                "Pay extra attention to preserving ALL content that should be kept, especially "
+                "INVEST validation, step numbering, and any CRITICAL instructions. "
+                "Double-check your output before submitting."
+            )
+            retry_instructions.insert(0, retry_hint)
+
+        session = PatchSession(
+            workflow_content=content,
+            instructions=retry_instructions,
+            provider=provider,
+            model=model,
+            display_model=display_model,
+            settings_file=settings,
+            timeout=phase_timeout,
+        )
+
+        try:
+            transformed, results = session.run()
+        except PatchError as exc:
+            last_session_error = exc
+            logger.warning(
+                "Patch session failed for %s, retry %d/%d: %s",
+                workflow_label,
+                attempt + 1,
+                _MAX_VALIDATION_RETRIES,
+                exc,
+            )
+            if attempt == _MAX_VALIDATION_RETRIES - 1:
+                raise
+            continue
+
+        # Did the session itself fail (no <transformed-document> after retries)?
+        if not check_threshold(results):
+            successful = sum(1 for r in results if r.success)
+            total = len(results)
+            rate = (successful * 100) // total if total > 0 else 0
+            msg = (
+                f"Patch transforms failed for {workflow_label}: "
+                f"{successful}/{total} succeeded ({rate}%, minimum 75% required)"
+            )
+            if attempt == _MAX_VALIDATION_RETRIES - 1:
+                raise PatchError(msg)
+            logger.warning("%s — retry %d/%d", msg, attempt + 1, _MAX_VALIDATION_RETRIES)
+            continue
+
+        # Optional per-attempt validation hook (XML well-formedness,
+        # patch must_contain rules, etc.). Driven by the caller so each
+        # call site can interleave its own checks with the retry loop.
+        if per_attempt_validator is not None:
+            errors = per_attempt_validator(transformed)
+            if errors:
+                last_validation_errors = errors
+                logger.warning(
+                    "Validator rejected output for %s, retry %d/%d: %s",
+                    workflow_label,
+                    attempt + 1,
+                    _MAX_VALIDATION_RETRIES,
+                    errors,
+                )
+                if attempt == _MAX_VALIDATION_RETRIES - 1:
+                    raise PatchError(
+                        f"Validation failed after {_MAX_VALIDATION_RETRIES} attempts: {errors}"
+                    )
+                continue
+
+        # Success.
+        return transformed, results
+
+    # Unreachable in normal paths — every loop iteration either
+    # returns or raises. Belt-and-braces to satisfy type checkers.
+    if last_validation_errors:
+        raise PatchError(
+            f"Validation failed after {_MAX_VALIDATION_RETRIES} attempts: {last_validation_errors}"
+        )
+    if last_session_error:
+        raise PatchError(
+            f"Patch session error after {_MAX_VALIDATION_RETRIES} attempts: {last_session_error}"
+        )
+    raise PatchError(
+        f"Patch transforms failed for {workflow_label} after {_MAX_VALIDATION_RETRIES} attempts"
+    )
 
 
 def _validate_instructions_xml(compiled_content: str) -> str | None:
@@ -218,7 +384,6 @@ def compile_patch(
 
     """
     from bmad_assist.core.config import get_config
-    from bmad_assist.providers.registry import get_provider
 
     # Discover patch file
     patch_path = discover_patch(workflow, project_root, cwd=cwd)
@@ -262,7 +427,6 @@ def compile_patch(
     phase_name = workflow.replace("-", "_")
 
     # Try to get phase-specific config first, fallback to global master
-    from bmad_assist.core.config.loaders import get_phase_timeout
     from bmad_assist.core.config.models.providers import get_phase_provider_config
 
     phase_config = get_phase_provider_config(config, phase_name)
@@ -285,117 +449,52 @@ def compile_patch(
         # Got MasterProviderConfig (either from phase_models or global master)
         provider_config = phase_config
 
-    # Create provider instance from resolved config
-    master_provider = get_provider(provider_config.provider)
-    master_model = provider_config.model
-    master_display_model = provider_config.model_name  # Human-readable name for logging
-    master_settings = provider_config.settings_path
-
     logger.debug(
         "Compiling patch for %s using provider=%s, model=%s, display_model=%s, settings=%s",
         workflow,
         provider_config.provider,
         provider_config.model,
-        master_display_model,
-        master_settings,
+        provider_config.model_name,
+        provider_config.settings_path,
     )
 
-    # Run LLM session with validation retries (3 total attempts)
-    from bmad_assist.compiler.patching.types import TransformResult
+    # Per-attempt validator: post-process the LLM output and check it for
+    # XML well-formedness + patch.validation rules. The post-processed
+    # content is what eventually ships, but this validator doesn't
+    # mutate `apply_llm_transforms`'s returned value — it only signals
+    # pass/fail to drive the retry loop. We re-run post_process below on
+    # the accepted output (one extra call per successful compile, never
+    # per retry).
+    def _legacy_validator(transformed: str) -> list[str] | None:
+        post_processed = post_process_compiled(transformed, patch.post_process)
+        errors: list[str] = []
 
-    max_validation_retries = 3
-    compiled_workflow: str | None = None
-    results: list[TransformResult] = []
+        xml_error = _validate_instructions_xml(post_processed)
+        if xml_error:
+            errors.append(f"XML validation: {xml_error}")
 
-    for validation_attempt in range(max_validation_retries):
-        # Add retry hint to instructions on subsequent attempts
-        retry_instructions = list(patch.transforms)
-        if validation_attempt > 0:
-            retry_hint = (
-                f"RETRY ATTEMPT {validation_attempt + 1}: Previous attempt failed validation. "
-                "Pay extra attention to preserving ALL content that should be kept, especially "
-                "INVEST validation, step numbering, and any CRITICAL instructions. "
-                "Double-check your output before submitting."
-            )
-            retry_instructions.insert(0, retry_hint)
-
-        # Get phase timeout (respects user's timeouts config, falls back to global default)
-        phase_timeout = get_phase_timeout(config, phase_name)
-
-        # Create and run session
-        session = PatchSession(
-            workflow_content=workflow_content,
-            instructions=retry_instructions,
-            provider=master_provider,
-            model=master_model,
-            display_model=master_display_model,
-            settings_file=master_settings,
-            timeout=phase_timeout,
-        )
-
-        try:
-            compiled_workflow, results = session.run()
-        except PatchError:
-            if validation_attempt == max_validation_retries - 1:
-                raise
-            logger.warning(
-                "Session failed, retry %d/%d",
-                validation_attempt + 1,
-                max_validation_retries,
-            )
-            continue
-
-        # Post-process: apply deterministic rules from patch config
-        compiled_workflow = post_process_compiled(compiled_workflow, patch.post_process)
-
-        # Validate XML well-formedness of instructions section
-        # LLMs can produce mismatched tags that pass content validation but
-        # break XML parsing later in filter_instructions()
-        xml_errors = _validate_instructions_xml(compiled_workflow)
-        if xml_errors:
-            logger.warning(
-                "XML validation failed: %s. Retry %d/%d",
-                xml_errors,
-                validation_attempt + 1,
-                max_validation_retries,
-            )
-            if validation_attempt == max_validation_retries - 1:
-                msg = f"XML validation failed after {max_validation_retries} attempts: {xml_errors}"
-                raise PatchError(msg)
-            continue
-
-        # Validate output
         if patch.validation:
-            errors = validate_output(compiled_workflow, patch.validation)
-            if errors:
-                logger.warning(
-                    "Validation failed: %s. Retry %d/%d",
-                    errors,
-                    validation_attempt + 1,
-                    max_validation_retries,
-                )
-                if validation_attempt == max_validation_retries - 1:
-                    msg = f"Validation failed after {max_validation_retries} attempts: {errors}"
-                    raise PatchError(msg)
-                continue
+            errors.extend(validate_output(post_processed, patch.validation))
 
-        # Validation passed
-        break
+        return errors or None
 
-    if compiled_workflow is None:
-        raise PatchError("Compilation failed: no output produced")
+    raw_workflow, results = apply_llm_transforms(
+        content=workflow_content,
+        transforms=list(patch.transforms),
+        provider_config=provider_config,
+        config=config,
+        phase_name=phase_name,
+        workflow_label=workflow,
+        per_attempt_validator=_legacy_validator,
+    )
 
-    # Check success threshold (75%)
-    if not check_threshold(results):
-        successful = sum(1 for r in results if r.success)
-        total = len(results)
-        rate = (successful * 100) // total if total > 0 else 0
-        raise PatchError(
-            f"Patch compilation failed: {successful}/{total} transforms succeeded "
-            f"({rate}%, minimum 75% required)"
-        )
+    # Apply post_process once more to the accepted raw output to obtain
+    # the final, persisted form. This must mirror what the validator
+    # accepted byte-for-byte.
+    compiled_workflow = post_process_compiled(raw_workflow, patch.post_process)
 
-    # Count warnings (failed transforms that didn't block compilation)
+    # Count warnings (failed transforms that didn't block compilation).
+    # The threshold check itself ran inside apply_llm_transforms.
     warning_count = sum(1 for r in results if not r.success)
 
     # Determine cache location based on patch source
