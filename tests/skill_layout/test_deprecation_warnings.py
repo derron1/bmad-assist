@@ -93,17 +93,18 @@ def test_phase_3_5_orphan_code_review_synthesis_emits_deprecation(tmp_path: Path
     assert "code-review-synthesis" in str(deps[0].message)
 
 
-def test_security_review_does_not_emit_deprecation(tmp_path: Path) -> None:
-    """``security-review`` remains the only legacy-only orphan after Phase 3.5 — no warning."""
-    # Some installs may not have a security-review compiler module; if
-    # the loader raises, the test still proves no warning was emitted.
-    try:
-        deps = _record_warnings("security-review", tmp_path, layout="old")
-    except Exception:
-        # Loader error is fine — we only care that no deprecation was
-        # emitted before the loader failed.
-        return
-    assert deps == []
+def test_security_review_emits_deprecation(tmp_path: Path) -> None:
+    """Phase 6-prep added a skill-layout port for ``security-review``.
+
+    Before Phase 6-prep, security-review was the last legacy-only
+    workflow and was therefore exempt from the deprecation warning.
+    With its skill-layout port now registered in
+    ``WORKFLOW_TO_SKILL_ID`` and ``_SKILL_LAYOUT_COMPILERS``, the
+    legacy fallback path now warns like every other migrated workflow.
+    """
+    deps = _record_warnings("security-review", tmp_path, layout="old")
+    assert len(deps) == 1
+    assert "security-review" in str(deps[0].message)
 
 
 def test_phase_3_5_qa_plan_orphans_emit_deprecation(tmp_path: Path) -> None:

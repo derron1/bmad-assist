@@ -95,6 +95,10 @@ WORKFLOW_TO_SKILL_ID = {
     "qa-plan-generate": "bmad-qa-plan-generate",
     "qa-plan-execute": "bmad-qa-plan-execute",
     "code-review-synthesis": "bmad-code-review-synthesis",
+    # Phase 6-prep — last bmad-assist-authored workflow migrated.
+    # After this entry, every workflow has a skill-layout equivalent
+    # and the legacy compiler tree can be deleted wholesale.
+    "security-review": "bmad-security-review",
 }
 
 # Search prefixes for v6.4+ skill mirrors (relative to project root).

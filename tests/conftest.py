@@ -20,6 +20,7 @@ _SKILL_COMPILER_MODULES: tuple[str, ...] = (
     "bmad_assist.compiler.skills.bmad_qa_plan_execute",
     "bmad_assist.compiler.skills.bmad_qa_plan_generate",
     "bmad_assist.compiler.skills.bmad_retrospective",
+    "bmad_assist.compiler.skills.bmad_security_review",
     "bmad_assist.compiler.skills.bmad_testarch_atdd",
     "bmad_assist.compiler.skills.bmad_testarch_automate",
     "bmad_assist.compiler.skills.bmad_testarch_ci",

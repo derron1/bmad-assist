@@ -82,6 +82,10 @@ _SKILL_LAYOUT_COMPILERS: dict[str, str] = {
     "bmad-qa-plan-generate": "bmad-qa-plan-generate",
     "retrospective": "bmad-retrospective",
     "bmad-retrospective": "bmad-retrospective",
+    # Phase 6-prep: security-review (CWE-based vulnerability scanner;
+    # bmad-assist-authored, no upstream BMAD source).
+    "security-review": "bmad-security-review",
+    "bmad-security-review": "bmad-security-review",
     "testarch-atdd": "bmad-testarch-atdd",
     "bmad-testarch-atdd": "bmad-testarch-atdd",
     "testarch-automate": "bmad-testarch-automate",
@@ -159,6 +163,12 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
         )
 
         return BmadRetrospectiveCompiler()
+    if skill_id == "bmad-security-review":
+        from bmad_assist.compiler.skills.bmad_security_review import (
+            BmadSecurityReviewCompiler,
+        )
+
+        return BmadSecurityReviewCompiler()
     if skill_id == "bmad-testarch-atdd":
         from bmad_assist.compiler.skills.bmad_testarch_atdd import (
             BmadTestarchAtddCompiler,
