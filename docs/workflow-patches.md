@@ -1,5 +1,7 @@
 # Workflow Patches
 
+> **Phase 6 status:** This doc describes the legacy patch pipeline that operated on `workflow.yaml` + `instructions.xml`. As of Phase 6, all routing goes through the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml`), and per-skill customization is now expressed in `customize.toml`. The mechanics described below (regex post-process, transforms, `.bmad-assist/patches/*.patch.yaml`) remain in the codebase as a compatibility surface but are no longer the primary customization path. **A full rewrite of this doc is pending.** For canonical workflow names, see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+
 Workflow patches customize BMAD workflow prompts for bmad-assist automation. They transform interactive workflows into automated versions by removing user prompts, embedding compile-time data, and applying deterministic text transformations.
 
 ## Problem
@@ -37,14 +39,14 @@ Example structure:
 .bmad-assist/
 ├── patches/
 │   ├── defaults.yaml              # Shared post-process rules
-│   ├── create-story.patch.yaml
-│   ├── dev-story.patch.yaml
-│   ├── validate-story.patch.yaml
-│   ├── code-review.patch.yaml
-│   └── retrospective.patch.yaml
+│   ├── bmad-create-story.patch.yaml
+│   ├── bmad-dev-story.patch.yaml
+│   ├── bmad-validate-story.patch.yaml
+│   ├── bmad-code-review.patch.yaml
+│   └── bmad-retrospective.patch.yaml
 └── cache/                         # Compiled templates (auto-generated)
-    ├── create-story.tpl.xml
-    └── dev-story.tpl.xml
+    ├── bmad-create-story.tpl.xml
+    └── bmad-dev-story.tpl.xml
 ```
 
 ## Patch File Structure
@@ -52,15 +54,15 @@ Example structure:
 ```yaml
 # Metadata
 patch:
-  name: "create-story-optimizer"
+  name: "bmad-create-story-optimizer"
   version: "3.0.0"
   author: "Your Name"
-  description: "Optimizes create-story for bmad-assist automation"
+  description: "Optimizes bmad-create-story for bmad-assist automation"
 
 # Version requirements
 compatibility:
   bmad_version: "6.0.0-alpha.22"
-  workflow: "create-story"
+  workflow: "bmad-create-story"
 
 # Compile-time git data (optional)
 git_intelligence:
@@ -114,7 +116,7 @@ Version requirements for the patch.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `bmad_version` | Yes | Required bmad-assist version (exact match) |
-| `workflow` | Yes | Target workflow name (e.g., `create-story`, `dev-story`) |
+| `workflow` | Yes | Target workflow name (e.g., `bmad-create-story`, `bmad-dev-story`) |
 
 ### `git_intelligence`
 
@@ -271,9 +273,9 @@ Compiled patches are cached to avoid recompilation:
 
 ```
 .bmad-assist/cache/
-├── create-story.tpl.xml
-├── dev-story.tpl.xml
-└── validate-story.tpl.xml
+├── bmad-create-story.tpl.xml
+├── bmad-dev-story.tpl.xml
+└── bmad-validate-story.tpl.xml
 ```
 
 Cache invalidation occurs when:
@@ -290,7 +292,7 @@ rm -rf .bmad-assist/cache/
 
 ```bash
 # Compile a specific patch
-bmad-assist patch compile create-story
+bmad-assist patch compile bmad-create-story
 
 # Compile all patches in project
 bmad-assist patch compile-all
@@ -299,10 +301,10 @@ bmad-assist patch compile-all
 bmad-assist patch list
 
 # Show patch details
-bmad-assist patch show create-story
+bmad-assist patch show bmad-create-story
 
 # Debug compilation (verbose output)
-bmad-assist compile -w create-story -e 1 -s 1 --debug
+bmad-assist compile -w bmad-create-story -e 1 -s 1 --debug
 ```
 
 ## Example: Minimal Patch
@@ -316,7 +318,7 @@ patch:
 
 compatibility:
   bmad_version: "6.0.0-alpha.22"
-  workflow: "create-story"
+  workflow: "bmad-create-story"
 
 transforms:
   - "Remove all <ask> elements - no interactive user"
@@ -336,14 +338,14 @@ validation:
 
 ```yaml
 patch:
-  name: "dev-story-automation"
+  name: "bmad-dev-story-automation"
   version: "2.0.0"
   author: "BMad"
-  description: "Full automation patch for dev-story workflow"
+  description: "Full automation patch for bmad-dev-story workflow"
 
 compatibility:
   bmad_version: "6.0.0-alpha.22"
-  workflow: "dev-story"
+  workflow: "bmad-dev-story"
 
 git_intelligence:
   enabled: true

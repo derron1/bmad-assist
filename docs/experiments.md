@@ -2,6 +2,8 @@
 
 The experiment framework enables systematic LLM comparison through controlled execution of BMAD workflows. It isolates fixtures, tracks metrics, and generates comparison reports to answer questions about model performance, prompt effectiveness, and workflow optimization.
 
+> **Workflow names:** Examples in this doc use the canonical `bmad-<name>` skill ids (e.g., `bmad-create-story`, `bmad-dev-story`). Legacy short names (`create-story`, `dev-story`, …) still work as backwards-compatible aliases in loop templates and patch-set manifests for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+
 ## Problem
 
 When optimizing bmad-assist workflows, you need answers to:
@@ -42,7 +44,7 @@ experiments/
 │   └── simple-portfolio/
 ├── workflows/             # Workflow sets for A/B variants
 │   ├── baseline/
-│   └── code-review-test-001/
+│   └── bmad-code-review-test-001/
 ├── templates/             # Pre-compiled template sets for A/B variants
 ├── ab-tests/              # A/B test definition YAML files
 ├── ab-results/            # A/B test results (gitignored)
@@ -131,38 +133,38 @@ name: standard
 description: "Full BMAD loop with validation and review"
 
 sequence:
-  - workflow: create-story
+  - workflow: bmad-create-story
     required: true           # Failure stops experiment
-  - workflow: validate-story
+  - workflow: bmad-validate-story
     required: true
-  - workflow: validate-story-synthesis
+  - workflow: bmad-validate-story-synthesis
     required: false          # Optional - failure logged but continues
-  - workflow: dev-story
+  - workflow: bmad-dev-story
     required: true
-  - workflow: code-review
+  - workflow: bmad-code-review
     required: true
-  - workflow: code-review-synthesis
+  - workflow: bmad-code-review-synthesis
     required: false
 ```
 
 ### Supported Workflows
 
-Workflow names accept both kebab-case (`create-story`) and snake_case (`create_story`).
+Workflow names accept both kebab-case (`bmad-create-story`) and snake_case (`bmad_create_story`). Legacy aliases without the `bmad-` prefix (e.g., `create-story`) are still resolved for one more release.
 
 | Workflow | Description |
 |----------|-------------|
-| `create-story` | Story generation from epic |
-| `validate-story` | Multi-LLM story validation |
-| `validate-story-synthesis` | Validation consensus |
-| `dev-story` | Implementation phase |
-| `code-review` | Multi-LLM code review |
-| `code-review-synthesis` | Review consensus |
-| `retrospective` | Epic retrospective |
-| `atdd` | Test-driven development |
-| `test-review` | Test review phase |
-| `test-design` | ATDD test planning |
-| `qa-plan-generate` | QA test plan generation |
-| `qa-plan-execute` | QA test execution |
+| `bmad-create-story` | Story generation from epic |
+| `bmad-validate-story` | Multi-LLM story validation |
+| `bmad-validate-story-synthesis` | Validation consensus |
+| `bmad-dev-story` | Implementation phase |
+| `bmad-code-review` | Multi-LLM code review |
+| `bmad-code-review-synthesis` | Review consensus |
+| `bmad-retrospective` | Epic retrospective |
+| `bmad-testarch-atdd` | Test-driven development |
+| `bmad-testarch-test-review` | Test review phase |
+| `bmad-testarch-test-design` | ATDD test planning |
+| `bmad-qa-plan-generate` | QA test plan generation |
+| `bmad-qa-plan-execute` | QA test execution |
 
 ## Patch-Set Manifests
 
@@ -173,13 +175,13 @@ name: baseline
 description: "Production patches from project"
 
 patches:
-  create-story: ${project}/.bmad-assist/patches/create-story.patch.yaml
-  validate-story: ${project}/.bmad-assist/patches/validate-story.patch.yaml
-  dev-story: null           # null = no patch, use raw workflow
-  code-review: ${project}/.bmad-assist/patches/code-review.patch.yaml
+  bmad-create-story: ${project}/.bmad-assist/patches/bmad-create-story.patch.yaml
+  bmad-validate-story: ${project}/.bmad-assist/patches/bmad-validate-story.patch.yaml
+  bmad-dev-story: null           # null = no patch, use raw workflow
+  bmad-code-review: ${project}/.bmad-assist/patches/bmad-code-review.patch.yaml
 
 workflow_overrides:          # Alternative workflow implementations (optional)
-  atdd: /path/to/custom-atdd-workflow/
+  bmad-testarch-atdd: /path/to/custom-atdd-workflow/
 ```
 
 ### Patch Resolution
@@ -440,16 +442,16 @@ resolved:
     name: baseline
     source: /path/to/experiments/patch-sets/baseline.yaml
     patches:
-      create-story: /path/to/patches/create-story.patch.yaml
-      dev-story: null
+      bmad-create-story: /path/to/patches/bmad-create-story.patch.yaml
+      bmad-dev-story: null
   loop:
     name: standard
     source: /path/to/experiments/loops/standard.yaml
     sequence:
-      - create-story
-      - validate-story
-      - dev-story
-      - code-review
+      - bmad-create-story
+      - bmad-validate-story
+      - bmad-dev-story
+      - bmad-code-review
 
 results:
   stories_attempted: 2
@@ -458,7 +460,7 @@ results:
   retrospective_completed: true
   qa_completed: false
   phases:
-    - phase: create-story
+    - phase: bmad-create-story
       story: "1.1"
       epic: 1
       status: completed

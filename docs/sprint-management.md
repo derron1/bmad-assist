@@ -2,6 +2,8 @@
 
 Sprint management tracks development progress across epics and stories in bmad-assist. The system maintains a `sprint-status.yaml` file that serves as a human-readable view of project state, synchronized from the authoritative `state.yaml` runtime file.
 
+> **Workflow names:** Loop config examples use canonical `bmad_<name>` skill ids (e.g., `bmad_create_story`, `bmad_dev_story`). Legacy short names (`create_story`, `dev_story`, …) still resolve as backwards-compatible aliases for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+
 ## Problem
 
 BMAD development workflows need to track story and epic progress across multiple phases (create, validate, develop, review, retrospective). Manual status tracking is error-prone and falls out of sync with actual project artifacts.
@@ -369,18 +371,18 @@ paths:
 
 loop:
   story:
-    - create_story
-    - validate_story
-    - dev_story
-    - code_review
-    - code_review_synthesis
+    - bmad_create_story
+    - bmad_validate_story
+    - bmad_dev_story
+    - bmad_code_review
+    - bmad_code_review_synthesis
   epic_teardown:
-    - retrospective
+    - bmad_retrospective
 ```
 
 ## Synthesis Extraction Quality
 
-When `code_review_synthesis` or `validate_story_synthesis` runs, the runner records how reliably the LLM output was parsed. This metadata is stored in `state.yaml` — it is not reflected in `sprint-status.yaml`, which only tracks the four BMAD-facing statuses (`backlog`, `in-progress`, `review`, `done`).
+When `bmad_code_review_synthesis` or `bmad_validate_story_synthesis` runs, the runner records how reliably the LLM output was parsed. This metadata is stored in `state.yaml` — it is not reflected in `sprint-status.yaml`, which only tracks the four BMAD-facing statuses (`backlog`, `in-progress`, `review`, `done`).
 
 ### Extraction quality levels
 

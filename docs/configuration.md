@@ -12,33 +12,35 @@ Settings are loaded in this order (later overrides earlier):
 
 ## Skill Layout (BMAD v6.4+)
 
-bmad-assist supports two workflow layouts. As of Phase 5 (the v6.4+ flip),
-the new layout is the default.
+bmad-assist routes all workflows through the BMAD v6.4+ skill layout
+(`SKILL.md` + `customize.toml`). As of Phase 6, this is the only routing
+path — the legacy `workflow.yaml` + `instructions.xml` pipeline has been
+removed.
+
+> **Workflow names:** Skill ids are canonical `bmad-<name>` (e.g., `bmad-create-story`, `bmad-dev-story`). Legacy short aliases (`create-story`, `dev-story`, …) still resolve in dispatch for one more release; see the `[Unreleased]` section of [CHANGELOG.md](../CHANGELOG.md).
 
 ```yaml
 # bmad-assist.yaml
-skill_layout: auto   # auto (default) | new | old
+skill_layout: auto   # deprecated no-op; safe to omit
 ```
 
-| Value | When to use |
-|-------|-------------|
-| `auto` | **Default.** Detects the layout via `_bmad/scripts/resolve_customization.py` (BMAD v6.4+ installer) or any bootstrapped `.claude/skills/bmad-*/customize.toml`. Falls back to `old` if neither signal is present. |
-| `new`  | Forces the v6.4+ skill layout (`SKILL.md` + `customize.toml`). Use when you've manually staged skills under `.claude/skills/` or are testing the new path. |
-| `old`  | Forces the legacy `workflow.yaml` + `instructions.xml` pipeline. Use to keep an existing legacy project on the old path while you migrate. |
+| Value | Behavior |
+|-------|----------|
+| `auto` (default) | Resolves to the v6.4+ skill layout — the only supported path. |
+| `new`  | Same as `auto`. Accepted for backwards compatibility. |
+| `old`  | **Deprecated no-op.** Emits a `DeprecationWarning`; routing still uses the skill layout. Will be removed in the next major release. |
 
 The CLI flag `--skill-layout {auto,new,old}` on `bmad-assist run` and
-`bmad-assist init` overrides this config value.
-
-When the legacy path is taken for a workflow that has a v6.4+ port, a
-`DeprecationWarning` is emitted once per workflow per process. Legacy
-support will be removed in a future release.
+`bmad-assist init` is also accepted but is a no-op-with-warning when set
+to anything other than `auto`. Both the flag and the config field will
+be removed in the next major release.
 
 `bmad-assist init` is layout-aware:
 
 - **Fresh project** → bootstraps the new layout under `.claude/skills/<id>/`
   and `.agents/skills/<id>/`.
 - **Existing v6.4+ install** → leaves installed skills alone (no-clobber).
-- **Existing legacy install** → keeps the legacy `_bmad/bmm/workflows/...` setup.
+- **Existing legacy `_bmad/bmm/workflows/...` install** → no longer consulted by routing. Run `bmad-assist init` to bootstrap the v6.4+ skill layout (see the `[Unreleased]` Migration notes in [CHANGELOG.md](../CHANGELOG.md)).
 
 `--reset-workflows` re-copies bundled workflow files but preserves any
 per-skill `customize.toml` overrides. Use `--reset-skills-force` for the

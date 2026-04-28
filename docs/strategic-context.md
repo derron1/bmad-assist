@@ -8,8 +8,8 @@ Workflow compilers previously loaded all strategic documents unconditionally. Be
 
 | Workflow | PRD Citation Rate | Observation |
 |----------|-------------------|-------------|
-| code-review | 0% (105 files) | PRD never referenced |
-| validate-story | 26% (35/134 files) | PRD rarely needed |
+| `bmad-code-review` | 0% (105 files) | PRD never referenced |
+| `bmad-validate-story` | 26% (35/134 files) | PRD rarely needed |
 
 Loading unused documents wastes context tokens that could be used for source code or story details.
 

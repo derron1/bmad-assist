@@ -2,6 +2,8 @@
 
 A/B workflow testing compares two configurations side-by-side against the same fixture and story set. It uses git worktree isolation to run each variant independently, then generates a comparison report showing metric differences.
 
+> **Workflow names:** YAML examples in this doc use the canonical `bmad-<name>` skill ids (e.g., `bmad-create-story`, `bmad-code-review`). Legacy short names (`create-story`, `code-review`, …) still work as backwards-compatible aliases in `phases` lists for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+
 ## Problem
 
 When iterating on prompts, models, or patch-sets, you need answers to:
@@ -45,8 +47,8 @@ stories:                            # Stories with per-story git refs
   - id: "3.2"
     ref: def5678
 phases:                             # Ordered phases to execute per story
-  - create-story
-  - dev-story
+  - bmad-create-story
+  - bmad-dev-story
 variant_a:                          # Baseline configuration
   label: baseline
   config: opus-solo                 # Config template name
@@ -99,17 +101,17 @@ Story IDs (the `id` field) must contain a dot separator: `epic.story` (e.g., `"3
 
 ### Supported Phases
 
-Phase names accept both kebab-case and snake_case (normalized internally).
+Phase names accept both kebab-case and snake_case (normalized internally). Legacy short aliases (e.g., `create-story` instead of `bmad-create-story`) are still resolved.
 
 | Phase | Description |
 |-------|-------------|
-| `create-story` | Story generation from epic |
-| `validate-story` | Multi-LLM story validation |
-| `validate-story-synthesis` | Validation consensus |
-| `dev-story` | Implementation phase |
-| `code-review` | Multi-LLM code review |
-| `code-review-synthesis` | Review consensus |
-| `retrospective` | Epic retrospective |
+| `bmad-create-story` | Story generation from epic |
+| `bmad-validate-story` | Multi-LLM story validation |
+| `bmad-validate-story-synthesis` | Validation consensus |
+| `bmad-dev-story` | Implementation phase |
+| `bmad-code-review` | Multi-LLM code review |
+| `bmad-code-review-synthesis` | Review consensus |
+| `bmad-retrospective` | Epic retrospective |
 
 ### Validation Rules
 
@@ -203,18 +205,18 @@ A **workflow set** is a directory in `experiments/workflows/` containing raw wor
 ```
 experiments/workflows/
 ├── baseline/
-│   ├── code-review/
+│   ├── bmad-code-review/
 │   │   ├── workflow.yaml
 │   │   └── instructions.xml
-│   └── create-story/
+│   └── bmad-create-story/
 │       ├── workflow.yaml
 │       └── instructions.xml
-├── code-review-test-001/
-│   └── code-review/
+├── bmad-code-review-test-001/
+│   └── bmad-code-review/
 │       ├── workflow.yaml
 │       └── instructions.xml
 └── minimal-set/
-    └── create-story/
+    └── bmad-create-story/
         ├── workflow.yaml
         └── instructions.xml
 ```
@@ -228,10 +230,10 @@ A **template set** is a directory in `experiments/templates/` containing pre-com
 ```
 experiments/templates/
 ├── optimized-v1/
-│   ├── create-story.tpl.xml
-│   ├── create-story.tpl.xml.meta.yaml
-│   ├── dev-story.tpl.xml
-│   └── dev-story.tpl.xml.meta.yaml
+│   ├── bmad-create-story.tpl.xml
+│   ├── bmad-create-story.tpl.xml.meta.yaml
+│   ├── bmad-dev-story.tpl.xml
+│   └── bmad-dev-story.tpl.xml.meta.yaml
 └── baseline-compiled/
     └── ...
 ```
@@ -247,8 +249,8 @@ stories:
   - id: "3.1"
     ref: HEAD
 phases:
-  - create-story
-  - dev-story
+  - bmad-create-story
+  - bmad-dev-story
 variant_a:
   label: baseline
   config: opus-solo
@@ -435,8 +437,8 @@ stories:
   - id: "3.2"
     ref: def5678
 phases:
-  - create-story
-  - dev-story
+  - bmad-create-story
+  - bmad-dev-story
 variant_a:
   label: baseline
   status: completed              # completed | failed | cancelled
@@ -493,7 +495,7 @@ stories:
   - id: "1.1"
     ref: HEAD
 phases:
-  - create-story
+  - bmad-create-story
 variant_a:
   label: opus
   config: opus-solo
@@ -520,8 +522,8 @@ stories:
   - id: "3.5"                         # Add Destination Health Tracking
     ref: d2b1fba                      # feat(story-3.5): implement story
 phases:
-  - code-review
-  - code-review-synthesis
+  - bmad-code-review
+  - bmad-code-review-synthesis
 variant_a:
   label: baseline
   config: opus-haiku-gemini-glm      # Full config with phase_models, timeouts, etc.
@@ -531,7 +533,7 @@ variant_b:
   label: agents-team
   config: opus-haiku-gemini-glm
   patch_set: baseline
-  workflow_set: code-review-test-001  # Modified code-review workflow
+  workflow_set: bmad-code-review-test-001  # Modified bmad-code-review workflow
 scorecard: false
 ```
 
@@ -550,12 +552,12 @@ stories:
   - id: "3.3"
     ref: v1.0.0
 phases:
-  - create-story
-  - validate-story
-  - validate-story-synthesis
-  - dev-story
-  - code-review
-  - code-review-synthesis
+  - bmad-create-story
+  - bmad-validate-story
+  - bmad-validate-story-synthesis
+  - bmad-dev-story
+  - bmad-code-review
+  - bmad-code-review-synthesis
 variant_a:
   label: baseline
   config: opus-solo
@@ -586,9 +588,9 @@ experiments/
 ├── patch-sets/                   # Patch-set manifests
 ├── workflows/                    # Workflow sets for A/B variants
 │   ├── baseline/
-│   │   └── code-review/
-│   └── code-review-test-001/
-│       └── code-review/
+│   │   └── bmad-code-review/
+│   └── bmad-code-review-test-001/
+│       └── bmad-code-review/
 ├── templates/                    # Pre-compiled template sets
 ├── fixtures/                     # Fixture repositories
 └── loops/                        # Loop templates (legacy)

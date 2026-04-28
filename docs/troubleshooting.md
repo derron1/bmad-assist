@@ -2,11 +2,13 @@
 
 Common issues and their solutions.
 
+> **Workflow names:** Examples below use the canonical `bmad-<name>` skill ids. Legacy short aliases (e.g., `dev-story` → `bmad-dev-story`) still resolve in dispatch for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+
 ## "Workflow not found" Error
 
 **Symptoms:**
-- `CompilerError: Workflow 'dev-story' not found!`
-- `Bundled workflow 'code-review' not found!`
+- `CompilerError: Workflow 'bmad-dev-story' not found!`
+- `Bundled workflow 'bmad-code-review' not found!`
 
 **Solution:**
 ```bash
@@ -26,7 +28,7 @@ bmad-assist init  # Shows workflow validation
 
 **Solution:**
 1. Ensure bmad-assist is properly installed: `pip install -e .`
-2. Check workflow discovery: `bmad-assist compile -w dev-story --debug`
+2. Check workflow discovery: `bmad-assist compile -w bmad-dev-story --debug`
 3. For custom workflows, place them in `.bmad-assist/workflows/{workflow-name}/`
 
 ## Custom Workflow Overrides
@@ -276,5 +278,5 @@ For detailed troubleshooting:
 bmad-assist run -v --project ./my-project
 
 # Debug specific workflow compilation
-bmad-assist compile -w dev-story -e 1 -s 1 --debug
+bmad-assist compile -w bmad-dev-story -e 1 -s 1 --debug
 ```

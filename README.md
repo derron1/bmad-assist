@@ -29,7 +29,7 @@ One LLM (Master) writes all code. The others only validate and review - they nev
 - **A/B Testing** - Compare workflow configs, prompts, or model fleets side-by-side with git worktree isolation and LLM-powered analysis reports
 - **[TEA (Test Engineering Architect)](https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise)** - 8 integrated workflows: framework setup, CI scaffolding, test design, ATDD, automation, NFR assessment, traceability, test review
 - **Bundled Workflows** - BMAD workflows included and ready to use out of the box
-- **Git Auto-commit** - Automatic commits after create-story, dev-story, and code-review-synthesis phases (`-g` flag)
+- **Git Auto-commit** - Automatic commits after `bmad-create-story`, `bmad-dev-story`, and `bmad-code-review-synthesis` phases (`-g` flag)
 - **Deep Verify** *(WIP)* - Multi-method artifact verification (pattern matching, boundary analysis, cross-reference checks)
 - **Security Agent** *(WIP)* - Parallel CWE pattern analysis with tech stack detection, integrated into code review phase
 
@@ -156,24 +156,26 @@ timeouts:
 
 bmad-assist extends [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) workflows for Multi-LLM automation.
 
+> **Workflow names:** All workflow references below use the canonical `bmad-<name>` form (BMAD v6.4+ skill ids). Legacy short names (e.g., `create-story` instead of `bmad-create-story`) still work as backwards-compatible aliases for one more release — see the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) for the deprecation timeline.
+
 ### Modified from BMAD
 
 | Workflow | Changes |
 |----------|---------|
-| `code-review` | Removed interactive steps, file discovery handled by compiler, outputs to stdout with extraction markers |
-| `create-story` | Removed user menus, context injected by compiler |
-| `dev-story` | Removed interactive confirmations |
-| `retrospective` | Automated summary generation |
+| `bmad-code-review` | Removed interactive steps, file discovery handled by compiler, outputs to stdout with extraction markers |
+| `bmad-create-story` | Removed user menus, context injected by compiler |
+| `bmad-dev-story` | Removed interactive confirmations |
+| `bmad-retrospective` | Automated summary generation |
 
 ### Added by bmad-assist
 
 | Workflow | Purpose |
 |----------|---------|
-| `validate-story` | Multi-LLM story validation with INVEST criteria and Evidence Score |
-| `validate-story-synthesis` | Consolidates multiple validator reports into single verdict |
-| `code-review-synthesis` | Consolidates code review findings from multiple reviewers |
-| `qa-plan-generate` | Generates QA test plans from requirements |
-| `qa-plan-execute` | Executes generated QA plans |
+| `bmad-validate-story` | Multi-LLM story validation with INVEST criteria and Evidence Score |
+| `bmad-validate-story-synthesis` | Consolidates multiple validator reports into single verdict |
+| `bmad-code-review-synthesis` | Consolidates code review findings from multiple reviewers |
+| `bmad-qa-plan-generate` | Generates QA test plans from requirements |
+| `bmad-qa-plan-execute` | Executes generated QA plans |
 
 ### Key Differences from Vanilla BMAD
 
