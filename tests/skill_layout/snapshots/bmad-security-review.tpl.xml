@@ -1,0 +1,720 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Perform CWE-based security vulnerability analysis on the provided code diff. Languages detected: unknown. Patterns loaded: 22.
+
+]]></mission>
+<context>
+<file id="17629c11" path="security-patterns" label="FILE"><![CDATA[
+
+patterns:
+- cwe_id: CWE-89
+  detection_hint: string concatenation or f-string in SQL query
+  safe_example: 'cursor.execute("SELECT * FROM users WHERE id = ?", (user_input,))
+
+    '
+  severity: HIGH
+  tier: 1
+  title: SQL Injection
+  vulnerable_example: 'query = f"SELECT * FROM users WHERE id = {user_input}"
+
+    '
+- cwe_id: CWE-79
+  detection_hint: innerHTML, dangerouslySetInnerHTML, v-html with user data
+  safe_example: 'element.textContent = userInput
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Cross-Site Scripting (XSS)
+  vulnerable_example: 'element.innerHTML = userInput
+
+    '
+- cwe_id: CWE-22
+  detection_hint: user input in file paths without basename() or realpath() validation
+  safe_example: 'filepath = os.path.join(base_dir, os.path.basename(user_filename))
+
+    assert os.path.commonpath([base_dir, filepath]) == base_dir
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Path Traversal
+  vulnerable_example: 'filepath = os.path.join(base_dir, user_filename)
+
+    '
+- cwe_id: CWE-78
+  detection_hint: shell=True, os.system(), backticks with user input
+  safe_example: 'subprocess.run(["ping", host], shell=False)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: OS Command Injection
+  vulnerable_example: 'os.system(f"ping {host}")
+
+    subprocess.run(f"echo {msg}", shell=True)
+
+    '
+- cwe_id: CWE-287
+  detection_hint: authentication bypass via header/cookie check without crypto verification
+  safe_example: 'if verify_jwt_token(request.headers.get("Authorization")): grant_admin()
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Improper Authentication
+  vulnerable_example: 'if request.headers.get("X-Admin") == "true": grant_admin()
+
+    '
+- cwe_id: CWE-502
+  detection_hint: pickle.loads, yaml.load (not safe_load), ObjectInputStream on untrusted
+    data
+  safe_example: 'data = json.loads(user_string)
+
+    obj = yaml.safe_load(user_string)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Deserialization of Untrusted Data
+  vulnerable_example: 'data = pickle.loads(user_bytes)
+
+    obj = yaml.load(user_string)
+
+    '
+- cwe_id: CWE-798
+  detection_hint: literal strings assigned to password/secret/key/token variables
+  safe_example: 'API_KEY = os.environ["API_KEY"]
+
+    password = get_secret("db_password")
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Hardcoded Credentials
+  vulnerable_example: 'API_KEY = "sk-live-abc123def456"
+
+    password = "admin123"
+
+    '
+- cwe_id: CWE-327
+  detection_hint: md5, sha1 for password hashing or security-sensitive hashing
+  safe_example: 'hashlib.sha256(password.encode()).hexdigest()
+
+    bcrypt.hashpw(password, bcrypt.gensalt())
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Use of Broken Cryptographic Algorithm
+  vulnerable_example: 'hashlib.md5(password.encode()).hexdigest()
+
+    hashlib.sha1(data).hexdigest()
+
+    '
+- cwe_id: CWE-330
+  detection_hint: math/rand or random module for tokens, session IDs, crypto keys
+  safe_example: 'token = secrets.token_hex(32)
+
+    session_id = secrets.token_urlsafe(32)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Use of Insufficiently Random Values
+  vulnerable_example: 'token = random.randint(0, 999999)
+
+    session_id = str(random.random())
+
+    '
+- cwe_id: CWE-311
+  detection_hint: HTTP (not HTTPS) for sensitive data, cookies without secure flag
+  safe_example: 'response.set_cookie("session", token, secure=True, httponly=True)
+
+    requests.get("https://api.internal/data")
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Missing Encryption of Sensitive Data
+  vulnerable_example: 'response.set_cookie("session", token)  # no secure/httponly
+
+    requests.get("http://api.internal/data")  # plain HTTP
+
+    '
+- cwe_id: CWE-306
+  detection_hint: HTTP handler for sensitive operation (transfer, delete, admin) without
+    authentication middleware or token check
+  safe_example: '@app.route("/api/transfer", methods=["POST"])
+
+    @require_auth
+
+    def transfer(): process_transfer(request.json)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Missing Authentication for Critical Function
+  vulnerable_example: '@app.route("/api/transfer", methods=["POST"])
+
+    def transfer(): process_transfer(request.json)  # no auth
+
+    '
+- cwe_id: CWE-20
+  detection_hint: direct use of user input without validation/bounds checking
+  safe_example: 'age = int(request.params["age"])
+
+    if not (0 <= age <= 150): raise ValueError("Invalid age")
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Input Validation
+  vulnerable_example: 'age = int(request.params["age"])  # no bounds check
+
+    '
+- cwe_id: CWE-200
+  detection_hint: stack traces, internal paths, or config in error responses
+  safe_example: 'except Exception: return {"error": "Internal server error"}
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Exposure of Sensitive Information
+  vulnerable_example: 'except Exception as e: return {"error": str(e), "stack": traceback.format_exc()}
+
+    '
+- cwe_id: CWE-400
+  detection_hint: unbounded reads, missing rate limits, no pagination on queries
+  safe_example: 'data = request.body.read(MAX_BODY_SIZE)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Uncontrolled Resource Consumption
+  vulnerable_example: 'data = request.body.read()  # no size limit
+
+    '
+- cwe_id: CWE-532
+  detection_hint: password, token, secret, key values in log statements
+  safe_example: 'logger.info(f"Login attempt: user={username}")
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Insertion of Sensitive Information into Log File
+  vulnerable_example: 'logger.info(f"Login attempt: user={username}, password={password}")
+
+    '
+- cwe_id: CWE-284
+  detection_hint: admin/privileged endpoints without authorization decorator/middleware
+  safe_example: '@app.route("/admin/delete/<id>")
+
+    @require_admin
+
+    def delete_user(id): db.delete(id)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Access Control
+  vulnerable_example: '@app.route("/admin/delete/<id>")
+
+    def delete_user(id): db.delete(id)  # no auth check
+
+    '
+- cwe_id: CWE-916
+  detection_hint: single-round SHA/MD5 for password storage (use bcrypt/scrypt/argon2)
+  safe_example: 'hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Use of Password Hash With Insufficient Computational Effort
+  vulnerable_example: 'hashed = hashlib.sha256(password.encode()).hexdigest()
+
+    '
+- cwe_id: CWE-319
+  detection_hint: unencrypted connections (SMTP, FTP, HTTP) for sensitive data
+  safe_example: 'smtp = smtplib.SMTP_SSL("mail.example.com", 465)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Cleartext Transmission of Sensitive Information
+  vulnerable_example: 'smtp = smtplib.SMTP("mail.example.com")  # no TLS
+
+    '
+- cwe_id: CWE-611
+  detection_hint: XML parsing without disabling external entities
+  safe_example: 'parser = etree.XMLParser(resolve_entities=False)
+
+    tree = etree.parse(user_xml, parser)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Restriction of XML External Entity Reference
+  vulnerable_example: 'tree = etree.parse(user_xml)  # XXE possible
+
+    '
+- cwe_id: CWE-943
+  detection_hint: MongoDB/NoSQL queries with unvalidated user input (object injection)
+  safe_example: 'db.users.find({"username": str(user_input)})  # ensure string type
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Neutralization of Special Elements in Data Query Logic
+  vulnerable_example: 'db.users.find({"username": user_input})  # NoSQL injection
+
+    '
+- cwe_id: CWE-326
+  detection_hint: RSA < 2048 bits, AES < 128 bits, DES/3DES usage
+  safe_example: 'key = RSA.generate(2048)  # minimum 2048-bit for RSA
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Inadequate Encryption Strength
+  vulnerable_example: 'key = RSA.generate(1024)
+
+    '
+- cwe_id: CWE-307
+  detection_hint: login/auth endpoint without rate limiting, account lockout, or backoff
+  safe_example: '@app.route("/login", methods=["POST"])
+
+    @rate_limit(max_attempts=5, window=300)
+
+    def login(): return check_password(request.json)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Restriction of Excessive Authentication Attempts
+  vulnerable_example: '@app.route("/login", methods=["POST"])
+
+    def login(): return check_password(request.json)  # no rate limit
+
+    '
+
+
+]]></file>
+</context>
+<variables>
+<var name="detected_languages">unknown</var>
+<var name="detected_languages_list">[]</var>
+<var name="patterns_loaded_count">22</var>
+<var name="security_patterns">patterns:
+- cwe_id: CWE-89
+  detection_hint: string concatenation or f-string in SQL query
+  safe_example: 'cursor.execute("SELECT * FROM users WHERE id = ?", (user_input,))
+
+    '
+  severity: HIGH
+  tier: 1
+  title: SQL Injection
+  vulnerable_example: 'query = f"SELECT * FROM users WHERE id = {user_input}"
+
+    '
+- cwe_id: CWE-79
+  detection_hint: innerHTML, dangerouslySetInnerHTML, v-html with user data
+  safe_example: 'element.textContent = userInput
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Cross-Site Scripting (XSS)
+  vulnerable_example: 'element.innerHTML = userInput
+
+    '
+- cwe_id: CWE-22
+  detection_hint: user input in file paths without basename() or realpath() validation
+  safe_example: 'filepath = os.path.join(base_dir, os.path.basename(user_filename))
+
+    assert os.path.commonpath([base_dir, filepath]) == base_dir
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Path Traversal
+  vulnerable_example: 'filepath = os.path.join(base_dir, user_filename)
+
+    '
+- cwe_id: CWE-78
+  detection_hint: shell=True, os.system(), backticks with user input
+  safe_example: 'subprocess.run(["ping", host], shell=False)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: OS Command Injection
+  vulnerable_example: 'os.system(f"ping {host}")
+
+    subprocess.run(f"echo {msg}", shell=True)
+
+    '
+- cwe_id: CWE-287
+  detection_hint: authentication bypass via header/cookie check without crypto verification
+  safe_example: 'if verify_jwt_token(request.headers.get("Authorization")): grant_admin()
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Improper Authentication
+  vulnerable_example: 'if request.headers.get("X-Admin") == "true": grant_admin()
+
+    '
+- cwe_id: CWE-502
+  detection_hint: pickle.loads, yaml.load (not safe_load), ObjectInputStream on untrusted
+    data
+  safe_example: 'data = json.loads(user_string)
+
+    obj = yaml.safe_load(user_string)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Deserialization of Untrusted Data
+  vulnerable_example: 'data = pickle.loads(user_bytes)
+
+    obj = yaml.load(user_string)
+
+    '
+- cwe_id: CWE-798
+  detection_hint: literal strings assigned to password/secret/key/token variables
+  safe_example: 'API_KEY = os.environ["API_KEY"]
+
+    password = get_secret("db_password")
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Hardcoded Credentials
+  vulnerable_example: 'API_KEY = "sk-live-abc123def456"
+
+    password = "admin123"
+
+    '
+- cwe_id: CWE-327
+  detection_hint: md5, sha1 for password hashing or security-sensitive hashing
+  safe_example: 'hashlib.sha256(password.encode()).hexdigest()
+
+    bcrypt.hashpw(password, bcrypt.gensalt())
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Use of Broken Cryptographic Algorithm
+  vulnerable_example: 'hashlib.md5(password.encode()).hexdigest()
+
+    hashlib.sha1(data).hexdigest()
+
+    '
+- cwe_id: CWE-330
+  detection_hint: math/rand or random module for tokens, session IDs, crypto keys
+  safe_example: 'token = secrets.token_hex(32)
+
+    session_id = secrets.token_urlsafe(32)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Use of Insufficiently Random Values
+  vulnerable_example: 'token = random.randint(0, 999999)
+
+    session_id = str(random.random())
+
+    '
+- cwe_id: CWE-311
+  detection_hint: HTTP (not HTTPS) for sensitive data, cookies without secure flag
+  safe_example: 'response.set_cookie("session", token, secure=True, httponly=True)
+
+    requests.get("https://api.internal/data")
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Missing Encryption of Sensitive Data
+  vulnerable_example: 'response.set_cookie("session", token)  # no secure/httponly
+
+    requests.get("http://api.internal/data")  # plain HTTP
+
+    '
+- cwe_id: CWE-306
+  detection_hint: HTTP handler for sensitive operation (transfer, delete, admin) without
+    authentication middleware or token check
+  safe_example: '@app.route("/api/transfer", methods=["POST"])
+
+    @require_auth
+
+    def transfer(): process_transfer(request.json)
+
+    '
+  severity: HIGH
+  tier: 1
+  title: Missing Authentication for Critical Function
+  vulnerable_example: '@app.route("/api/transfer", methods=["POST"])
+
+    def transfer(): process_transfer(request.json)  # no auth
+
+    '
+- cwe_id: CWE-20
+  detection_hint: direct use of user input without validation/bounds checking
+  safe_example: 'age = int(request.params["age"])
+
+    if not (0 &lt;= age &lt;= 150): raise ValueError("Invalid age")
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Input Validation
+  vulnerable_example: 'age = int(request.params["age"])  # no bounds check
+
+    '
+- cwe_id: CWE-200
+  detection_hint: stack traces, internal paths, or config in error responses
+  safe_example: 'except Exception: return {"error": "Internal server error"}
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Exposure of Sensitive Information
+  vulnerable_example: 'except Exception as e: return {"error": str(e), "stack": traceback.format_exc()}
+
+    '
+- cwe_id: CWE-400
+  detection_hint: unbounded reads, missing rate limits, no pagination on queries
+  safe_example: 'data = request.body.read(MAX_BODY_SIZE)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Uncontrolled Resource Consumption
+  vulnerable_example: 'data = request.body.read()  # no size limit
+
+    '
+- cwe_id: CWE-532
+  detection_hint: password, token, secret, key values in log statements
+  safe_example: 'logger.info(f"Login attempt: user={username}")
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Insertion of Sensitive Information into Log File
+  vulnerable_example: 'logger.info(f"Login attempt: user={username}, password={password}")
+
+    '
+- cwe_id: CWE-284
+  detection_hint: admin/privileged endpoints without authorization decorator/middleware
+  safe_example: '@app.route("/admin/delete/&lt;id&gt;")
+
+    @require_admin
+
+    def delete_user(id): db.delete(id)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Access Control
+  vulnerable_example: '@app.route("/admin/delete/&lt;id&gt;")
+
+    def delete_user(id): db.delete(id)  # no auth check
+
+    '
+- cwe_id: CWE-916
+  detection_hint: single-round SHA/MD5 for password storage (use bcrypt/scrypt/argon2)
+  safe_example: 'hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12))
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Use of Password Hash With Insufficient Computational Effort
+  vulnerable_example: 'hashed = hashlib.sha256(password.encode()).hexdigest()
+
+    '
+- cwe_id: CWE-319
+  detection_hint: unencrypted connections (SMTP, FTP, HTTP) for sensitive data
+  safe_example: 'smtp = smtplib.SMTP_SSL("mail.example.com", 465)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Cleartext Transmission of Sensitive Information
+  vulnerable_example: 'smtp = smtplib.SMTP("mail.example.com")  # no TLS
+
+    '
+- cwe_id: CWE-611
+  detection_hint: XML parsing without disabling external entities
+  safe_example: 'parser = etree.XMLParser(resolve_entities=False)
+
+    tree = etree.parse(user_xml, parser)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Restriction of XML External Entity Reference
+  vulnerable_example: 'tree = etree.parse(user_xml)  # XXE possible
+
+    '
+- cwe_id: CWE-943
+  detection_hint: MongoDB/NoSQL queries with unvalidated user input (object injection)
+  safe_example: 'db.users.find({"username": str(user_input)})  # ensure string type
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Neutralization of Special Elements in Data Query Logic
+  vulnerable_example: 'db.users.find({"username": user_input})  # NoSQL injection
+
+    '
+- cwe_id: CWE-326
+  detection_hint: RSA &lt; 2048 bits, AES &lt; 128 bits, DES/3DES usage
+  safe_example: 'key = RSA.generate(2048)  # minimum 2048-bit for RSA
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Inadequate Encryption Strength
+  vulnerable_example: 'key = RSA.generate(1024)
+
+    '
+- cwe_id: CWE-307
+  detection_hint: login/auth endpoint without rate limiting, account lockout, or backoff
+  safe_example: '@app.route("/login", methods=["POST"])
+
+    @rate_limit(max_attempts=5, window=300)
+
+    def login(): return check_password(request.json)
+
+    '
+  severity: MEDIUM
+  tier: 2
+  title: Improper Restriction of Excessive Authentication Attempts
+  vulnerable_example: '@app.route("/login", methods=["POST"])
+
+    def login(): return check_password(request.json)  # no rate limit
+
+    '
+</var>
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-security-review
+description: 'CWE-based security vulnerability scanner. Reviews a code diff plus modified source files against bundled CWE pattern catalogues and emits a structured JSON findings report. Use in parallel with code-review reviewers for security-sensitive changes.'
+---
+
+# Security Review Workflow
+
+**Goal:** Scan the embedded git diff and source files for security vulnerabilities matching known CWE patterns, then emit a structured JSON report with severities and confidence scores.
+
+**Your Role:** Security vulnerability scanner performing CWE-based code analysis.
+
+- READ-ONLY: never edit files. Output the JSON report between the markers below; the orchestrator captures it from stdout.
+- All inputs (security patterns, modified source files, git diff) are EMBEDDED in the CONTEXT section — do NOT attempt to read upstream files.
+- Communicate all responses in `{communication_language}`; emit the report in `{document_output_language}`.
+
+## Conventions
+
+- Bare paths (e.g. `patterns/core.yaml`) resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/.claude/skills/bmad-security-review` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj`-prefixed paths resolve from the project working directory.
+- `bmad-security-review` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/.claude/skills/bmad-security-review --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/.claude/skills/bmad-security-review/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/_bmad/custom/bmad-security-review.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/_bmad/custom/bmad-security-review.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `date` as system-generated current datetime
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `{communication_language}`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Paths
+
+- `pattern_dir` = `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/.claude/skills/bmad-security-review/patterns/`
+
+## Input Files
+
+| Input | Description | Path Pattern(s) | Load Strategy |
+|-------|-------------|------------------|---------------|
+| security_patterns | Tier-prioritized CWE pattern YAML (loaded by compiler) | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-security-review/proj/.claude/skills/bmad-security-review/patterns/*.yaml` | EMBEDDED |
+| git_diff | Diff under analysis (PRIMARY TARGET) | injected as `[git-diff]` | EMBEDDED |
+| source_files | Modified source files (full bodies for inter-procedural tracing) | injected via real file paths | EMBEDDED_IF_PRESENT |
+
+## Execution
+
+<workflow>
+
+<critical>SCOPE LIMITATION: You are a READ-ONLY SCANNER. Do NOT create files, do NOT modify files, do NOT use Write/Edit/Bash tools. Output the JSON report to stdout between the SECURITY_REPORT_START / SECURITY_REPORT_END markers.</critical>
+
+<critical>All security patterns and source context are EMBEDDED in the CONTEXT section — do NOT attempt to read upstream pattern files or modified sources.</critical>
+
+<step n="1" goal="Scan diff against CWE patterns + score findings">
+  <action>Review every changed line in `[git-diff]` against the embedded `security-patterns` catalogue. Trace data flow through callees that are present in the embedded source files; flag UNVERIFIED when a callee is absent.</action>
+  <action>For each potential vulnerability capture: matched `cwe_id`, severity (HIGH/MEDIUM/LOW), confidence in [0.0, 1.0] (1.0 exact match • 0.8 strong • 0.6 ambiguous • 0.4 possible • 0.2 weak), and specific remediation with a safe alternative.</action>
+  <action>Exclusions are narrow: skip test files (unless they contain production credentials) and generated/vendored code. Ambiguous findings ship with low confidence (0.2-0.4) — do NOT silently omit them.</action>
+</step>
+
+<step n="2" goal="Mandatory zero-finding re-examination">
+  <check if="step 1 produced zero findings">
+    <action>Re-examine the diff for: missing auth on HTTP handlers, SSRF (user-controlled URLs), missing rate limits on auth endpoints, unbounded resource consumption (goroutine spawning, unlimited reads), sensitive data in logs or error responses.</action>
+    <action>If still zero, include a top-level `notes` string in the JSON explaining why.</action>
+  </check>
+</step>
+
+<step n="3" goal="Emit structured JSON report (stdout)">
+  <critical>OUTPUT FORMAT: your entire output MUST be ONLY the JSON between the markers. The first line MUST be `&lt;!-- SECURITY_REPORT_START --&gt;` and the last MUST be `&lt;!-- SECURITY_REPORT_END --&gt;`. Any text outside these markers FAILS the review.</critical>
+
+  <action>Emit between the markers:
+
+```
+&lt;!-- SECURITY_REPORT_START --&gt;
+{"findings": [{"id": "SEC-001", "file_path": "path/to/file.go", "line_number": 42, "cwe_id": "CWE-330", "severity": "HIGH", "title": "Weak Random Number Generator", "description": "math/rand used for security-sensitive operation instead of crypto/rand", "remediation": "Replace math/rand with crypto/rand for cryptographic operations", "confidence": 0.95}]}
+&lt;!-- SECURITY_REPORT_END --&gt;
+```
+  </action>
+
+  <action>Field rules: every finding has all fields shown • `severity` ∈ {HIGH, MEDIUM, LOW} • `confidence` is a float in [0.0, 1.0] • `id` format `SEC-NNN` sequential from SEC-001 • when no findings, emit `{"findings": [], "notes": "..."}`.</action>
+</step>
+
+</workflow>
+
+
+]]></instructions>
+<output-template></output-template>
+</compiled-workflow>

@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Execute story implementation following a context filled story spec file. Use when the user says "dev this story [story file]" or "implement the next story in the sprint plan"
+
+Target: Story 10.1 - initial-setup
+Implement all tasks and subtasks following TDD methodology.
+
+]]></mission>
+<context>
+<file id="bca33d1c" path="docs/project_context.md" label="PROJECT CONTEXT"><![CDATA[
+
+# Project Context
+
+Minimal context.
+
+]]></file>
+<file id="9b1fbad5" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
+
+# Epic 10: Test Epic
+
+## Story 10.1: Initial Setup
+
+Content.
+
+]]></file>
+<file id="5c62d978" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
+
+# Story 10.1: Initial Setup
+
+## Status
+
+ready-for-dev
+
+## Acceptance Criteria
+
+- [ ] AC1
+
+## Tasks/Subtasks
+
+- [ ] Task 1
+
+## Dev Notes
+
+Minimal notes.
+
+]]></file>
+</context>
+<variables>
+<var name="communication_language">English</var>
+<var name="date">2026-01-15</var>
+<var name="description">Execute story implementation following a context filled story spec file. Use when the user says "dev this story [story file]" or "implement the next story in the sprint plan"</var>
+<var name="document_output_language">English</var>
+<var name="epic_num">10</var>
+<var name="name">bmad-dev-story</var>
+<var name="project_context">{project-root}/docs/project-context.md</var>
+
+<var name="story_file" file_id="5c62d978">embedded in prompt, file id: 5c62d978</var>
+<var name="story_id">10.1</var>
+<var name="story_key">10-1-initial-setup</var>
+<var name="story_num">1</var>
+<var name="story_title">initial-setup</var>
+
+<var name="timestamp">20260115_1200</var>
+<var name="user_skill_level">expert</var>
+
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-dev-story
+description: 'Execute story implementation following a context filled story spec file. Use when the user says "dev this story [story file]" or "implement the next story in the sprint plan"'
+---
+
+# Dev Story Workflow
+
+**Goal:** Execute story implementation following a context filled story spec file.
+
+**Your Role:** Developer implementing the story.
+- Communicate all responses in English and language MUST be tailored to expert
+- Generate all documents in English
+- Only modify the story file in these areas: Tasks/Subtasks checkboxes, Dev Agent Record (Debug Log, Completion Notes), File List, Change Log, and Status
+- Execute ALL steps in exact order; do NOT skip steps
+- Absolutely DO NOT stop because of "milestones", "significant progress", or "session boundaries". Continue in a single execution until the story is COMPLETE (all ACs satisfied and all tasks/subtasks checked) UNLESS a FAILURE CONDITION is triggered.
+- Do NOT schedule a "next session" or request review pauses unless a FAILURE CONDITION applies. Only Step 9 decides completion.
+- User skill level (expert) affects conversation style ONLY, not code updates.
+
+## Conventions
+
+- Bare paths (e.g. `steps/step-01-init.md`) resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/.claude/skills/bmad-dev-story` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj`-prefixed paths resolve from the project working directory.
+- `bmad-dev-story` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/.claude/skills/bmad-dev-story --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/.claude/skills/bmad-dev-story/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/_bmad/custom/bmad-dev-story.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/_bmad/custom/bmad-dev-story.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `user_skill_level`
+- `implementation_artifacts`
+- `date` as system-generated current datetime
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `English`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Paths
+
+- `story_file` = `` (explicit story path; auto-discovered if empty)
+- `sprint_status` = `{implementation_artifacts}/`
+
+## Execution
+
+<workflow>
+  <critical>Communicate all responses in English and language MUST be tailored to expert</critical>
+  <critical>Generate all documents in English</critical>
+  <critical>Only modify the story file in these areas: Tasks/Subtasks checkboxes, Dev Agent Record (Debug Log, Completion Notes), File List,
+    Change Log, and Status</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps</critical>
+  <critical>Absolutely DO NOT stop because of "milestones", "significant progress", or "session boundaries". Continue in a single execution
+    until the story is COMPLETE (all ACs satisfied and all tasks/subtasks checked) UNLESS a FAILURE CONDITION is triggered.</critical>
+  <critical>Do NOT schedule a "next session" or request review pauses unless a FAILURE CONDITION applies. Only Step 9 decides completion.</critical>
+  <critical>User skill level (expert) affects conversation style ONLY, not code updates.</critical>
+
+  <!-- step removed: sprint-status managed by loop handler -->
+
+  <!-- step 2 removed: context already embedded -->
+
+  <!-- step 1 removed: file discovery handled by compiler -->
+
+  <!-- step removed: sprint-status managed by loop handler -->
+
+  <!-- step 2 removed: context already embedded -->
+
+  <step n="1" goal="Author comprehensive tests">
+    <action>Create unit tests for business logic and core functionality introduced/changed by the task</action>
+    <action>Add integration tests for component interactions specified in story requirements</action>
+    <action>Include end-to-end tests for critical user flows when story requirements demand them</action>
+    <action>Cover edge cases and error handling scenarios identified in story Dev Notes</action>
+  </step>
+
+  <!-- step 4 removed: status managed by loop handler -->
+
+  <step n="2" goal="Validate and mark task complete ONLY when fully done">
+    <critical>NEVER mark a task complete unless ALL conditions are met - NO LYING OR CHEATING</critical>
+
+    <!-- VALIDATION GATES -->
+    <action>Verify ALL tests for this task/subtask ACTUALLY EXIST and PASS 100%</action>
+    <action>Confirm implementation matches EXACTLY what the task/subtask specifies - no extra features</action>
+    <action>Validate that ALL acceptance criteria related to this task are satisfied</action>
+    <action>Run full test suite to ensure NO regressions introduced</action>
+
+    <!-- REVIEW FOLLOW-UP HANDLING -->
+    <check if="task is review follow-up (has [AI-Review] prefix)">
+      <action>Extract review item details (severity, description, related AC/file)</action>
+      <action>Add to resolution tracking list: {{resolved_review_items}}</action>
+
+      <!-- Mark task in Review Follow-ups section -->
+      <action>Mark task checkbox [x] in "Tasks/Subtasks → Review Follow-ups (AI)" section</action>
+
+      <!-- CRITICAL: Also mark corresponding action item in review section -->
+      <action>Find matching action item in "Senior Developer Review (AI) → Action Items" section by matching description</action>
+      <action>Mark that action item checkbox [x] as resolved</action>
+
+      <action>Add to Dev Agent Record → Completion Notes: "✅ Resolved review finding [{{severity}}]: Execute story implementation following a context filled story spec file. Use when the user says "dev this story [story file]" or "implement the next story in the sprint plan""</action>
+    </check>
+
+    <!-- ONLY MARK COMPLETE IF ALL VALIDATION PASS -->
+    <check if="ALL validation gates pass AND tests ACTUALLY exist and pass">
+      <action>ONLY THEN mark the task (and subtasks) checkbox with [x]</action>
+      <action>Update File List section with ALL new, modified, or deleted files (paths relative to repo root)</action>
+      <action>Add completion notes to Dev Agent Record summarizing what was ACTUALLY implemented and tested</action>
+    </check>
+
+    <check if="ANY validation fails">
+      <action>DO NOT mark task complete - fix issues first</action>
+      <action>HALT if unable to fix validation failures</action>
+    </check>
+
+    <check if="review_continuation == true and {{resolved_review_items}} is not empty">
+      <action>Count total resolved review items in this session</action>
+      <action>Add Change Log entry: "Addressed code review findings - {{resolved_count}} items resolved (Date: 2026-01-15)"</action>
+    </check>
+
+    <action>Save the story file</action>
+    <action>Determine if more incomplete tasks remain</action>
+    <action if="more tasks remain">
+      
+    </action>
+    <action if="no tasks remain">
+      
+    </action>
+  </step>
+
+  <!-- step removed: sprint-status managed by loop handler -->
+
+  <!-- step 10 removed: no interactive user -->
+
+</workflow>
+
+]]></instructions>
+<output-template></output-template>
+</compiled-workflow>

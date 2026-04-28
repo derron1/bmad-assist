@@ -112,7 +112,15 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
     legacy_compiler_class: ClassVar[type[WorkflowCompiler] | None] = None
     """:class:`WorkflowCompiler` subclass we delegate to for the
     workflow-specific tail of compilation (context files, mission, XML
-    output). Subclasses MUST set this."""
+    output).
+
+    Phase 7.1 made this optional: a subclass that has fully inlined its
+    workhorse compile logic (i.e. overrides :meth:`_run_workflow_compile`)
+    sets this to ``None``. Subclasses still on the delegation pattern
+    MUST set it. The :meth:`__init_subclass__` guard requires either a
+    ``legacy_compiler_class`` to delegate to, or an inlined
+    :meth:`_run_workflow_compile` override.
+    """
 
     @abstractmethod
     def build_extra_vars(
@@ -138,15 +146,33 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
         # on this class (or any non-base ancestor).
         if getattr(cls, "__abstractmethods__", None):
             return
+        # Phase 7.1: intermediate base classes (e.g. SynthesisCompilerBase)
+        # opt out of the concrete-leaf contract checks by setting
+        # ``_is_intermediate_base = True`` directly on the class. This
+        # lets them implement build_extra_vars without being treated as
+        # leaves while still leaving the leaf-contract guard rails in
+        # place for actual workflow subclasses.
+        if cls.__dict__.get("_is_intermediate_base", False):
+            return
         if not getattr(cls, "skill_id", ""):
             raise TypeError(f"{cls.__name__} must set ``skill_id`` (e.g. 'bmad-create-story')")
         if not getattr(cls, "legacy_workflow_name", ""):
             raise TypeError(
                 f"{cls.__name__} must set ``legacy_workflow_name`` (e.g. 'create-story')"
             )
-        if cls.legacy_compiler_class is None:
+        # Phase 7.1: legacy_compiler_class becomes optional once the
+        # subclass has fully inlined its workhorse logic. We detect the
+        # inlined case by checking whether the subclass (or any ancestor
+        # below SkillLayoutCompilerBase) overrides _run_workflow_compile.
+        # If neither is present, the subclass has no compile path and we
+        # fail loudly.
+        no_legacy = cls.legacy_compiler_class is None
+        no_override = cls._run_workflow_compile is SkillLayoutCompilerBase._run_workflow_compile
+        if no_legacy and no_override:
             raise TypeError(
-                f"{cls.__name__} must set ``legacy_compiler_class`` to a WorkflowCompiler subclass"
+                f"{cls.__name__} must either set ``legacy_compiler_class`` to a "
+                f"WorkflowCompiler subclass (delegation pattern) OR override "
+                f"``_run_workflow_compile`` (Phase 7+ inlined pattern)"
             )
 
     # --- WorkflowCompiler protocol -------------------------------------- #
@@ -162,13 +188,25 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
         return skill_md.parent
 
     def get_required_files(self) -> list[str]:
-        """Glob patterns the compiler expects to find under the project."""
-        # Match the legacy compiler so Phase 3+ stays a behavioural
-        # no-op for downstream consumers that introspect the patterns.
+        """Glob patterns the compiler expects to find under the project.
+
+        Default: delegate to the legacy compiler when one is configured;
+        otherwise return an empty list. Inlined subclasses (Phase 7+)
+        should override if they need to advertise glob patterns.
+        """
+        if self.legacy_compiler_class is None:
+            return []
         return self._instantiate_legacy().get_required_files()
 
     def get_variables(self) -> dict[str, Any]:
-        """Variables resolved by the compiler before invoking the LLM."""
+        """Variables resolved by the compiler before invoking the LLM.
+
+        Default: delegate to the legacy compiler when one is configured;
+        otherwise return an empty dict. Inlined subclasses (Phase 7+)
+        should override if they need to declare variables.
+        """
+        if self.legacy_compiler_class is None:
+            return {}
         return self._instantiate_legacy().get_variables()
 
     def validate_context(self, context: CompilerContext) -> None:
@@ -179,9 +217,14 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
         legacy compiler too; we route through it so both the old and
         new paths share the same error surface.
 
+        Inlined subclasses (Phase 7+) without a ``legacy_compiler_class``
+        MUST override this to enforce their own preconditions.
+
         Subclasses can override to add skill-specific checks (e.g.
         requiring SKILL.md to be locatable).
         """
+        if self.legacy_compiler_class is None:
+            return
         self._instantiate_legacy().validate_context(context)
 
     # --- The compile pipeline -------------------------------------------- #
@@ -252,14 +295,14 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             output_template=embedded_template,
         )
 
-        # 5. Stamp the synthesised IR onto the context and delegate.
+        # 5. Stamp the synthesised IR onto the context and run the
+        # workhorse compile step (delegate or inlined).
         original_ir = context.workflow_ir
         original_patch = context.patch_path
         context.workflow_ir = synthetic_ir
         context.patch_path = patch_path
         try:
-            legacy = self._instantiate_legacy()
-            compiled = legacy.compile(context)
+            compiled = self._run_workflow_compile(context)
         finally:
             context.workflow_ir = original_ir
             context.patch_path = original_patch
@@ -275,6 +318,24 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             output_template=compiled.output_template,
             token_estimate=compiled.token_estimate,
         )
+
+    def _run_workflow_compile(self, context: CompilerContext) -> CompiledWorkflow:
+        """Run the workflow-specific tail of the compile pipeline.
+
+        Default implementation delegates to the legacy compiler bound at
+        :attr:`legacy_compiler_class`. The base class has already
+        stamped a synthetic :class:`WorkflowIR` onto ``context`` and
+        wired the resolved patch path; the hook just needs to turn that
+        into a :class:`CompiledWorkflow`.
+
+        Phase 7+ inlined subclasses override this with their own
+        compile body (no ``legacy_compiler_class`` required). They can
+        still use :meth:`_instantiate_legacy` if they need to fall
+        back, but the typical inlined implementation builds context
+        files, mission, and XML output directly.
+        """
+        legacy = self._instantiate_legacy()
+        return legacy.compile(context)
 
     # --- Internal helpers ------------------------------------------------ #
 

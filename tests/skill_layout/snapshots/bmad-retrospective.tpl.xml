@@ -1,0 +1,807 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Post-epic review to extract lessons and assess success. Use when the user says "run a retrospective" or "lets retro the epic [epic]"
+
+Target: Epic 10
+Generate retrospective report with extraction markers.
+
+]]></mission>
+<context>
+<file id="be5d0255" path="docs/project_context.md" label="PROJECT CONTEXT"><![CDATA[
+
+# Project Context
+
+Minimal context.
+
+]]></file>
+<file id="5e091a72" path="docs/prd.md" label="PRD"><![CDATA[
+
+# PRD
+
+Project requirements.
+
+]]></file>
+<file id="aab30cfd" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
+
+# Architecture
+
+Layered.
+
+]]></file>
+<file id="1c880d0b" path="docs/epics/epic-10.md" label="EPIC"><![CDATA[
+
+# Epic 10: Test Epic
+
+## Story 10.1: Initial Setup
+
+Content.
+
+]]></file>
+<file id="b01f1921" path="docs/sprint-artifacts/" label="SPRINT STATUS"><![CDATA[
+
+development_status:
+  10-1-initial-setup: done
+  epic-10: complete
+  epic-10-retrospective: pending
+
+]]></file>
+<file id="c8888405" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
+
+# Story 10.1: Initial Setup
+
+## Status
+
+done
+
+## Acceptance Criteria
+
+- [ ] AC1
+
+## Tasks/Subtasks
+
+- [ ] Task 1
+
+## Dev Notes
+
+Minimal notes.
+
+]]></file>
+</context>
+<variables>
+<var name="communication_language">English</var>
+<var name="description">Post-epic review to extract lessons and assess success. Use when the user says "run a retrospective" or "lets retro the epic [epic]"</var>
+<var name="document_output_language">English</var>
+<var name="epic_num">10</var>
+<var name="name">bmad-retrospective</var>
+<var name="next_epic_num">11</var>
+<var name="prev_epic_num">9</var>
+<var name="project_context">{project-root}/docs/project-context.md</var>
+
+<var name="user_skill_level">expert</var>
+
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-retrospective
+description: 'Post-epic review to extract lessons and assess success. Use when the user says "run a retrospective" or "lets retro the epic [epic]"'
+---
+
+# Retrospective Workflow
+
+**Goal:** Post-epic review to extract lessons and assess success.
+
+**Your Role:** Developer facilitating retrospective.
+- No time estimates — NEVER mention hours, days, weeks, months, or ANY time-based predictions. AI has fundamentally changed development speed.
+- Communicate all responses in English and language MUST be tailored to expert
+- Generate all documents in English
+- Document output: Retrospective analysis. Concise insights, lessons learned, action items. User skill level (expert) affects conversation style ONLY, not retrospective content.
+- Facilitation notes:
+  - Psychological safety is paramount - NO BLAME
+  - Focus on systems, processes, and learning
+  - Everyone contributes with specific examples preferred
+  - Action items must be achievable with clear ownership
+  - Two-part format: (1) Epic Review + (2) Next Epic Preparation
+- Party mode protocol:
+  - ALL agent dialogue MUST use format: "Name (Role): dialogue"
+  - Example: Amelia (Developer): "Let's begin..."
+  - Example: {user_name} (Project Lead): [User responds]
+  - Create natural back-and-forth with user actively participating
+  - Show disagreements, diverse perspectives, authentic team dynamics
+
+## Conventions
+
+- Bare paths resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/.claude/skills/bmad-retrospective` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj`-prefixed paths resolve from the project working directory.
+- `bmad-retrospective` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/.claude/skills/bmad-retrospective --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/.claude/skills/bmad-retrospective/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/custom/bmad-retrospective.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/custom/bmad-retrospective.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `user_skill_level`
+- `planning_artifacts`, `implementation_artifacts`
+- `date` as system-generated current datetime
+- YOU MUST ALWAYS SPEAK OUTPUT in your Agent communication style with the config `English`
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `English`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Paths
+
+- `sprint_status_file` = `{implementation_artifacts}/`
+
+## Input Files
+
+| Input | Description | Path Pattern(s) | Load Strategy |
+|-------|-------------|------------------|---------------|
+| epics | The completed epic for retrospective | whole: `{planning_artifacts}/*epic*.md`, sharded_index: `{planning_artifacts}/*epic*/index.md`, sharded_single: `{planning_artifacts}/*epic*/epic-10.md` | SELECTIVE_LOAD |
+| previous_retrospective | Previous epic's retrospective (optional) | `{implementation_artifacts}/**/epic-9-retro-*.md` | SELECTIVE_LOAD |
+| architecture | System architecture for context | whole: `{planning_artifacts}/*architecture*.md`, sharded: `{planning_artifacts}/*architecture*/*.md` | FULL_LOAD |
+| prd | Product requirements for context | whole: `{planning_artifacts}/*prd*.md`, sharded: `{planning_artifacts}/*prd*/*.md` | FULL_LOAD |
+| document_project | Brownfield project documentation (optional) | sharded: `{planning_artifacts}/*.md` | INDEX_GUIDED |
+
+## Required Inputs
+
+- `agent_roster` = resolved via `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/scripts/resolve_config.py --project-root /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj --key agents` (merges four layers in order: `_bmad/config.toml`, `_bmad/config.user.toml`, `_bmad/custom/config.toml`, `_bmad/custom/config.user.toml`)
+
+## Execution
+
+<workflow>
+
+<critical>AUTOMATED MODE: This retrospective runs WITHOUT user interaction.
+- Analyze all provided context (epic, stories, sprint-status, previous retro)
+- Generate a SINGLE structured retrospective report
+- Wrap output in extraction markers
+- Do NOT use party-mode dialogue format
+- Do NOT wait for user input
+- Do NOT save files directly</critical>
+
+<critical>AUTOMATED MODE: This retrospective runs WITHOUT user interaction.
+- Analyze all provided context (epic, stories, sprint-status, previous retro)
+- Generate a SINGLE structured retrospective report
+- Wrap output in extraction markers
+- Do NOT use party-mode dialogue format
+- Do NOT wait for user input
+- Do NOT save files directly</critical>
+
+<step n="1" goal="Epic Discovery - Find Completed Epic with Priority Logic">
+
+<action>Explain to {user_name} the epic discovery process using natural dialogue</action>
+
+<!-- party-mode output removed for automation -->
+
+<!-- managed programmatically by bmad-assist -->
+
+<!-- managed programmatically by bmad-assist -->
+<action>Read ALL development_status entries</action>
+<action>Find the highest epic number with at least one story marked "done"</action>
+<action>Extract epic number from keys like "epic-X-retrospective" or story keys like "X-Y-story-name"</action>
+<action>Set {{detected_epic}} = highest epic number found with completed stories</action>
+
+<check if="{{detected_epic}} found">
+  <action>Present finding to user with context</action>
+
+  <!-- party-mode output removed for automation -->
+
+  
+
+  
+</check>
+<check if="{{epic_number}} still not determined">
+  <action>PRIORITY 3: Fallback to stories folder</action>
+
+<action>Scan {implementation_artifacts} for highest numbered story files</action>
+<action>Extract epic numbers from story filenames (pattern: epic-X-Y-story-name.md)</action>
+<action>Set {{detected_epic}} = highest epic number found</action>
+
+  <!-- party-mode output removed for automation -->
+
+<action>Set {{epic_number}} = confirmed number</action>
+</check>
+
+<action>Once {{epic_number}} is determined, verify epic completion status</action>
+
+<!-- managed programmatically by bmad-assist -->
+
+<action>Count total stories found for this epic</action>
+<action>Count stories with status = "done"</action>
+<action>Collect list of pending story keys (status != "done")</action>
+<action>Determine if complete: true if all stories are done, false otherwise</action>
+
+<check if="epic is not complete">
+  <!-- party-mode output removed for automation -->
+
+<action if="user says yes">Set {{partial_retrospective}} = true</action>
+<!-- party-mode output removed for automation -->
+</check>
+
+<check if="epic is complete">
+  <!-- party-mode output removed for automation -->
+</check>
+
+</step>
+
+<step n="0.5" goal="Discover and load project documents">
+  <action>Load input files according to the Input Files table above. For SELECTIVE_LOAD inputs, load only the epic matching {{epic_number}}. For FULL_LOAD inputs, load the complete document. For INDEX_GUIDED inputs, check the index first and load relevant sections. After discovery, these content variables are available: {epics_content} (selective load for this epic), {architecture_content}, {prd_content}, {document_project_content}</action>
+  <note>After discovery, these content variables are available: {epics_content} (selective load for this epic), {architecture_content}, {prd_content}, {document_project_content}</note>
+</step>
+
+<step n="2" goal="Deep Story Analysis - Extract Lessons from Implementation">
+
+<!-- party-mode output removed for automation -->
+
+<action>For each story in epic {{epic_number}}, read the complete story file from {implementation_artifacts}/{{epic_number}}-{{story_num}}-*.md</action>
+
+<action>Extract and analyze from each story:</action>
+
+**Dev Notes and Struggles:**
+
+- Look for sections like "## Dev Notes", "## Implementation Notes", "## Challenges", "## Development Log"
+- Identify where developers struggled or made mistakes
+- Note unexpected complexity or gotchas discovered
+- Record technical decisions that didn't work out as planned
+- Track where estimates were way off (too high or too low)
+
+**Review Feedback Patterns:**
+
+- Look for "## Review", "## Code Review", "## Dev Review" sections
+- Identify recurring feedback themes across stories
+- Note which types of issues came up repeatedly
+- Track quality concerns or architectural misalignments
+- Document praise or exemplary work called out in reviews
+
+**Lessons Learned:**
+
+- Look for "## Lessons Learned", "## Retrospective Notes", "## Takeaways" sections within stories
+- Extract explicit lessons documented during development
+- Identify "aha moments" or breakthroughs
+- Note what would be done differently
+- Track successful experiments or approaches
+
+**Technical Debt Incurred:**
+
+- Look for "## Technical Debt", "## TODO", "## Known Issues", "## Future Work" sections
+- Document shortcuts taken and why
+- Track debt items that affect next epic
+- Note severity and priority of debt items
+
+**Testing and Quality Insights:**
+
+- Look for "## Testing", "## QA Notes", "## Test Results" sections
+- Note testing challenges or surprises
+- Track bug patterns or regression issues
+- Document test coverage gaps
+
+<action>Synthesize patterns across all stories:</action>
+
+**Common Struggles:**
+
+- Identify issues that appeared in 2+ stories (e.g., "3 out of 5 stories had API authentication issues")
+- Note areas where team consistently struggled
+- Track where complexity was underestimated
+
+**Recurring Review Feedback:**
+
+- Identify feedback themes (e.g., "Error handling was flagged in every review")
+- Note quality patterns (positive and negative)
+- Track areas where team improved over the course of epic
+
+**Breakthrough Moments:**
+
+- Document key discoveries (e.g., "Story 3 discovered the caching pattern we used for rest of epic")
+- Note when team velocity improved dramatically
+- Track innovative solutions worth repeating
+
+**Velocity Patterns:**
+
+- Calculate average completion time per story
+- Note velocity trends (e.g., "First 2 stories took 3x longer than estimated")
+- Identify which types of stories went faster/slower
+
+**Team Collaboration Highlights:**
+
+- Note moments of excellent collaboration mentioned in stories
+- Track where pair programming or mob programming was effective
+- Document effective problem-solving sessions
+
+<action>Store this synthesis - these patterns will drive the retrospective discussion</action>
+
+<!-- party-mode output removed for automation -->
+
+</step>
+
+<step n="3" goal="Load and Integrate Previous Epic Retrospective">
+
+<action>Calculate previous epic number: 9 = {{epic_number}} - 1</action>
+
+<check if="9 >= 1">
+  <action>Search for previous retrospectives using pattern: {implementation_artifacts}/epic-9-retro-*.md</action>
+
+  <check if="previous retrospectives found">
+    <!-- party-mode output removed for automation -->
+
+    <action>Read the previous retrospectives</action>
+
+    <action>Extract key elements:</action>
+    - **Action items committed**: What did the team agree to improve?
+    - **Lessons learned**: What insights were captured?
+    - **Process improvements**: What changes were agreed upon?
+    - **Technical debt flagged**: What debt was documented?
+    - **Team agreements**: What commitments were made?
+    - **Preparation tasks**: What was needed for this epic?
+
+    <action>Cross-reference with current epic execution:</action>
+
+    **Action Item Follow-Through:**
+    - For each action item from Epic 9 retro, check if it was completed
+    - Look for evidence in current epic's story records
+    - Mark each action item: ✅ Completed, ⏳ In Progress, ❌ Not Addressed
+
+    **Lessons Applied:**
+    - For each lesson from Epic 9, check if team applied it in Epic {{epic_number}}
+    - Look for evidence in dev notes, review feedback, or outcomes
+    - Document successes and missed opportunities
+
+    **Process Improvements Effectiveness:**
+    - For each process change agreed to in Epic 9, assess if it helped
+    - Did the change improve velocity, quality, or team satisfaction?
+    - Should we keep, modify, or abandon the change?
+
+    **Technical Debt Status:**
+    - For each debt item from Epic 9, check if it was addressed
+    - Did unaddressed debt cause problems in Epic {{epic_number}}?
+    - Did the debt grow or shrink?
+
+    <action>Prepare "continuity insights" for the retrospective discussion</action>
+
+    <action>Identify wins where previous lessons were applied successfully:</action>
+    - Document specific examples of applied learnings
+    - Note positive impact on Epic {{epic_number}} outcomes
+    - Celebrate team growth and improvement
+
+    <action>Identify missed opportunities where previous lessons were ignored:</action>
+    - Document where team repeated previous mistakes
+    - Note impact of not applying lessons (without blame)
+    - Explore barriers that prevented application
+
+    <!-- party-mode output removed for automation -->
+
+  </check>
+
+  <check if="no previous retro found">
+    <!-- party-mode output removed for automation -->
+<action>Set {{first_retrospective}} = true</action>
+</check>
+</check>
+
+<check if="9 < 1">
+  <!-- party-mode output removed for automation -->
+<action>Set {{first_retrospective}} = true</action>
+</check>
+
+</step>
+
+<step n="4" goal="Preview Next Epic with Change Detection">
+
+<action>Calculate next epic number: 11 = {{epic_number}} + 1</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Attempt to load next epic using selective loading strategy:</action>
+
+**Try sharded first (more specific):**
+<action>Check if file exists: {planning_artifacts}/epic*/epic-11.md</action>
+
+<check if="sharded epic file found">
+  <action>Load {planning_artifacts}/*epic*/epic-11.md</action>
+  <action>Set {{next_epic_source}} = "sharded"</action>
+</check>
+
+**Fallback to whole document:**
+<check if="sharded epic not found">
+<action>Check if file exists: {planning_artifacts}/epic*.md</action>
+
+  <check if="whole epic file found">
+    <action>Load entire epics document</action>
+    <action>Extract Epic 11 section</action>
+    <action>Set {{next_epic_source}} = "whole"</action>
+  </check>
+</check>
+
+<check if="next epic found">
+  <action>Analyze next epic for:</action>
+  - Epic title and objectives
+  - Planned stories and complexity estimates
+  - Dependencies on Epic {{epic_number}} work
+  - New technical requirements or capabilities needed
+  - Potential risks or unknowns
+  - Business goals and success criteria
+
+<action>Identify dependencies on completed work:</action>
+
+- What components from Epic {{epic_number}} does Epic 11 rely on?
+- Are all prerequisites complete and stable?
+- Any incomplete work that creates blocking dependencies?
+
+<action>Note potential gaps or preparation needed:</action>
+
+- Technical setup required (infrastructure, tools, libraries)
+- Knowledge gaps to fill (research, training, spikes)
+- Refactoring needed before starting next epic
+- Documentation or specifications to create
+
+<action>Check for technical prerequisites:</action>
+
+- APIs or integrations that must be ready
+- Data migrations or schema changes needed
+- Testing infrastructure requirements
+- Deployment or environment setup
+
+  <!-- party-mode output removed for automation -->
+
+<action>Set {{next_epic_exists}} = true</action>
+</check>
+
+<check if="next epic NOT found">
+  <!-- party-mode output removed for automation -->
+
+<action>Set {{next_epic_exists}} = false</action>
+</check>
+
+</step>
+
+<step n="5" goal="Initialize Retrospective with Rich Context">
+
+<action>Load agent roster from {agent_roster}</action>
+<action>Identify which agents participated in Epic {{epic_number}} based on story records</action>
+<action>Ensure key roles present: Product Owner, Developer (facilitating), Testing/QA, Architect</action>
+
+<!-- party-mode output removed for automation -->
+
+</step>
+
+<step n="6" goal="Epic Review Discussion - What Went Well, What Didn't">
+
+<!-- party-mode output removed for automation -->
+
+<action>Amelia (Developer) naturally turns to {user_name} to engage them in the discussion</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>After {user_name} responds, have 1-2 team members react to or build on what {user_name} shared</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Continue facilitating natural dialogue, periodically bringing {user_name} back into the conversation</action>
+
+<action>After covering successes, guide the transition to challenges with care</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Use {user_name}'s response to guide the discussion toward systemic understanding rather than blame</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Continue the discussion, weaving in patterns discovered from the deep story analysis (Step 2)</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Continue the retrospective discussion, creating moments where:</action>
+
+- Team members ask {user_name} questions directly
+- {user_name}'s input shifts the discussion direction
+- Disagreements arise naturally and get resolved
+- Quieter team members are invited to contribute
+- Specific stories are referenced with real examples
+- Emotions are authentic (frustration, pride, concern, hope)
+
+<check if="previous retrospective exists">
+  <!-- party-mode output removed for automation -->
+
+<action>Use the previous retro follow-through as a learning moment about commitment and accountability</action>
+</check>
+
+<!-- party-mode output removed for automation -->
+
+<action>Allow team members to add any final thoughts on the epic review</action>
+<action>Ensure {user_name} has opportunity to add their perspective</action>
+
+</step>
+
+<step n="7" goal="Next Epic Preparation Discussion - Interactive and Collaborative">
+
+<check if="{{next_epic_exists}} == false">
+  <!-- party-mode output removed for automation -->
+  <action>Skip to Step 8</action>
+</check>
+
+<!-- party-mode output removed for automation -->
+
+<action>Use {user_name}'s input to guide deeper exploration of preparation needs</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Create space for debate and disagreement about priorities</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Continue working through preparation needs across all dimensions:</action>
+
+- Dependencies on Epic {{epic_number}} work
+- Technical setup and infrastructure
+- Knowledge gaps and research needs
+- Documentation or specification work
+- Testing infrastructure
+- Refactoring or debt reduction
+- External dependencies (APIs, integrations, etc.)
+
+<action>For each preparation area, facilitate team discussion that:</action>
+
+- Identifies specific needs with concrete examples
+- Estimates effort realistically based on Epic {{epic_number}} experience
+- Assigns ownership to specific agents
+- Determines criticality and timing
+- Surfaces risks of NOT doing the preparation
+- Explores parallel work opportunities
+- Brings {user_name} in for key decisions
+
+<!-- party-mode output removed for automation -->
+
+</step>
+
+<step n="8" goal="Synthesize Action Items with Significant Change Detection">
+
+<!-- party-mode output removed for automation -->
+
+<action>Synthesize themes from Epic {{epic_number}} review discussion into actionable improvements</action>
+
+<action>Create specific action items with:</action>
+
+- Clear description of the action
+- Assigned owner (specific agent or role)
+- Timeline or deadline
+- Success criteria (how we'll know it's done)
+- Category (process, technical, documentation, team, etc.)
+
+<action>Ensure action items are SMART:</action>
+
+- Specific: Clear and unambiguous
+- Measurable: Can verify completion
+- Achievable: Realistic given constraints
+- Relevant: Addresses real issues from retro
+- Time-bound: Has clear deadline
+
+<!-- party-mode output removed for automation -->
+
+<action>CRITICAL ANALYSIS - Detect if discoveries require epic updates</action>
+
+<action>Check if any of the following are true based on retrospective discussion:</action>
+
+- Architectural assumptions from planning proven wrong during Epic {{epic_number}}
+- Major scope changes or descoping occurred that affects next epic
+- Technical approach needs fundamental change for Epic 11
+- Dependencies discovered that Epic 11 doesn't account for
+- User needs significantly different than originally understood
+- Performance/scalability concerns that affect Epic 11 design
+- Security or compliance issues discovered that change approach
+- Integration assumptions proven incorrect
+- Team capacity or skill gaps more severe than planned
+- Technical debt level unsustainable without intervention
+
+<check if="significant discoveries detected">
+  
+
+<action>Add epic review session to critical path if user agrees</action>
+
+  <!-- party-mode output removed for automation -->
+</check>
+
+<check if="no significant discoveries">
+  <!-- party-mode output removed for automation -->
+</check>
+
+<!-- party-mode output removed for automation -->
+
+<action>Give each agent with assignments a moment to acknowledge their ownership</action>
+
+<action>Ensure {user_name} approves the complete action plan</action>
+
+</step>
+
+<step n="9" goal="Critical Readiness Exploration - Interactive Deep Dive">
+
+<!-- party-mode output removed for automation -->
+
+<action>Explore testing and quality state through natural conversation</action>
+
+<!-- party-mode output removed for automation -->
+
+<!-- party-mode output removed for automation -->
+
+<action>Explore deployment and release status</action>
+
+<!-- party-mode output removed for automation -->
+
+<check if="not yet deployed">
+  <!-- party-mode output removed for automation -->
+
+<action>Add deployment milestone to critical path with agreed timeline</action>
+</check>
+
+<action>Explore stakeholder acceptance</action>
+
+<!-- party-mode output removed for automation -->
+
+<check if="acceptance incomplete or feedback pending">
+  <!-- party-mode output removed for automation -->
+
+<action>Add stakeholder acceptance to critical path if user agrees</action>
+</check>
+
+<action>Explore technical health and stability</action>
+
+<!-- party-mode output removed for automation -->
+
+<action>Explore unresolved blockers</action>
+
+<!-- party-mode output removed for automation -->
+
+<check if="blockers identified">
+  <!-- party-mode output removed for automation -->
+
+<action>Assign blocker resolution to appropriate agent</action>
+<action>Add to critical path with priority and deadline</action>
+</check>
+
+<action>Synthesize the readiness assessment</action>
+
+<!-- party-mode output removed for automation -->
+
+<!-- party-mode output removed for automation -->
+
+</step>
+
+<step n="10" goal="Retrospective Closure with Celebration and Commitment">
+
+<!-- party-mode output removed for automation -->
+
+<!-- party-mode output removed for automation -->
+
+<action>Prepare to save retrospective summary document</action>
+
+</step>
+
+<step n="11" goal="Generate Retrospective Report with Extraction Markers">
+
+<critical>OUTPUT FORMAT REQUIRED:
+Your retrospective report MUST be wrapped with extraction markers:
+
+<!-- RETROSPECTIVE_REPORT_START -->
+# Epic {{epic_number}} Retrospective: {{epic_title}}
+
+## Executive Summary
+[Brief overview of epic outcomes]
+
+## What Went Well
+[List successes with specific examples from stories]
+
+## What Didn't Go Well
+[List challenges with specific examples from stories]
+
+## Key Learnings
+[Actionable insights extracted from implementation]
+
+## Action Items
+[Specific, owned, time-bound improvements]
+
+## Metrics
+- Stories Completed: X/Y
+- Technical Debt Items: N
+- Blockers Encountered: N
+
+## Preparation for Next Epic
+[If next epic exists, list dependencies and preparation needed]
+
+<!-- RETROSPECTIVE_REPORT_END -->
+
+The orchestrator extracts ONLY content between these markers.
+Do NOT include party-mode dialogue in the report.
+Do NOT save files - output to stdout only.</critical>
+
+<action>Generate comprehensive retrospective summary document including:</action>
+
+- Epic summary and metrics
+- Team participants
+- Successes and strengths identified
+- Challenges and growth areas
+- Key insights and learnings
+- Previous retro follow-through analysis (if applicable)
+- Next epic preview and dependencies
+- Action items with owners and timelines
+- Preparation tasks for next epic
+- Critical path items
+- Significant discoveries and epic update recommendations (if any)
+- Readiness assessment
+- Commitments and next steps
+
+<action>Format retrospective document as readable markdown with clear sections</action>
+<!-- filename determined by orchestrator -->
+<action>Output the complete retrospective document between extraction markers</action>
+
+<output>
+✅ Retrospective document saved: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md
+</output>
+
+<!-- managed programmatically by bmad-assist -->
+
+<!-- managed programmatically by bmad-assist -->
+
+<action>Update last_updated field to current date</action>
+
+</step>
+
+<step n="12" goal="Final Summary and Handoff">
+
+<action>Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-retrospective/proj/.claude/skills/bmad-retrospective --key workflow.on_complete` — if the resolved value is non-empty, follow it as the final terminal instruction before exiting.</action>
+</step>
+
+</workflow>
+
+<facilitation-guidelines>
+<guideline>PARTY MODE REQUIRED: All agent dialogue uses "Name (Role): dialogue" format</guideline>
+<guideline>Amelia (Developer) maintains psychological safety throughout - no blame or judgment</guideline>
+<guideline>Focus on systems and processes, not individual performance</guideline>
+<guideline>Create authentic team dynamics: disagreements, diverse perspectives, emotions</guideline>
+<guideline>User ({user_name}) is active participant, not passive observer</guideline>
+<guideline>Encourage specific examples over general statements</guideline>
+<guideline>Balance celebration of wins with honest assessment of challenges</guideline>
+<guideline>Ensure every voice is heard - all agents contribute</guideline>
+<guideline>Action items must be specific, achievable, and owned</guideline>
+<guideline>Forward-looking mindset - how do we improve for next epic?</guideline>
+<guideline>Intent-based facilitation, not scripted phrases</guideline>
+<guideline>Deep story analysis provides rich material for discussion</guideline>
+<guideline>Previous retro integration creates accountability and continuity</guideline>
+<guideline>Significant change detection prevents epic misalignment</guideline>
+<guideline>Critical verification prevents starting next epic prematurely</guideline>
+<guideline>Document everything - retrospective insights are valuable for future reference</guideline>
+<guideline>Two-part structure ensures both reflection AND preparation</guideline>
+</facilitation-guidelines>
+
+]]></instructions>
+<output-template></output-template>
+</compiled-workflow>

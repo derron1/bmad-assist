@@ -65,16 +65,56 @@ class TestSubclassContract:
                     return {}
 
     def test_subclass_missing_legacy_compiler_class_raises(self) -> None:
-        """A subclass without ``legacy_compiler_class`` raises ``TypeError``."""
+        """A subclass with neither ``legacy_compiler_class`` nor inlined override raises.
+
+        Phase 7.1 made ``legacy_compiler_class`` optional for subclasses
+        that override :meth:`_run_workflow_compile` (the inlined pattern).
+        A subclass with NEITHER must still fail loudly — there is no
+        compile path to take.
+        """
         with pytest.raises(TypeError, match="legacy_compiler_class"):
 
             class MissingClass(SkillLayoutCompilerBase):
                 skill_id = "bmad-anything"
                 legacy_workflow_name = "anything"
                 # legacy_compiler_class deliberately omitted.
+                # _run_workflow_compile NOT overridden either.
 
                 def build_extra_vars(self, context, customization):
                     return {}
+
+    def test_inlined_subclass_with_run_workflow_compile_override_instantiates(self) -> None:
+        """A subclass without ``legacy_compiler_class`` is allowed when it overrides hook.
+
+        Phase 7.1: a subclass without ``legacy_compiler_class`` is
+        allowed when it overrides :meth:`_run_workflow_compile`
+        instead. This is the inlined-compiler pattern Brief 7.2 will
+        follow for every workflow.
+        """
+        from bmad_assist.compiler.types import CompiledWorkflow
+
+        class InlinedSub(SkillLayoutCompilerBase):
+            skill_id = "bmad-inlined"
+            legacy_workflow_name = "inlined"
+            legacy_compiler_class = None
+
+            def build_extra_vars(self, context, customization):
+                return {}
+
+            def _run_workflow_compile(self, context):  # noqa: ARG002 — test stub
+                return CompiledWorkflow(
+                    workflow_name=self.skill_id,
+                    mission="",
+                    context="",
+                    variables={},
+                    instructions="",
+                    output_template=None,
+                    token_estimate=0,
+                )
+
+        instance = InlinedSub()
+        assert instance.workflow_name == "bmad-inlined"
+        assert instance.legacy_compiler_class is None
 
     def test_concrete_subclass_with_all_attrs_instantiates(self) -> None:
         """A concrete subclass with all required attrs instantiates cleanly."""
@@ -253,9 +293,7 @@ class TestNoPatchPath:
     * Emit a debug log so the no-patch decision is observable.
     """
 
-    def test_no_patch_logs_decision(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_no_patch_logs_decision(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """The base class logs a one-line debug entry when no patch is found."""
         import logging
 
@@ -314,13 +352,12 @@ class TestNoPatchPath:
         compile_workflow("bmad-validate-story-synthesis", ctx, skill_layout="new")
 
         no_patch_logs = [
-            rec for rec in caplog.records
+            rec
+            for rec in caplog.records
             if rec.name == base_mod.logger.name
             and "No patch found for bmad-validate-story-synthesis" in rec.message
         ]
-        assert no_patch_logs, (
-            "expected the base class to log a debug entry when no patch is found"
-        )
+        assert no_patch_logs, "expected the base class to log a debug entry when no patch is found"
 
     def test_no_patch_returns_substituted_body_verbatim(self, tmp_path: Path) -> None:
         """No patch → no LLM transforms, no regex post-process, no patch validation.
@@ -332,9 +369,7 @@ class TestNoPatchPath:
         from bmad_assist.compiler import compile_workflow
         from bmad_assist.validation.anonymizer import AnonymizedValidation
 
-        bundled_synth = (
-            REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-code-review-synthesis"
-        )
+        bundled_synth = REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-code-review-synthesis"
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -381,7 +416,10 @@ class TestNoPatchPath:
         # The cache should record an EMPTY patch_hash (no patch file
         # discovered → empty hash).
         meta_path = (
-            proj / ".bmad-assist" / "cache" / "skills"
+            proj
+            / ".bmad-assist"
+            / "cache"
+            / "skills"
             / "bmad-code-review-synthesis.tpl.xml.meta.yaml"
         )
         assert meta_path.is_file()

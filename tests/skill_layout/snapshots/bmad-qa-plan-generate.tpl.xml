@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Generate a comprehensive E2E test plan for a completed epic, classifying tests as Category A (CLI/API/file), B (Playwright UI), or C (human verification). Produces executable test code, not summaries.
+
+Target: Epic 10
+
+Generate E2E test plan with categories:
+- Category A: CLI/API/File tests (100% automatable)
+- Category B: Playwright UI tests (use ONLY selectors from ux-elements.md)
+- Category C: Human verification (manual tests)
+
+CRITICAL: For Category B tests, use ONLY data-testid selectors from the
+embedded ux-elements.md. NEVER invent or guess selector names.
+
+]]></mission>
+<context>
+<file id="6e412141" path="prd.md" label="PRD"><![CDATA[
+
+# PRD
+
+FR-1: example.
+NFR-1: example.
+
+
+]]></file>
+<file id="a9808fff" path="ux-elements.md" label="UX DESIGN"><![CDATA[
+
+# From: ux-elements.md
+
+# UX Elements
+
+- `[data-testid="main-panel"]`
+- `[data-testid="submit-btn"]`
+
+
+]]></file>
+<file id="4e03c430" path="architecture.md" label="ARCHITECTURE"><![CDATA[
+
+# Architecture
+
+Layered.
+
+
+]]></file>
+<file id="eec95053" path="epic-10.md" label="EPIC"><![CDATA[
+
+# Epic 10: Test Epic
+
+Objectives.
+
+## Story 10.1
+
+Content.
+
+
+]]></file>
+</context>
+<variables>
+<var name="communication_language">English</var>
+<var name="description">Generate a comprehensive E2E test plan for a completed epic, classifying tests as Category A (CLI/API/file), B (Playwright UI), or C (human verification). Produces executable test code, not summaries.</var>
+<var name="document_output_language">English</var>
+<var name="epic_num">10</var>
+<var name="name">bmad-qa-plan-generate</var>
+<var name="project_context">{project-root}/docs/project-context.md</var>
+<var name="sprint_status">none</var>
+<var name="template">.claude/skills/bmad-qa-plan-generate/template.md</var>
+<var name="user_skill_level">expert</var>
+<var name="validation">.claude/skills/bmad-qa-plan-generate/checklist.md</var>
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-qa-plan-generate
+description: 'Generate a comprehensive E2E test plan for a completed epic, classifying tests as Category A (CLI/API/file), B (Playwright UI), or C (human verification). Produces executable test code, not summaries.'
+---
+
+# QA Plan Generate Workflow
+
+**Goal:** Produce an executable E2E test plan covering every functional requirement, acceptance criterion, and UI interaction in a completed epic. Output runnable test code (bash + Python heredoc + Playwright TypeScript) — not summaries.
+
+**Your Role:** Test architect generating test-execution artifacts.
+
+- All inputs (epic, stories, traceability, ux-elements, PRD, architecture) are EMBEDDED in the CONTEXT section — do not attempt to read files.
+- Communicate all responses in `English`; emit the test plan in `English`.
+- Write the result to `{output_file}` using the embedded `template.md` as the structure guide.
+
+## Conventions
+
+- Bare paths (e.g. `template.md`) resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/.claude/skills/bmad-qa-plan-generate` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj`-prefixed paths resolve from the project working directory.
+- `bmad-qa-plan-generate` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/.claude/skills/bmad-qa-plan-generate --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/.claude/skills/bmad-qa-plan-generate/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/_bmad/custom/bmad-qa-plan-generate.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/_bmad/custom/bmad-qa-plan-generate.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `output_folder`
+- `date` as system-generated current datetime
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `English`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Paths
+
+- `qa_artifacts` = `{output_folder}/qa-artifacts`
+- `output_file` = `{qa_artifacts}/test-plans/epic-10-e2e-plan.md`
+- `trace_file` = `{qa_artifacts}/traceability/epic-10-trace.md`
+
+## Input Files
+
+| Input | Description | Path Pattern(s) | Load Strategy |
+|-------|-------------|------------------|---------------|
+| epic | Epic definition (objectives, FRs, story refs) | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/epics/epic-10*.md` | EMBEDDED |
+| stories | Story files for this epic (max 10) | `{output_folder}/implementation-artifacts/stories/10-*.md` | EMBEDDED |
+| trace | Traceability file (optional, for coverage gap analysis) | `{trace_file}` | EMBEDDED_IF_PRESENT |
+| ux_elements | UI selectors documentation (REQUIRED for Category B) | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/modules/*/ux-elements.md`, `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/ux-elements.md`, `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/epics/epic-10-ux.md` | EMBEDDED |
+| prd | PRD for FR/NFR extraction | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/prd.md` | EMBEDDED |
+| architecture | Architecture for NFR context | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-qa-plan-generate/proj/docs/architecture.md` | EMBEDDED |
+
+## Execution
+
+<workflow>
+
+<critical>OUTPUT FORMAT: This is NOT a summary. You MUST emit ACTUAL EXECUTABLE TEST CODE for every test. Each test gets its own Markdown subsection (`### E10-{cat}{nn}: name`) and its own fenced code block. Tests must be immediately runnable without modification.</critical>
+
+<critical>SELECTOR RULES (Category B): Use ONLY `data-testid` values present in the embedded `ux-elements.md`. NEVER invent selector names. NEVER use CSS classes, `aria-selected`, or `aria-checked`. If a selector is missing, downgrade the test to Category C with a note "requires ux-elements.md update".</critical>
+
+<critical>WAIT STATE: Use `await page.waitForLoadState('domcontentloaded')` — NEVER `'networkidle'` (SSE breaks it).</critical>
+
+<step n="1" goal="Analyze embedded context">
+  <action>Read the embedded epic file. Capture: epic title, objectives, FRs, referenced stories, technical scope.</action>
+  <action>Read every embedded story. For each story capture: title, ACs, technical implementation hints, UI components mentioned.</action>
+  <action>If `ux-elements.md` is embedded, index every `data-testid` value — this is your ONLY allowed selector vocabulary for Category B.</action>
+  <action>If `prd.md` is embedded, extract FR-* and NFR-* identifiers — every test must cite a requirement.</action>
+  <action>If a trace file is embedded, note existing coverage and gaps to bias the new plan toward uncovered requirements.</action>
+</step>
+
+<step n="2" goal="Classify testable requirements">
+  <action>For each requirement / AC / behavior, assign exactly one category:
+    - **A (CLI/API/File)** — fully automatable: CLI commands, REST endpoints, file ops, DB state, config validation.
+    - **B (Playwright/UI)** — UI interactions ONLY when `ux-elements.md` provides the needed selectors.
+    - **C (Human Verification)** — external services, real credentials, subjective quality, third-party APIs, performance under real load.
+  </action>
+  <action>Default to Category C when in doubt — never invent code that won't run.</action>
+</step>
+
+<step n="3" goal="Generate test code">
+  <action>Use the test ID format: `E10-A##` / `B##` / `C##` (zero-padded sequence).</action>
+
+  <substep n="3a" title="Category A — bash + Python">
+    <action>For each Cat A requirement, emit a Markdown subsection with header `### E10-A##: {test_name}` and a single bash code block containing:
+      - Comment header with test ID, requirement reference (FR/AC), expected outcome.
+      - `cleanup()` function and `trap cleanup EXIT` for any temp state.
+      - Setup: use `$PROJECT_ROOT` (NEVER hardcode absolute paths). Activate venv if invoking Python.
+      - Test execution (bash commands or `python3 &lt;&lt;'PYEOF' ... PYEOF` heredoc).
+      - Verification (asserts, output checks, exit-code echo).
+      - `echo "Expected exit code: 0"` (or document the expected non-zero code).
+    </action>
+    <action>Each Cat A test must be idempotent and self-contained.</action>
+  </substep>
+
+  <substep n="3b" title="Category B — Playwright TypeScript">
+    <critical>ONLY generate Cat B if ux-elements.md was embedded. Otherwise skip Cat B and add a note in the Master Checklist.</critical>
+    <action>Each Cat B test is its OWN standalone `test()` function — NEVER nested inside `test.describe()`. The output parser extracts tests by `### E10-B##:` header.</action>
+    <action>Emit a Markdown subsection per test with header `### E10-B##: {test_name}` and a single typescript code block containing:
+      - Header comment: test ID, requirement reference, "Selectors from: ux-elements.md".
+      - `test('Generate a comprehensive E2E test plan for a completed epic, classifying tests as Category A (CLI/API/file), B (Playwright UI), or C (human verification). Produces executable test code, not summaries.', async ({ page }) =&gt; { ... })` with `await page.goto('http://localhost:8765/')` and `await page.waitForLoadState('domcontentloaded')`.
+      - Use `forceClick(page, '[data-testid="..."]')` for footer / off-viewport elements; the helper is included in the template's Cat B section header.
+      - Wait conditions: `await expect(page.locator('[data-testid="..."]')).toBeVisible()` — check visibility, NOT classes (Alpine.js uses `x-show`).
+      - All `data-testid` values copied EXACTLY from `ux-elements.md`.
+    </action>
+  </substep>
+
+  <substep n="3c" title="Category C — human verification">
+    <action>Each Cat C test is a Markdown subsection with `### E10-C##: {test_name}` containing:
+      - Requirement reference.
+      - Prerequisites list.
+      - Numbered steps.
+      - Expected result.
+      - Pass-criteria checklist using `- [ ]` checkbox syntax.
+    </action>
+  </substep>
+</step>
+
+<step n="4" goal="Assemble plan and write output">
+  <action>Compose the full plan using the embedded `template.md` structure:
+    1. Header (`# E2E Test Plan - Epic 10`, generated date, epic title).
+    2. **Setup** section (PROJECT_ROOT export + venv activation).
+    3. **Test Categories Summary** table with counts (A / B / C / total).
+    4. **Master Checklist** table — every test by ID, name, category, status (initially "pending").
+    5. **Category A Tests** section with prerequisites + every Cat A subsection from step 3a.
+    6. **Category B Tests** section with prerequisites, the `forceClick` helper, and every Cat B subsection (or a note if ux-elements was missing).
+    7. **Category C Tests** section with every Cat C subsection.
+    8. **Traceability Matrix** table — every requirement (FR/AC/NFR) mapped to its covering test IDs and coverage status.
+    9. **Notes** — flag any missing selectors, untestable requirements, or gaps.
+    10. **Automation Recommendations** — actionable improvements for `ux-elements.md`, story specs, or test infrastructure.
+    11. End with `&lt;!-- QA_PLAN_END --&gt;`.
+  </action>
+  <action>Write the assembled plan to `{output_file}` (creating `{qa_artifacts}/test-plans/` if it does not exist).</action>
+</step>
+
+<step n="5" goal="Report summary">
+  <action>Emit a stdout summary:
+    ```
+    ## QA Plan Generated
+
+    **Epic:** 10
+    **Output:** {output_file}
+
+    **Test Counts:**
+    - Category A (CLI/API): {count_a} tests
+    - Category B (Playwright): {count_b} tests
+    - Category C (Human): {count_c} tests
+    - **Total:** {total} tests
+
+    **Notes:** {warnings_or_none}
+
+    **Next Steps:**
+    1. Review generated test plan
+    2. Run Category A tests: `bmad-assist qa execute --epic 10 --category A`
+    3. Run Category B tests: `bmad-assist qa execute --epic 10 --category B`
+    4. Complete Category C manual tests
+    ```
+  </action>
+</step>
+
+</workflow>
+
+
+]]></instructions>
+<output-template><![CDATA[
+
+# E2E Test Plan - Epic {epic_num}
+
+**Generated:** {date}
+**Epic:** {epic_title}
+
+---
+
+## Setup
+
+Run once before executing tests:
+
+```bash
+export PROJECT_ROOT="$(pwd)"
+cd "$PROJECT_ROOT"
+source .venv/bin/activate
+```
+
+---
+
+## Test Categories Summary
+
+| Category | Description | Count | Automation |
+|----------|-------------|-------|------------|
+| A | CLI/API/File | {count_a} | 100% |
+| B | Playwright/UI | {count_b} | 100% (with selectors) |
+| C | Human Verification | {count_c} | Manual |
+| **Total** | | **{total}** | |
+
+---
+
+## Master Checklist
+
+| ID | Test Name | Category | Status |
+|----|-----------|----------|--------|
+{checklist_rows}
+
+---
+
+## Category A Tests (CLI/API/File)
+
+### Prerequisites
+
+- Python virtual environment activated
+- Project dependencies installed
+- Required services running (if applicable)
+
+{category_a_tests}
+
+---
+
+## Category B Tests (Playwright/UI)
+
+### Prerequisites
+
+- Playwright installed: `npm install -D @playwright/test`
+- Browsers installed: `npx playwright install`
+- Dashboard server running: `bmad-assist dashboard --port 8765`
+
+### forceClick Helper
+
+Include this helper in all spec files for footer button interactions:
+
+```typescript
+async function forceClick(page: Page, selector: string) {
+  await page.evaluate((sel: string) => {
+    const el = document.querySelector(sel) as HTMLElement;
+    if (el) { el.scrollIntoView({ block: 'center' }); el.click(); }
+  }, selector);
+}
+```
+
+{category_b_tests}
+
+---
+
+## Category C Tests (Human Verification)
+
+{category_c_tests}
+
+---
+
+## Traceability Matrix
+
+| Requirement | Test IDs | Coverage |
+|-------------|----------|----------|
+{traceability_rows}
+
+---
+
+## Notes
+
+{notes}
+
+---
+
+## Automation Recommendations
+
+{recommendations}
+
+<!-- QA_PLAN_END -->
+
+
+]]></output-template>
+</compiled-workflow>

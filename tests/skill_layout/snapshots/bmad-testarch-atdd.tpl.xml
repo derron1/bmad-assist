@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Generate red-phase acceptance test scaffolds using the TDD cycle. Use when the user says "lets write acceptance tests" or "I want to do ATDD"
+
+Mode: None
+Target: Story 10.1
+
+]]></mission>
+<context>
+<file id="aa9bb127" path="docs/project_context.md" label="PROJECT CONTEXT"><![CDATA[
+
+# Project Context
+
+Minimal context.
+
+]]></file>
+<file id="0fa5c5b3" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
+
+# Story 10.1: Initial Setup
+
+## Status
+
+ready-for-dev
+
+## Acceptance Criteria
+
+- [ ] AC1
+
+## Tasks/Subtasks
+
+- [ ] Task 1
+
+## Dev Notes
+
+Minimal notes.
+
+]]></file>
+</context>
+<variables>
+<var name="epic_num">10</var>
+<var name="story_file" file_id="0fa5c5b3">embedded in prompt, file id: 0fa5c5b3</var>
+<var name="story_id">10.1</var>
+<var name="story_num">1</var>
+<var name="test_dir">tests</var>
+<var name="workflow_mode"></var>
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-testarch-atdd
+description: 'Generate red-phase acceptance test scaffolds using the TDD cycle. Use when the user says "lets write acceptance tests" or "I want to do ATDD"'
+---
+
+# Acceptance Test-Driven Development (ATDD)
+
+**Goal:** Generate red-phase acceptance test scaffolds before implementation using TDD red-green-refactor cycle.
+
+**Role:** You are the Master Test Architect.
+
+You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+
+## Conventions
+
+- Bare paths (e.g. `instructions.md`) resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj`-prefixed paths resolve from the project working directory.
+- `bmad-testarch-atdd` resolves to the skill directory's basename.
+- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd`.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/_bmad/custom/bmad-testarch-atdd.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/_bmad/custom/bmad-testarch-atdd.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `user_name`
+- `communication_language`
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `{communication_language}`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Workflow Architecture
+
+This workflow uses **tri-modal step-file architecture**:
+
+- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
+- **Validate mode (steps-v/)**: validation against checklist
+- **Edit mode (steps-e/)**: revise existing outputs
+
+## Initialization Sequence
+
+### 1. Mode Determination
+
+"Welcome to the workflow. What would you like to do?"
+
+- **[C] Create** — Run the workflow from the beginning
+- **[R] Resume** — Resume an interrupted Create workflow
+- **[V] Validate** — Validate existing outputs
+- **[E] Edit** — Edit existing outputs
+
+### 2. Route to First Step
+
+- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd/steps-c/step-01-preflight-and-context.md`
+- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd/steps-c/step-01b-resume.md` (Create-mode continuation)
+- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd/steps-v/step-01-validate.md`
+- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/.claude/skills/bmad-testarch-atdd/steps-e/step-01-assess.md`
+
+]]></instructions>
+<output-template></output-template>
+</compiled-workflow>

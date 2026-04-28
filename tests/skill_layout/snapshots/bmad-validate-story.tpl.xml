@@ -1,0 +1,587 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiled-workflow>
+<mission><![CDATA[
+
+Adversarial Story Validation
+
+Target: Story 10.1 - initial-setup
+
+Your mission is to FIND ISSUES in the story file:
+- Identify missing requirements or acceptance criteria
+- Find ambiguous or unclear specifications
+- Detect gaps in technical context
+- Suggest improvements for developer clarity
+
+CRITICAL: You are a VALIDATOR, not a developer.
+- Read-only: You cannot modify any files
+- Adversarial: Assume the story has problems
+- Thorough: Check all sections systematically
+
+Focus on STORY QUALITY, not code implementation.
+
+]]></mission>
+<context>
+<file id="f57cff42" path="docs/project_context.md" label="PROJECT CONTEXT"><![CDATA[
+
+# Project Context
+
+Minimal context.
+
+]]></file>
+<file id="42fa2838" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
+
+# Architecture
+
+Layered.
+
+]]></file>
+<file id="6af8060c" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
+
+# Epic 10: Test Epic
+
+## Story 10.1: Initial Setup
+
+Content.
+
+]]></file>
+<file id="5a01e3a9" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
+
+# Story 10.1: Initial Setup
+
+## Status
+
+ready-for-validation
+
+## Acceptance Criteria
+
+- [ ] AC1
+
+## Tasks/Subtasks
+
+- [ ] Task 1
+
+## Dev Notes
+
+Minimal notes.
+
+]]></file>
+</context>
+<variables>
+<var name="communication_language">English</var>
+<var name="date">2026-01-15</var>
+<var name="description">Adversarial story-quality validator. Use after `create-story` to surface issues, gaps, and disaster risks before development begins. Produces a validation report; does not modify the story.</var>
+<var name="document_output_language">English</var>
+<var name="epic_num">10</var>
+<var name="epics_file" file_id="6af8060c">embedded in prompt, file id: 6af8060c</var>
+<var name="model">validator</var>
+<var name="name">bmad-validate-story</var>
+<var name="project_context">{project-root}/docs/project-context.md</var>
+
+<var name="story_file" file_id="5a01e3a9">embedded in prompt, file id: 5a01e3a9</var>
+<var name="story_id">10.1</var>
+<var name="story_key">10-1-initial-setup</var>
+<var name="story_num">1</var>
+<var name="story_title">initial-setup</var>
+
+<var name="timestamp">20260115_120000</var>
+<var name="user_skill_level">expert</var>
+
+<var name="validation_focus">story_quality</var>
+</variables>
+<instructions><![CDATA[
+
+---
+name: bmad-validate-story
+description: 'Adversarial story-quality validator. Use after `create-story` to surface issues, gaps, and disaster risks before development begins. Produces a validation report; does not modify the story.'
+---
+
+# Validate Story Workflow
+
+**Goal:** Independently re-analyze a story file and surface every gap, ambiguity, or disaster risk the original `create-story` LLM may have missed. Output a structured validation report with an Evidence Score.
+
+**Your Role:** Adversarial story-quality validator competing against the original create-story output.
+
+- READ-ONLY: never edit files, never call Write/Edit/Bash. Output the report to stdout only — the orchestrator captures and persists it.
+- Communicate all responses in `English` and generate the report in `English`.
+- Assume the story has problems. Be thorough. Cite specific lines.
+- All inputs (story file, project context, architecture, epic) are EMBEDDED below — do not attempt to read files.
+
+## Conventions
+
+- Bare paths (e.g. `template.md`) resolve from the skill root.
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/.claude/skills/bmad-validate-story` resolves to this skill's installed directory (where `customize.toml` lives).
+- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj`-prefixed paths resolve from the project working directory.
+- `bmad-validate-story` resolves to the skill directory's basename.
+
+## On Activation
+
+### Step 1: Resolve the Workflow Block
+
+Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/.claude/skills/bmad-validate-story --key workflow`
+
+**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+
+1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/.claude/skills/bmad-validate-story/customize.toml` — defaults
+2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/_bmad/custom/bmad-validate-story.toml` — team overrides
+3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/_bmad/custom/bmad-validate-story.user.toml` — personal overrides
+
+Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+
+### Step 2: Execute Prepend Steps
+
+Execute each entry in `` in order before proceeding.
+
+### Step 3: Load Persistent Facts
+
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs under `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj` — load the referenced contents as facts. All other entries are facts verbatim.
+
+### Step 4: Load Config
+
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/_bmad/bmm/config.yaml` and resolve:
+
+- `project_name`, `user_name`
+- `communication_language`, `document_output_language`
+- `planning_artifacts`, `implementation_artifacts`
+- `date` as system-generated current datetime
+
+### Step 5: Greet the User
+
+Greet `{user_name}`, speaking in `English`.
+
+### Step 6: Execute Append Steps
+
+Execute each entry in `` in order.
+
+Activation is complete. Begin the workflow below.
+
+## Paths
+
+- `story_dir` = `{implementation_artifacts}`
+- `epics_file` = `{planning_artifacts}/epics.md`
+- `architecture_file` = `{planning_artifacts}/architecture.md`
+- `prd_file` = `{planning_artifacts}/PRD.md`
+
+## Input Files
+
+| Input | Description | Path Pattern(s) | Load Strategy |
+|-------|-------------|------------------|---------------|
+| story | Story file under validation (PRIMARY TARGET) | `{implementation_artifacts}/10-1-initial-setup.md` | EMBEDDED |
+| project_context | Ground-truth conventions, standards, decisions | `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/**/project-context.md` | EMBEDDED |
+| epics | Epic + acceptance criteria source | `{planning_artifacts}/*epic*.md` | EMBEDDED |
+| architecture | Architecture for technical-alignment checks | `{planning_artifacts}/*architecture*.md` | EMBEDDED |
+| prd | PRD fallback when epics omit detail | `{planning_artifacts}/*prd*.md` | EMBEDDED |
+
+## Execution
+
+<workflow>
+
+<critical>SCOPE LIMITATION: You are a READ-ONLY VALIDATOR. Output your validation report to stdout ONLY. Do NOT create files, do NOT modify files, do NOT use Write/Edit/Bash tools. Your stdout output will be captured and saved by the orchestration system.</critical>
+
+<critical>All configuration and context is available in the VARIABLES and CONTEXT sections below. Use these resolved values directly — do not attempt to load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/.claude/skills/bmad-validate-story` or other workflow files.</critical>
+
+<critical>COMMON LLM MISTAKES TO HUNT FOR: reinventing wheels, wrong libraries, wrong file locations, breaking regressions, ignoring UX, vague implementations, missing acceptance criteria, omitted previous-story learnings.</critical>
+
+<step n="1" goal="INVEST + acceptance-criteria + dependency analysis">
+  <action>Read the embedded story file end-to-end. Note story id, title, current status.</action>
+
+  <substep n="1a" title="INVEST scoring">
+    <action>Score each INVEST criterion 1-10 (10 = critical violation). For each violation, capture a concrete quote and why it fails:</action>
+    <action>**I — Independent**: hidden cross-story dependencies, ordering constraints.</action>
+    <action>**N — Negotiable**: prescriptive HOW vs outcome-focused WHAT.</action>
+    <action>**V — Valuable**: clear, meaningful business value tied to epic goals.</action>
+    <action>**E — Estimable**: scope clear enough to estimate; unknown unknowns flagged.</action>
+    <action>**S — Small**: deliverable in a single sprint; not too small to be meaningful.</action>
+    <action>**T — Testable**: every AC objectively verifiable with edge/error cases.</action>
+  </substep>
+
+  <substep n="1b" title="Acceptance-criteria deep dive">
+    <action>For each AC, hunt for: vague language ("should work well", "fast"), untestable claims, missing scenarios, contradictions, missing edge cases / error handling. Quote the exact text.</action>
+  </substep>
+
+  <substep n="1c" title="Hidden dependencies">
+    <action>Identify undocumented dependencies: libraries/services/APIs, cross-team handoffs, infrastructure (DBs, queues, caches), data migrations/seeds, sequential story dependencies, external blockers. For each, state impact.</action>
+  </substep>
+
+  <substep n="1d" title="Estimation reality-check">
+    <action>Compare stated/implied effort vs scope. Verdict: realistic / underestimated / overestimated / unestimable, with reasoning.</action>
+  </substep>
+
+  <substep n="1e" title="Technical alignment">
+    <action>Verify story aligns with architecture: patterns, technologies, layering, naming conventions, integration points. Document any conflicts with architecture content embedded above.</action>
+  </substep>
+</step>
+
+<step n="2" goal="Disaster prevention gap analysis">
+  <action>Hunt for risks the original LLM missed across these categories. Document each finding with: what's missing, where it would bite, suggested fix.</action>
+
+  <substep n="2a" title="Reinvention risks">
+    <action>Areas where developer might duplicate existing code; reuse opportunities not surfaced; patterns from previous stories not referenced.</action>
+  </substep>
+
+  <substep n="2b" title="Technical specification gaps">
+    <action>Missing version pins, missing API contract details, schema risks, security/perf gaps that could cause failures.</action>
+  </substep>
+
+  <substep n="2c" title="File structure / convention gaps">
+    <action>Wrong file locations, naming convention drift, integration pattern breaks, deployment/env requirements missing.</action>
+  </substep>
+
+  <substep n="2d" title="Regression risks">
+    <action>Breaking changes to existing behavior, missing test requirements, UX violations, learnings from prior stories not applied.</action>
+  </substep>
+
+  <substep n="2e" title="Implementation risks">
+    <action>Vague instructions inviting wrong interpretation, completion-lie loopholes (ACs that allow fake "done"), scope-creep openings, missing quality requirements.</action>
+  </substep>
+</step>
+
+<step n="3" goal="LLM-dev-agent optimization analysis">
+  <action>Identify story-content issues that hurt downstream LLM consumption: verbosity wasting tokens, ambiguous instructions, context overload, critical signals buried in prose, poor scannable structure. For each, capture before/after suggestions and rationale.</action>
+</step>
+
+<step n="4" goal="Categorize, prioritize, and score evidence">
+  <action>Categorize every finding into one of:
+    - **critical_issues** — must fix (security, blocking, missing essentials)
+    - **enhancements** — should add (helpful guidance, better specifications)
+    - **optimizations** — nice to have (performance hints, dev tips)
+    - **llm_optimizations** — token efficiency / clarity improvements
+  </action>
+  <action>Number each finding for the report.</action>
+
+  <substep n="4a" title="Calculate Evidence Score">
+    <critical>You MUST calculate and emit the Evidence Score. The score gates downstream synthesis decisions.</critical>
+
+    <action>Map each finding to severity points:
+      - **CRITICAL** (+3): security vulns, data corruption risks, blocking gaps, missing essential requirements
+      - **IMPORTANT** (+1): missing guidance, unclear specs, integration risks
+      - **MINOR** (+0.3): typos, style, minor clarifications
+    </action>
+    <action>Count CLEAN PASS categories (areas with NO issues): each is **-0.5 points**. Categories: 6 INVEST criteria + Acceptance Criteria + Dependencies + Technical Alignment + Implementation.</action>
+    <action>Compute: `evidence_score = sum(finding_points) + clean_pass_count * -0.5`</action>
+    <action>Determine verdict:
+      - **EXCELLENT** when score ≤ -3
+      - **PASS** when -3 &lt; score &lt; 3
+      - **MAJOR REWORK** when 3 ≤ score &lt; 7
+      - **REJECT** when score ≥ 7
+    </action>
+  </substep>
+</step>
+
+<step n="5" goal="Generate validation report (stdout)">
+  <critical>OUTPUT MARKERS REQUIRED: Your validation report MUST start with the marker `&lt;!-- VALIDATION_REPORT_START --&gt;` on its own line BEFORE the report header, and MUST end with `&lt;!-- VALIDATION_REPORT_END --&gt;` on its own line AFTER the final line. The orchestrator extracts ONLY content between these markers; anything outside is discarded.</critical>
+
+  <critical>TEMPLATE USAGE: Use the embedded `template.md` as a STRUCTURE GUIDE — replace every `{{placeholder}}` with the actual value derived from your analysis. Expand `{{#each X}}` sections by listing real items. NEVER emit literal `{{...}}` syntax in the final report.</critical>
+
+  <action>Emit the report between the markers, following the template's section order:
+    1. Report header (story id, key, title, file, date, validator).
+    2. Executive summary table (counts per category) and overall assessment.
+    3. Evidence Score Summary table — every finding as a row with severity icon, severity, description, source, score; followed by clean-pass count and final score → verdict.
+    4. Story Quality Gate — INVEST table with per-criterion status / severity / details, INVEST violations list, AC issues list, hidden risks/dependencies list, estimation reality-check, technical alignment status.
+    5. Critical Issues section (numbered, each with impact, source, problem, recommended fix).
+    6. Enhancements section (numbered, each with benefit, source, gap, suggested addition).
+    7. Optimizations section (numbered, each with value and suggestion).
+    8. LLM Optimizations section (numbered, each with issue type, token impact, current vs optimized snippet, rationale).
+    9. Competition Results — quality metrics table and disaster-prevention assessment.
+  </action>
+  <action>Do NOT include a "Changes Applied" section — this validator does not modify the story.</action>
+  <action>End with `&lt;!-- VALIDATION_REPORT_END --&gt;` on its own line.</action>
+</step>
+
+</workflow>
+
+]]></instructions>
+<critical>TEMPLATE USAGE: The template below shows the STRUCTURE and HEADINGS to follow. You MUST replace ALL {{variable}} placeholders with actual values from your analysis. You MUST expand {{#each X}} loops by listing actual items. NEVER output literal {{...}} syntax.</critical>
+<output-template>
+<!-- VALIDATION_REPORT_START -->
+<![CDATA[
+
+# 🎯 Story Context Validation Report
+
+<!-- report_header -->
+
+**Story:** {{story_key}} - {{story_title}}
+**Story File:** {{story_file}}
+**Validated:** {{date}}
+**Validator:** Quality Competition Engine
+
+---
+
+<!-- executive_summary -->
+
+## Executive Summary
+
+### Issues Overview
+
+| Category | Found | Applied |
+|----------|-------|---------|
+| 🚨 Critical Issues | {{critical_count}} | {{critical_applied}} |
+| ⚡ Enhancements | {{enhancement_count}} | {{enhancements_applied}} |
+| ✨ Optimizations | {{optimization_count}} | {{optimizations_applied}} |
+| 🤖 LLM Optimizations | {{llm_opt_count}} | {{llm_opts_applied}} |
+
+**Overall Assessment:** {{overall_assessment}}
+
+---
+
+<!-- evidence_score_summary -->
+
+## Evidence Score Summary
+
+| Severity | Description | Source | Score |
+|----------|-------------|--------|-------|
+{{#each evidence_findings}}
+| {{severity_icon}} {{severity}} | {{description}} | {{source}} | +{{score}} |
+{{/each}}
+{{#if clean_pass_count}}
+| 🟢 CLEAN PASS | {{clean_pass_count}} |
+{{/if}}
+
+### Evidence Score: {{evidence_score}}
+
+| Score | Verdict |
+|-------|---------|
+| **{{evidence_score}}** | **{{evidence_verdict}}** |
+
+---
+
+<!-- story_quality_gate -->
+
+## 🎯 Ruthless Story Validation {{epic_num}}.{{story_num}}
+
+### INVEST Criteria Assessment
+
+| Criterion | Status | Severity | Details |
+|-----------|--------|----------|---------|
+| **I**ndependent | {{invest_i_status}} | {{invest_i_severity}}/10 | {{invest_i_details}} |
+| **N**egotiable | {{invest_n_status}} | {{invest_n_severity}}/10 | {{invest_n_details}} |
+| **V**aluable | {{invest_v_status}} | {{invest_v_severity}}/10 | {{invest_v_details}} |
+| **E**stimable | {{invest_e_status}} | {{invest_e_severity}}/10 | {{invest_e_details}} |
+| **S**mall | {{invest_s_status}} | {{invest_s_severity}}/10 | {{invest_s_details}} |
+| **T**estable | {{invest_t_status}} | {{invest_t_severity}}/10 | {{invest_t_details}} |
+
+### INVEST Violations
+
+{{#each invest_violations}}
+- **[{{severity}}/10] {{criterion}}:** {{description}}
+{{/each}}
+
+{{#if no_invest_violations}}
+✅ No significant INVEST violations detected.
+{{/if}}
+
+### Acceptance Criteria Issues
+
+{{#each acceptance_criteria_issues}}
+- **{{issue_type}}:** {{description}}
+  - *Quote:* "{{quote}}"
+  - *Recommendation:* {{recommendation}}
+{{/each}}
+
+{{#if no_acceptance_criteria_issues}}
+✅ Acceptance criteria are well-defined and testable.
+{{/if}}
+
+### Hidden Risks and Dependencies
+
+{{#each hidden_dependencies}}
+- **{{dependency_type}}:** {{description}}
+  - *Impact:* {{impact}}
+  - *Mitigation:* {{mitigation}}
+{{/each}}
+
+{{#if no_hidden_dependencies}}
+✅ No hidden dependencies or blockers identified.
+{{/if}}
+
+### Estimation Reality-Check
+
+**Assessment:** {{estimation_assessment}}
+
+{{estimation_details}}
+
+### Technical Alignment
+
+**Status:** {{technical_alignment_status}}
+
+{{#each technical_alignment_issues}}
+- **{{issue_type}}:** {{description}}
+  - *Architecture Reference:* {{architecture_reference}}
+  - *Recommendation:* {{recommendation}}
+{{/each}}
+
+{{#if no_technical_alignment_issues}}
+✅ Story aligns with architecture.md patterns.
+{{/if}}
+
+### Evidence Score: {{evidence_score}} → {{evidence_verdict}}
+
+---
+
+<!-- critical_issues_section -->
+
+## 🚨 Critical Issues (Must Fix)
+
+These are essential requirements, security concerns, or blocking issues that could cause implementation disasters.
+
+{{#each critical_issues}}
+### {{number}}. {{title}}
+
+**Impact:** {{impact}}
+**Source:** {{source_reference}}
+
+**Problem:**
+{{problem_description}}
+
+**Recommended Fix:**
+{{recommended_fix}}
+
+{{/each}}
+
+{{#if no_critical_issues}}
+✅ No critical issues found - the original story covered essential requirements.
+{{/if}}
+
+---
+
+<!-- enhancements_section -->
+
+## ⚡ Enhancement Opportunities (Should Add)
+
+Additional guidance that would significantly help the developer avoid mistakes.
+
+{{#each enhancements}}
+### {{number}}. {{title}}
+
+**Benefit:** {{benefit}}
+**Source:** {{source_reference}}
+
+**Current Gap:**
+{{gap_description}}
+
+**Suggested Addition:**
+{{suggested_addition}}
+
+{{/each}}
+
+{{#if no_enhancements}}
+✅ No significant enhancement opportunities identified.
+{{/if}}
+
+---
+
+<!-- optimizations_section -->
+
+## ✨ Optimizations (Nice to Have)
+
+Performance hints, development tips, and additional context for complex scenarios.
+
+{{#each optimizations}}
+### {{number}}. {{title}}
+
+**Value:** {{value}}
+
+**Suggestion:**
+{{suggestion}}
+
+{{/each}}
+
+{{#if no_optimizations}}
+✅ No additional optimizations identified.
+{{/if}}
+
+---
+
+<!-- llm_optimizations_section -->
+
+## 🤖 LLM Optimization Improvements
+
+Token efficiency and clarity improvements for better dev agent processing.
+
+{{#each llm_optimizations}}
+### {{number}}. {{title}}
+
+**Issue:** {{issue_type}}
+**Token Impact:** {{token_impact}}
+
+**Current:**
+```
+{{current_text}}
+```
+
+**Optimized:**
+```
+{{optimized_text}}
+```
+
+**Rationale:** {{rationale}}
+
+{{/each}}
+
+{{#if no_llm_optimizations}}
+✅ Story content is well-optimized for LLM processing.
+{{/if}}
+
+---
+
+<!-- changes_applied_section -->
+
+## 📝 Changes Applied
+
+{{#if changes_applied}}
+The following improvements were applied to the story file:
+
+{{#each applied_changes}}
+- ✅ **{{category}}:** {{title}}
+{{/each}}
+
+**Total Changes:** {{changes_applied_count}}
+
+**Updated Sections:**
+{{#each updated_sections}}
+- {{section_name}}
+{{/each}}
+{{/if}}
+
+{{#if no_changes_applied}}
+No changes were applied to the story file. This report serves as documentation only.
+{{/if}}
+
+---
+
+<!-- competition_results -->
+
+## 🏆 Competition Results
+
+### Quality Metrics
+
+| Metric | Score |
+|--------|-------|
+| Requirements Coverage | {{requirements_coverage}}% |
+| Architecture Alignment | {{architecture_alignment}}% |
+| Previous Story Integration | {{previous_story_integration}}% |
+| LLM Optimization Score | {{llm_optimization_score}}% |
+| **Overall Quality Score** | **{{overall_quality_score}}%** |
+
+### Disaster Prevention Assessment
+
+{{#each disaster_categories}}
+- **{{category}}:** {{status}} {{details}}
+{{/each}}
+
+### Competition Outcome
+
+{{#if validator_won}}
+🏆 **Validator identified {{total_issues}} improvements** that enhance the story context.
+{{/if}}
+
+{{#if original_won}}
+✅ **Original create-story produced high-quality output** with minimal gaps identified.
+{{/if}}
+
+---
+
+**Report Generated:** {{date}}
+**Validation Engine:** BMAD Method Quality Competition v1.0
+
+]]></output-template>
+</compiled-workflow>
