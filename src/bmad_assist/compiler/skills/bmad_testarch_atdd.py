@@ -1,11 +1,10 @@
 """Skill-layout compiler for the ``bmad-testarch-atdd`` workflow.
 
-Phase 3.2-B consumer of
-:class:`bmad_assist.compiler.skills._base.SkillLayoutCompilerBase`.
-Same shape as :class:`bmad_assist.compiler.skills.bmad_code_review`:
-the base class handles the compile pipeline (find/parse/resolve/
-substitute/transform/validate/cache/delegate-to-legacy); this module
-only encodes the workflow-specific contract.
+Phase 7.2 inlines the workhorse compile logic via
+:class:`bmad_assist.compiler.skills._testarch_base.TestarchSkillCompilerBase`.
+The shared tri-modal pipeline lives on the base class; this module
+only encodes the workflow-specific contract: story_num requirement,
+``test_dir`` variable, and ``test-design-epic`` context augmentation.
 
 bmad-testarch-atdd uses BMAD v6.4+ step-file architecture (no inline
 ``<workflow>`` envelope; step files live under ``steps-c/``,
@@ -16,91 +15,112 @@ cycle.
 The ``apply_llm_transforms`` import is preserved at module top-level so
 tests can monkeypatch
 ``bmad_assist.compiler.skills.bmad_testarch_atdd.apply_llm_transforms``
-to stub LLM calls — the same convention used by every other skill
-compiler.
+to stub LLM calls.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 # Re-exported so tests/conftest can patch this module attribute. The
 # base class resolves it dynamically per call (see _base.py docstring).
 from bmad_assist.compiler.patching import apply_llm_transforms  # noqa: F401
-from bmad_assist.compiler.skills._base import SkillLayoutCompilerBase
-from bmad_assist.compiler.types import CompilerContext
-from bmad_assist.compiler.workflows.testarch_atdd import TestarchAtddCompiler
+from bmad_assist.compiler.shared_utils import safe_read_file
+from bmad_assist.compiler.skills._testarch_base import TestarchSkillCompilerBase
+from bmad_assist.compiler.types import CompilerContext, WorkflowIR
 from bmad_assist.core.exceptions import CompilerError
 
 logger = logging.getLogger(__name__)
 
 
-# Stable skill id used by all references (config, file paths, dispatch
-# keys). Mirrors ``bmad-code-review`` for consistency.
 SKILL_ID = "bmad-testarch-atdd"
 
 
-class BmadTestarchAtddCompiler(SkillLayoutCompilerBase):
+class BmadTestarchAtddCompiler(TestarchSkillCompilerBase):
     """:class:`WorkflowCompiler` for the v6.4+ ``bmad-testarch-atdd`` skill."""
 
     skill_id = SKILL_ID
     legacy_workflow_name = "testarch-atdd"
-    legacy_compiler_class = TestarchAtddCompiler
+    # Phase 7.2: inlined — no legacy compiler delegation.
+    legacy_compiler_class = None
 
-    def build_extra_vars(
-        self,
-        context: CompilerContext,
-        customization: dict[str, Any],
-    ) -> dict[str, str]:
-        """No workflow-specific extras for testarch-atdd.
-
-        The legacy compiler resolves ``{epic_num}`` / ``{story_num}`` /
-        ``{story_id}`` / ``{story_file}`` / ``{test_dir}`` / ``{date}``
-        downstream during its own ``compile()`` call. The SKILL.md
-        body references runtime tokens (``{user_name}``,
-        ``{communication_language}``, ``{workflow.*}`` blocks,
-        ``{skill-root}`` / ``{skill-name}`` / ``{project-root}``) that
-        the variable engine resolves before the LLM transform layer.
-        Nothing requires compile-time injection from the skill compiler.
-        """
-        return {}
+    def get_variables(self) -> dict[str, Any]:
+        """Return ATDD-specific variables (adds ``test_dir``)."""
+        base_vars = super().get_variables()
+        base_vars["test_dir"] = None  # From workflow.yaml variables
+        return base_vars
 
     def validate_context(self, context: CompilerContext) -> None:
-        """Apply the legacy compiler's contract + skill-source check.
+        """Apply the shared TEA contract + story-level requirement.
 
-        The legacy ``TestarchAtddCompiler.validate_context`` already
-        checks for ``epic_num``, ``story_num`` (ATDD is a story-level
-        workflow), and the workflow directory's existence. We add the
-        skill-source check on top so a missing SKILL.md fails early
-        with a skill-layout-specific message.
+        ATDD is a story-level workflow, so ``story_num`` is required in
+        addition to the base ``epic_num`` requirement.
         """
-        if context.project_root is None:
-            raise CompilerError("project_root is required in context")
-        if context.output_folder is None:
-            raise CompilerError("output_folder is required in context")
+        super().validate_context(context)
 
-        epic_num = context.resolved_variables.get("epic_num")
         story_num = context.resolved_variables.get("story_num")
-        if epic_num is None:
-            raise CompilerError(
-                "epic_num is required for testarch-atdd compilation.\n"
-                "  Suggestion: Provide epic_num via invocation params"
-            )
         if story_num is None:
             raise CompilerError(
                 "story_num is required for testarch-atdd compilation.\n"
                 "  Suggestion: Provide story_num via invocation params"
             )
 
-        skill_md = self._locate_skill_md(context)
-        if not skill_md.is_file():  # pragma: no cover — _locate_skill_md raises first
-            raise CompilerError(
-                f"SKILL.md not found: {skill_md}\n"
-                f"  Why it's needed: Source for the bmad-testarch-atdd skill\n"
-                f"  How to fix: Install BMAD v6.4+ in the project, or rely on "
-                f"the bmad-assist bundled fallback"
-            )
+    def _get_workflow_specific_variables(
+        self,
+        resolved: dict[str, Any],
+        context: CompilerContext,
+        workflow_ir: WorkflowIR,
+    ) -> None:
+        """Resolve ``test_dir`` from workflow.yaml variables."""
+        workflow_vars = workflow_ir.raw_config.get("variables", {})
+        test_dir = workflow_vars.get("test_dir", "{project-root}/tests")
+        test_dir = test_dir.replace("{project-root}", str(context.project_root))
+        resolved["test_dir"] = test_dir
+
+    def _build_context_files(
+        self,
+        context: CompilerContext,
+        resolved: dict[str, Any],
+    ) -> dict[str, str]:
+        """Add test-design-epic file to base context for P0/P1/P2 priorities."""
+        files = super()._build_context_files(context, resolved)
+
+        epic_num = resolved.get("epic_num")
+        if epic_num:
+            test_design_pattern = f"*test-design-epic*{epic_num}*.md"
+            test_design_path = self._find_test_design_file(context, test_design_pattern)
+            if test_design_path:
+                content = safe_read_file(test_design_path, context.project_root)
+                if content:
+                    files[str(test_design_path)] = content
+                    logger.debug("Embedded test-design-epic: %s", test_design_path)
+
+        return files
+
+    def _find_test_design_file(
+        self,
+        context: CompilerContext,
+        pattern: str,
+    ) -> Path | None:
+        """Find test-design file in output folder.
+
+        Searches ``implementation-artifacts/`` first, then
+        ``planning-artifacts/``, then the output folder root.
+        """
+        output_folder = context.output_folder
+        if not output_folder or not output_folder.exists():
+            return None
+
+        for subdir in ["implementation-artifacts", "planning-artifacts", ""]:
+            search_dir = output_folder / subdir if subdir else output_folder
+            if search_dir.exists():
+                matches = sorted(search_dir.glob(pattern))
+                if matches:
+                    return matches[0]
+
+        return None
 
 
 __all__ = ["SKILL_ID", "BmadTestarchAtddCompiler", "apply_llm_transforms"]
