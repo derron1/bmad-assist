@@ -11,7 +11,6 @@ Public API:
 """
 
 import logging
-import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -290,23 +289,26 @@ def _find_workflow_files(
     workflow: str,
     project_root: Path,
 ) -> tuple[Path, Path]:
-    """Find workflow.yaml and instructions file for a workflow.
+    """Find ``workflow.yaml`` and the instructions file for a workflow.
 
-    Phase 4: consults :func:`discover_workflow_source` first so the
-    layout-aware probe ordering (new-layout skills → legacy ``_bmad/...``
-    → bundled) is shared with the rest of the compiler. Falls back to
-    the legacy ``_bmad/...`` and ``~/.bmad/...`` walks for the cases
-    where the unified discovery doesn't find a usable
-    ``workflow.yaml`` (e.g. discovered hit was a v6.4+ skill that
-    doesn't ship ``workflow.yaml``).
+    Probe order (Phase 6 simplification — the bundled workflow source
+    fallback was removed when ``src/bmad_assist/workflows/<name>/`` was
+    deleted):
+
+    1. Project ``_bmad/...`` install (via the layout-aware discovery
+       helper).
+    2. Project ``_bmad/...`` install via the explicit search-path table
+       (covers locations the discovery helper doesn't probe).
+    3. Global ``~/.bmad/...`` install (legacy convention).
 
     Args:
         workflow: Workflow name (e.g., 'create-story').
         project_root: Project root directory.
 
     Returns:
-        Tuple of (workflow_yaml_path, instructions_path).
-        Instructions path may be .xml or .md depending on what exists.
+        Tuple of ``(workflow_yaml_path, instructions_path)``.
+        Instructions path may be ``.xml`` or ``.md`` depending on what
+        exists on disk.
 
     Raises:
         PatchError: If workflow files not found.
@@ -314,20 +316,19 @@ def _find_workflow_files(
     """
     from bmad_assist.compiler.workflow_discovery import discover_workflow_source
 
-    # Phase 4: prefer the unified, layout-aware discovery API. The
-    # legacy patching pipeline always wants a workflow.yaml on disk, so
-    # we explicitly request layout="old" to avoid being routed to a
-    # v6.4+ skill directory (which lacks workflow.yaml).
-    source = discover_workflow_source(workflow, project_root, layout="old")
-    if source is not None:
+    # 1. Layout-aware discovery — the helper hits the project override
+    # and v6.4+ skill mirror first; we only consume the "old" hit here
+    # because compile_patch needs ``workflow.yaml`` + ``instructions.xml``
+    # which the v6.4+ skill bundle doesn't ship.
+    source = discover_workflow_source(workflow, project_root)
+    if source is not None and source.layout in ("old", "override"):
         workflow_yaml = source.path / "workflow.yaml"
         if workflow_yaml.exists():
             instructions = _select_instructions(source.path)
             if instructions is not None:
                 return workflow_yaml, instructions
 
-    # Use mapping for testarch workflows (testarch-ci -> ci)
-    # Try both the mapped name and the full prefixed name
+    # 2. Explicit ``_bmad/...`` search paths.
     bmad_dir_name = _WORKFLOW_TO_BMAD_DIR.get(workflow, workflow)
     candidates = [bmad_dir_name]
     if bmad_dir_name != workflow:
@@ -343,7 +344,7 @@ def _find_workflow_files(
             if instructions is not None:
                 return workflow_yaml, instructions
 
-    # Not found in project - try global ~/.bmad/
+    # 3. Global ``~/.bmad/...`` install.
     for location in _WORKFLOW_LOCATIONS:
         for candidate_name in candidates:
             workflow_dir = Path.home() / location / candidate_name
@@ -354,21 +355,12 @@ def _find_workflow_files(
             if instructions is not None:
                 return workflow_yaml, instructions
 
-    # Not found in project or global - try bundled workflows
-    from bmad_assist.workflows import get_bundled_workflow_dir
-
-    bundled_dir = get_bundled_workflow_dir(workflow)
-    if bundled_dir is not None:
-        workflow_yaml = bundled_dir / "workflow.yaml"
-        if workflow_yaml.exists():
-            instructions = _select_instructions(bundled_dir)
-            if instructions is not None:
-                return workflow_yaml, instructions
-
     raise PatchError(
         f"Workflow not found: {workflow}\n"
         f"  Searched in: {project_root}/_bmad/**/workflows/{bmad_dir_name}/\n"
-        f"  Suggestion: Ensure BMAD is installed in the project or use bundled workflows"
+        f"  Suggestion: install BMAD in the project's _bmad/ tree, or "
+        f"author a workflow.yaml + instructions.xml under the project's "
+        f".bmad-assist/workflows/{workflow}/ override."
     )
 
 
@@ -620,80 +612,20 @@ def ensure_template_compiled(
         raise CompilerError(str(e)) from e
 
     # Step 2b: Compute current hashes for validation
-    current_patch_hash = compute_file_hash(patch_path)
     current_defaults_hash = compute_defaults_hash(patch_path, workflow)
 
-    # Step 2c: Check bundled cache (before local cache)
-    # If user has default (unmodified) patches, bundled template wins
-    from bmad_assist.workflows import get_bundled_cache
-
-    bundled = get_bundled_cache(workflow)
-    if bundled is not None:
-        tpl_content, meta_content = bundled
-        try:
-            import yaml
-
-            bundled_meta = yaml.safe_load(meta_content)
-            bundled_patch_hash = bundled_meta.get("patch_hash")
-
-            if current_patch_hash == bundled_patch_hash:
-                # Patch matches bundled - validate source hashes against DISCOVERED sources
-                bundled_source_hashes = bundled_meta.get("source_hashes", {})
-                sources_valid = True
-                for name, path in source_files.items():
-                    if not path.exists():
-                        sources_valid = False
-                        break
-                    if compute_file_hash(path) != bundled_source_hashes.get(name):
-                        sources_valid = False
-                        break
-
-                # Validate defaults_hash (both must be non-None to compare)
-                bundled_defaults_hash = bundled_meta.get("defaults_hash")
-                if (
-                    bundled_defaults_hash is not None
-                    and current_defaults_hash is not None
-                    and bundled_defaults_hash != current_defaults_hash
-                ):
-                    sources_valid = False
-
-                if sources_valid:
-                    # Write bundled content to local cache (one-time copy)
-                    # Use atomic writes (temp + rename) for crash resilience
-                    local_cache_path = cache.get_cache_path(workflow, project_root)
-                    local_cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    tmp_tpl = local_cache_path.with_suffix(".tmp")
-                    tmp_tpl.write_text(tpl_content, encoding="utf-8")
-                    os.rename(tmp_tpl, local_cache_path)
-                    # Also write meta atomically
-                    meta_path = local_cache_path.with_suffix(
-                        local_cache_path.suffix + ".meta.yaml"
-                    )
-                    tmp_meta = meta_path.with_suffix(".tmp")
-                    tmp_meta.write_text(meta_content, encoding="utf-8")
-                    os.rename(tmp_meta, meta_path)
-                    logger.info("Using bundled cache for %s (copied to %s)", workflow, local_cache_path)
-                    return local_cache_path
-                else:
-                    logger.debug(
-                        "Bundled cache for %s has stale source hashes, skipping",
-                        workflow,
-                    )
-            else:
-                logger.debug(
-                    "Patch hash mismatch for %s (custom patch), skipping bundled cache",
-                    workflow,
-                )
-        except Exception:
-            logger.warning(
-                "Bundled cache meta corrupted for %s, skipping", workflow
-            )
+    # Phase 6: bundled-cache shortcut removed alongside the bundled
+    # workflow source tree. Skill-layout compilers manage their own
+    # bundled-template fallback via
+    # :meth:`bmad_assist.compiler.skills._base.SkillLayoutCompilerBase._get_bundled_cache_path`.
 
     # Step 3: Check local cache locations in priority order
     # Project cache
     if cache.is_valid(
-        workflow, project_root,
-        source_files=source_files, patch_path=patch_path,
+        workflow,
+        project_root,
+        source_files=source_files,
+        patch_path=patch_path,
         defaults_hash=current_defaults_hash,
     ):
         cache_path = cache.get_cache_path(workflow, project_root)
@@ -705,8 +637,10 @@ def ensure_template_compiled(
         cwd is not None
         and cwd.resolve() != project_root.resolve()
         and cache.is_valid(
-            workflow, cwd,
-            source_files=source_files, patch_path=patch_path,
+            workflow,
+            cwd,
+            source_files=source_files,
+            patch_path=patch_path,
             defaults_hash=current_defaults_hash,
         )
     ):
@@ -716,8 +650,10 @@ def ensure_template_compiled(
 
     # Global cache
     if cache.is_valid(
-        workflow, None,
-        source_files=source_files, patch_path=patch_path,
+        workflow,
+        None,
+        source_files=source_files,
+        patch_path=patch_path,
         defaults_hash=current_defaults_hash,
     ):
         cache_path = cache.get_cache_path(workflow, None)
@@ -778,7 +714,10 @@ def load_workflow_ir(
 
     if cache_path is not None:
         result = _try_load_from_cache(
-            cache_path, workflow, project_root, workflow_dir,
+            cache_path,
+            workflow,
+            project_root,
+            workflow_dir,
         )
         if result is not None:
             return result
@@ -838,8 +777,7 @@ def _try_load_from_cache(
         cached_content = cache_path.read_text(encoding="utf-8")
     except OSError as e:
         logger.warning(
-            "Failed to read cached template %s: %s. "
-            "Falling back to original files.",
+            "Failed to read cached template %s: %s. Falling back to original files.",
             cache_path,
             e,
         )
@@ -868,8 +806,7 @@ def _try_load_from_cache(
 
         if not yaml_match or not instructions_match:
             logger.warning(
-                "Cached template for %s missing required sections, "
-                "falling back to original files",
+                "Cached template for %s missing required sections, falling back to original files",
                 workflow,
             )
             return None
@@ -903,9 +840,7 @@ def _try_load_from_cache(
             )
             try:
                 cache_path.unlink(missing_ok=True)
-                meta_path = cache_path.with_suffix(
-                    cache_path.suffix + ".meta.yaml"
-                )
+                meta_path = cache_path.with_suffix(cache_path.suffix + ".meta.yaml")
                 meta_path.unlink(missing_ok=True)
             except OSError:
                 pass  # Best effort cleanup
@@ -928,8 +863,7 @@ def _try_load_from_cache(
 
     except Exception as e:
         logger.warning(
-            "Failed to parse cached template for %s: %s. "
-            "Falling back to original files.",
+            "Failed to parse cached template for %s: %s. Falling back to original files.",
             workflow,
             e,
         )

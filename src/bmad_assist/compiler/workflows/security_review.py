@@ -25,7 +25,7 @@ from bmad_assist.compiler.source_context import (
     get_git_diff_files,
 )
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext
-from bmad_assist.compiler.workflow_discovery import discover_workflow_dir
+from bmad_assist.compiler.workflows import resolve_legacy_workflow_dir
 from bmad_assist.compiler.workflows.code_review import _capture_git_diff
 from bmad_assist.core.exceptions import CompilerError
 from bmad_assist.security.patterns import load_security_patterns
@@ -53,15 +53,19 @@ class SecurityReviewCompiler:
         return "security-review"
 
     def get_workflow_dir(self, context: CompilerContext) -> Path:
-        """Return the workflow directory for security-review.
+        """Return a real on-disk directory for legacy bookkeeping.
 
-        Uses discover_workflow_dir which checks CUSTOM_WORKFLOWS → bundled.
+        Phase 6 removed the bundled ``workflows/security-review/`` tree;
+        the skill-layout compiler injects the IR before invoking
+        ``compile()``. The path returned here is only used for
+        existence checks and debug logging — it points at the
+        ``bmad-security-review`` skill bundle (which always exists in
+        a healthy install).
         """
-        workflow_dir = discover_workflow_dir("security-review", context.project_root)
+        workflow_dir = resolve_legacy_workflow_dir("security-review", context.project_root)
         if workflow_dir is None:
             raise CompilerError(
-                "Security review workflow directory not found.\n"
-                "  Reinstall: pip install -e ."
+                "Security review skill directory not found.\n  Reinstall: pip install -e ."
             )
         return workflow_dir
 
@@ -82,9 +86,7 @@ class SecurityReviewCompiler:
     def validate_context(self, context: CompilerContext) -> None:
         """Validate context before compilation."""
         if not context.project_root or not context.project_root.is_dir():
-            raise CompilerError(
-                "project_root must be a valid directory for security review"
-            )
+            raise CompilerError("project_root must be a valid directory for security review")
 
     def compile(self, context: CompilerContext) -> CompiledWorkflow:
         """Compile security-review workflow.
@@ -126,11 +128,15 @@ class SecurityReviewCompiler:
         patterns = load_security_patterns(languages, available_pattern_budget)
 
         # Format patterns as YAML for embedding
-        patterns_yaml = yaml.dump(
-            {"patterns": patterns},
-            default_flow_style=False,
-            allow_unicode=True,
-        ) if patterns else "# No patterns loaded"
+        patterns_yaml = (
+            yaml.dump(
+                {"patterns": patterns},
+                default_flow_style=False,
+                allow_unicode=True,
+            )
+            if patterns
+            else "# No patterns loaded"
+        )
 
         # Step 5: Build context files dict
         context_files: dict[str, str] = {}

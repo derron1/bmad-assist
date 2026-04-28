@@ -49,9 +49,7 @@ def _seed_project_artifacts(project_root: Path) -> Path:
     """Populate the tmp project with the docs the compiler expects."""
     docs = project_root / "docs"
     docs.mkdir()
-    (docs / "project_context.md").write_text(
-        "# Project Context\n\nMinimal context for tests.\n"
-    )
+    (docs / "project_context.md").write_text("# Project Context\n\nMinimal context for tests.\n")
     (docs / "prd.md").write_text("# PRD\n\nProject requirements.\n")
     (docs / "architecture.md").write_text("# Architecture\n\nLayered.\n")
     epics_dir = docs / "epics"
@@ -96,9 +94,7 @@ def _make_context(project_root: Path) -> CompilerContext:
 class TestSkillLayoutCompileE2E:
     """End-to-end compile through the Phase 2 path."""
 
-    def test_compile_returns_well_shaped_compiled_workflow(
-        self, project_root: Path
-    ) -> None:
+    def test_compile_returns_well_shaped_compiled_workflow(self, project_root: Path) -> None:
         """``compile_workflow`` returns a non-empty, well-shaped result."""
         result = compile_workflow(
             "bmad-create-story",
@@ -122,32 +118,25 @@ class TestSkillLayoutCompileE2E:
         # the bare SKILL.md still mentions in its early steps.
         assert "<action>Update {{sprint_status}}</action>" not in body
 
-    def test_skill_layout_old_routes_through_legacy_path(
+    def test_skill_layout_old_routes_through_skill_layout_after_phase6(
         self, project_root: Path
     ) -> None:
-        """``skill_layout="old"`` must NOT pick the new compiler.
+        """Phase 6: ``skill_layout="old"`` is a no-op; routing always goes new."""
+        import warnings
 
-        The legacy compiler will fall back to bundled workflow files
-        (since this fixture project has no _bmad/bmm/workflows/...);
-        what we assert here is just that the compiler instance is the
-        legacy one, not the skill-layout one. We check via the
-        compiler's class location.
-        """
         from bmad_assist.compiler.core import get_workflow_compiler
 
-        compiler = get_workflow_compiler(
-            "create-story", skill_layout="old", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith(
-            "bmad_assist.compiler.workflows."
-        ), (
-            "skill_layout='old' must use the legacy compiler module, got "
-            f"{type(compiler).__module__}"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            compiler = get_workflow_compiler(
+                "create-story", skill_layout="old", project_root=project_root
+            )
+        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills."), (
+            "Phase 6 routes every workflow through the skill-layout "
+            f"compiler, got {type(compiler).__module__}"
         )
 
-    def test_skill_layout_new_routes_through_new_path(
-        self, project_root: Path
-    ) -> None:
+    def test_skill_layout_new_routes_through_new_path(self, project_root: Path) -> None:
         """``skill_layout="new"`` picks the skill-layout compiler."""
         from bmad_assist.compiler.core import get_workflow_compiler
 
@@ -156,9 +145,7 @@ class TestSkillLayoutCompileE2E:
             skill_layout="new",
             project_root=project_root,
         )
-        assert type(compiler).__module__.startswith(
-            "bmad_assist.compiler.skills."
-        )
+        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
 
     def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
         self, project_root: Path
@@ -169,9 +156,7 @@ class TestSkillLayoutCompileE2E:
         compiler = get_workflow_compiler(
             "create-story", skill_layout="new", project_root=project_root
         )
-        assert type(compiler).__module__.startswith(
-            "bmad_assist.compiler.skills."
-        )
+        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
 
 
 # --------------------------------------------------------------------------- #
@@ -204,9 +189,7 @@ class TestSkillLayoutCacheLifecycle:
         assert cache_path.is_file(), f"expected cache at {cache_path}"
         assert meta_path.is_file(), f"expected cache meta at {meta_path}"
 
-    def test_cache_invalidates_when_customize_toml_changes(
-        self, project_root: Path
-    ) -> None:
+    def test_cache_invalidates_when_customize_toml_changes(self, project_root: Path) -> None:
         """Mutating ``customize.toml`` rewrites the cache meta."""
         cache_path, meta_path = self._cache_paths(project_root)
 
@@ -220,12 +203,9 @@ class TestSkillLayoutCacheLifecycle:
 
         # Mutate customize.toml — anything observable that changes its
         # SHA suffices.
-        customize = (
-            project_root / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
-        )
+        customize = project_root / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
         customize.write_text(
-            customize.read_text(encoding="utf-8")
-            + '\n# tweak to invalidate cache\n',
+            customize.read_text(encoding="utf-8") + "\n# tweak to invalidate cache\n",
             encoding="utf-8",
         )
 
@@ -236,13 +216,10 @@ class TestSkillLayoutCacheLifecycle:
         )
         new_meta = meta_path.read_text(encoding="utf-8")
         assert new_meta != original_meta, (
-            "mutating customize.toml must invalidate the cache and "
-            "produce a new meta file"
+            "mutating customize.toml must invalidate the cache and produce a new meta file"
         )
 
-    def test_cache_invalidates_when_skill_md_changes(
-        self, project_root: Path
-    ) -> None:
+    def test_cache_invalidates_when_skill_md_changes(self, project_root: Path) -> None:
         """Mutating ``SKILL.md`` rewrites the cache meta."""
         cache_path, meta_path = self._cache_paths(project_root)
 
@@ -253,9 +230,7 @@ class TestSkillLayoutCacheLifecycle:
         )
         original_meta = meta_path.read_text(encoding="utf-8")
 
-        skill_md = (
-            project_root / ".claude" / "skills" / "bmad-create-story" / "SKILL.md"
-        )
+        skill_md = project_root / ".claude" / "skills" / "bmad-create-story" / "SKILL.md"
         skill_md.write_text(
             skill_md.read_text(encoding="utf-8") + "\n<!-- mutation -->\n",
             encoding="utf-8",
@@ -269,9 +244,7 @@ class TestSkillLayoutCacheLifecycle:
         new_meta = meta_path.read_text(encoding="utf-8")
         assert new_meta != original_meta
 
-    def test_cache_meta_records_skill_layout_mode_and_hashes(
-        self, project_root: Path
-    ) -> None:
+    def test_cache_meta_records_skill_layout_mode_and_hashes(self, project_root: Path) -> None:
         """Cache meta records the layout mode + content hashes."""
         import yaml
 
@@ -374,12 +347,11 @@ class TestSkillLayoutLLMTransforms:
             transformed = (
                 "<workflow>\n"
                 "<critical>SCOPE LIMITATION: do nothing else.</critical>\n"
-                "<step n=\"1\" goal=\"Mock\">noop</step>\n"
+                '<step n="1" goal="Mock">noop</step>\n'
                 "</workflow>"
             )
             results = [
-                TransformResult(success=True, transform_index=i)
-                for i in range(len(transforms))
+                TransformResult(success=True, transform_index=i) for i in range(len(transforms))
             ]
             return transformed, results
 
@@ -481,12 +453,11 @@ class TestSkillLayoutLLMTransforms:
             transformed = (
                 "<workflow>\n"
                 "<critical>SCOPE LIMITATION: stay focused.</critical>\n"
-                "<step n=\"1\" goal=\"Mock\">noop</step>\n"
+                '<step n="1" goal="Mock">noop</step>\n'
                 "</workflow>"
             )
             return transformed, [
-                TransformResult(success=True, transform_index=i)
-                for i in range(len(transforms))
+                TransformResult(success=True, transform_index=i) for i in range(len(transforms))
             ]
 
         monkeypatch.setattr(skill_mod, "apply_llm_transforms", fake_apply)
@@ -522,8 +493,7 @@ class TestSkillLayoutLLMTransforms:
             # markers, so the patch's must_contain rules will fail.
             transformed = "<workflow>\n<no-steps/>\n</workflow>"
             return transformed, [
-                TransformResult(success=True, transform_index=i)
-                for i in range(len(transforms))
+                TransformResult(success=True, transform_index=i) for i in range(len(transforms))
             ]
 
         monkeypatch.setattr(skill_mod, "apply_llm_transforms", bad_apply)
@@ -554,12 +524,11 @@ class TestSkillLayoutLLMTransforms:
             transformed = (
                 "<workflow>\n"
                 "<critical>SCOPE LIMITATION</critical>\n"
-                "<step n=\"1\">unclosed</stp>\n"
+                '<step n="1">unclosed</stp>\n'
                 "</workflow>"
             )
             return transformed, [
-                TransformResult(success=True, transform_index=i)
-                for i in range(len(transforms))
+                TransformResult(success=True, transform_index=i) for i in range(len(transforms))
             ]
 
         monkeypatch.setattr(skill_mod, "apply_llm_transforms", malformed_apply)

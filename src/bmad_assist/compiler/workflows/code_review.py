@@ -467,11 +467,11 @@ class CodeReviewCompiler:
 
         """
         from bmad_assist.compiler.workflow_discovery import (
-            discover_workflow_dir,
             get_workflow_not_found_message,
         )
+        from bmad_assist.compiler.workflows import resolve_legacy_workflow_dir
 
-        workflow_dir = discover_workflow_dir(self.workflow_name, context.project_root)
+        workflow_dir = resolve_legacy_workflow_dir(self.workflow_name, context.project_root)
         if workflow_dir is None:
             raise CompilerError(
                 get_workflow_not_found_message(self.workflow_name, context.project_root)

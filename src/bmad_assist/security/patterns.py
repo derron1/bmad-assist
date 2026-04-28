@@ -25,26 +25,31 @@ TIER_LOW = 3
 
 
 def get_pattern_dir() -> Path:
-    """Resolve bundled workflow pattern directory.
+    """Resolve bundled security-review pattern directory.
 
     Returns:
-        Path to the patterns/ directory within the bundled security-review workflow.
+        Path to the ``patterns/`` directory inside the bundled
+        ``bmad-security-review`` skill.
 
     Raises:
-        FileNotFoundError: If bundled pattern directory not found.
+        FileNotFoundError: If the bundled pattern directory cannot be
+            located (typically a broken install).
 
     """
-    # Navigate through parent package (hyphen in directory name prevents direct import)
+    # Phase 6: patterns ship under the bmad-security-review skill bundle
+    # (the legacy workflows/security-review/ tree was removed when the
+    # v6.4+ skill layout became the only routing path).
     try:
-        pkg = importlib.resources.files("bmad_assist.workflows")
-        patterns_dir = Path(str(pkg)) / "security-review" / "patterns"
+        pkg = importlib.resources.files("bmad_assist.skills")
+        patterns_dir = Path(str(pkg)) / "bmad-security-review" / "patterns"
         if patterns_dir.is_dir():
             return patterns_dir
     except (ModuleNotFoundError, TypeError):
         pass
 
-    # Fallback: resolve relative to this file
-    fallback = Path(__file__).parent.parent / "workflows" / "security-review" / "patterns"
+    # Fallback: resolve relative to this file (development checkouts where
+    # importlib.resources cannot resolve the package directory).
+    fallback = Path(__file__).parent.parent / "skills" / "bmad-security-review" / "patterns"
     if fallback.is_dir():
         return fallback
 

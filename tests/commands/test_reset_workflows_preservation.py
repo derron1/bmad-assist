@@ -85,12 +85,8 @@ def test_reset_skills_force_overwrites_customize_toml(tmp_path: Path) -> None:
 def test_ensure_project_setup_preserves_customize_by_default(tmp_path: Path) -> None:
     """ensure_project_setup(force=True) preserves customize.toml by default."""
     # Bootstrap baseline.
-    ensure_project_setup(
-        tmp_path, console=_quiet(), skill_layout="new"
-    )
-    customize = (
-        tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
-    )
+    ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
+    customize = tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
     user_marker = "# USER OVERRIDE\n"
     customize.write_text(user_marker, encoding="utf-8")
 
@@ -106,12 +102,8 @@ def test_ensure_project_setup_preserves_customize_by_default(tmp_path: Path) -> 
 
 def test_ensure_project_setup_destructive_reset(tmp_path: Path) -> None:
     """preserve_customizations=False overwrites customize.toml."""
-    ensure_project_setup(
-        tmp_path, console=_quiet(), skill_layout="new"
-    )
-    customize = (
-        tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
-    )
+    ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
+    customize = tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
     customize.write_text("# USER OVERRIDE\n", encoding="utf-8")
 
     ensure_project_setup(
@@ -127,28 +119,20 @@ def test_ensure_project_setup_destructive_reset(tmp_path: Path) -> None:
 # --- legacy-layout: --reset-workflows behaviour unchanged --------------------
 
 
-def test_legacy_reset_workflows_unaffected_by_preserve_flag(tmp_path: Path) -> None:
-    """The legacy path's reset behaviour is not gated by preserve_customizations.
-
-    The legacy layout has no per-user customize.toml override surface,
-    so the parameter is simply ignored when ``mode == "existing-old"``.
-    """
-    # Simulate a legacy install.
+def test_legacy_install_still_bootstraps_new_layout(tmp_path: Path) -> None:
+    """Phase 6: a legacy ``_bmad/...`` install no longer suppresses the new-layout bootstrap."""
+    # Simulate a pre-existing legacy install.
     legacy = tmp_path / "_bmad" / "bmm" / "workflows" / "4-implementation" / "create-story"
     legacy.mkdir(parents=True)
     (legacy / "workflow.yaml").write_text("name: create-story\n", encoding="utf-8")
 
-    # Reset on the legacy path — preserve_customizations should be a no-op here.
     result = ensure_project_setup(
         tmp_path,
         console=_quiet(),
-        skill_layout="auto",
         force=True,
         preserve_customizations=True,
     )
 
-    assert result.layout == "old"
-    # Legacy config should have been created on the legacy path.
-    assert (tmp_path / "_bmad" / "bmm" / "config.yaml").is_file()
-    # No new-layout side effects.
-    assert not (tmp_path / ".claude" / "skills" / "bmad-create-story").exists()
+    # Always new layout, regardless of which install style was present.
+    assert result.layout == "new"
+    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()

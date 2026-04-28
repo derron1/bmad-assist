@@ -31,7 +31,7 @@ def mock_config() -> MagicMock:
     config.testarch = MagicMock()
     config.testarch.engagement_model = "auto"  # Allow workflows to run
     config.testarch.test_review_on_code_complete = "auto"
-    
+
     config.providers = MagicMock()
     config.providers.master = MagicMock()
     config.providers.master.provider = "claude"
@@ -125,10 +125,7 @@ class TestModeOff:
     """Test test review skipped when mode=off."""
 
     def test_execute_skips_when_mode_off(
-        self,
-        mock_config: MagicMock,
-        tmp_path: Path,
-        state_story_1_1: State
+        self, mock_config: MagicMock, tmp_path: Path, state_story_1_1: State
     ) -> None:
         """execute() skips with mode=off."""
         from bmad_assist.testarch.handlers import TestReviewHandler
@@ -148,10 +145,7 @@ class TestModeNotConfigured:
     """Test test review skipped when testarch not configured."""
 
     def test_execute_skips_when_not_configured(
-        self,
-        mock_config: MagicMock,
-        tmp_path: Path,
-        state_story_1_1: State
+        self, mock_config: MagicMock, tmp_path: Path, state_story_1_1: State
     ) -> None:
         """execute() skips when testarch is None."""
         from bmad_assist.testarch.handlers import TestReviewHandler
@@ -170,10 +164,7 @@ class TestModeAutoNoATDD:
     """Test test review skipped when mode=auto and no ATDD ran."""
 
     def test_execute_skips_when_auto_no_atdd(
-        self,
-        mock_config: MagicMock,
-        tmp_path: Path,
-        state_no_atdd: State
+        self, mock_config: MagicMock, tmp_path: Path, state_no_atdd: State
     ) -> None:
         """execute() skips when mode=auto and atdd_ran_for_story=False."""
         from bmad_assist.testarch.handlers import TestReviewHandler
@@ -237,12 +228,17 @@ class TestCompilerIntegration:
     """Test testarch-test-review compiler can be loaded."""
 
     def test_compiler_loads_successfully(self) -> None:
-        """testarch-test-review compiler can be loaded."""
+        """testarch-test-review compiler can be loaded.
+
+        Phase 6: dispatch returns the bmad-prefixed skill-layout
+        compiler, so ``workflow_name`` is the canonical skill id
+        (``bmad-testarch-test-review``).
+        """
         from bmad_assist.compiler.core import get_workflow_compiler
 
         compiler = get_workflow_compiler("testarch-test-review")
         assert compiler is not None
-        assert compiler.workflow_name == "testarch-test-review"
+        assert compiler.workflow_name == "bmad-testarch-test-review"
 
     def test_compiler_required_files(self) -> None:
         """Compiler declares required files."""
@@ -289,10 +285,7 @@ class TestModeCheckingLogic:
         assert should_run is True
 
     def test_mode_auto_with_atdd_returns_true(
-        self,
-        mock_config: MagicMock,
-        tmp_path: Path,
-        state_story_1_1: State
+        self, mock_config: MagicMock, tmp_path: Path, state_story_1_1: State
     ) -> None:
         """mode=auto with atdd_ran_for_story=True returns ('auto', True)."""
         from bmad_assist.testarch.handlers import TestReviewHandler
@@ -308,10 +301,7 @@ class TestModeCheckingLogic:
         assert should_run is True
 
     def test_mode_auto_without_atdd_returns_false(
-        self,
-        mock_config: MagicMock,
-        tmp_path: Path,
-        state_no_atdd: State
+        self, mock_config: MagicMock, tmp_path: Path, state_no_atdd: State
     ) -> None:
         """mode=auto with atdd_ran_for_story=False returns ('auto', False)."""
         from bmad_assist.testarch.handlers import TestReviewHandler
@@ -351,7 +341,7 @@ class TestWorkflowInvocation:
     @patch("bmad_assist.compiler.compile_workflow")
     @patch("bmad_assist.providers.get_provider")
     @patch("bmad_assist.testarch.handlers.test_review.get_paths")
-    @patch("bmad_assist.testarch.handlers.base.get_paths") # Patch base too
+    @patch("bmad_assist.testarch.handlers.base.get_paths")  # Patch base too
     def test_execute_invokes_workflow_when_mode_on(
         self,
         mock_base_get_paths: MagicMock,
@@ -378,6 +368,7 @@ class TestWorkflowInvocation:
 
         mock_provider = MagicMock()
         from bmad_assist.providers.base import ProviderResult
+
         mock_provider.invoke.return_value = ProviderResult(
             stdout="Quality Score: 85/100 (A - Good)",
             exit_code=0,
@@ -385,7 +376,7 @@ class TestWorkflowInvocation:
             provider_session_id="sess-123",
             command=("claude",),
             duration_ms=100,
-            stderr=""
+            stderr="",
         )
         mock_get_provider.return_value = mock_provider
 
@@ -402,7 +393,7 @@ class TestWorkflowInvocation:
     @patch("bmad_assist.compiler.compile_workflow")
     @patch("bmad_assist.providers.get_provider")
     @patch("bmad_assist.testarch.handlers.test_review.get_paths")
-    @patch("bmad_assist.testarch.handlers.base.get_paths") # Patch base too
+    @patch("bmad_assist.testarch.handlers.base.get_paths")  # Patch base too
     def test_execute_saves_review_file(
         self,
         mock_base_get_paths: MagicMock,
@@ -428,6 +419,7 @@ class TestWorkflowInvocation:
 
         mock_provider = MagicMock()
         from bmad_assist.providers.base import ProviderResult
+
         mock_provider.invoke.return_value = ProviderResult(
             stdout="# Test Review\n\nQuality Score: 90/100",
             exit_code=0,
@@ -435,7 +427,7 @@ class TestWorkflowInvocation:
             provider_session_id="sess-123",
             command=("claude",),
             duration_ms=100,
-            stderr=""
+            stderr="",
         )
         mock_get_provider.return_value = mock_provider
 

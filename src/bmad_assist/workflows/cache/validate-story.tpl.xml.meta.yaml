@@ -1,6 +1,0 @@
-bmad_version: 6.0.0-alpha.22
-compiled_at: '2026-01-23T00:55:50.174954+00:00'
-patch_hash: 4b7cc9e741da837f94cea0604c51f4d51213522c0d316b5c42be1a1e8ccded2b
-source_hashes:
-  instructions.xml: 7aad69d0ee9e8d9b60c8ec74d0270b69393c7c3308a60590184bf917ff2b7a66
-  workflow.yaml: e333d3dff79dd639ea0692140c30868b438e65df018e034d9d21aa738bbc2f42

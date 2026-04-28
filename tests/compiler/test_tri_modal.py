@@ -535,9 +535,9 @@ class TestModeSelection:
         with pytest.raises(CompilerError) as exc_info:
             validate_workflow_mode(ir, "c")
 
-        assert "macro" in str(exc_info.value).lower() or "not available" in str(
-            exc_info.value
-        ).lower()
+        assert (
+            "macro" in str(exc_info.value).lower() or "not available" in str(exc_info.value).lower()
+        )
 
 
 class TestWorkflowDiscoveryUpdate:
@@ -585,8 +585,8 @@ class TestWorkflowDiscoveryUpdate:
         assert _is_valid_workflow_dir(workflow_dir) is False
 
     def test_standard_workflows_includes_new_tea(self) -> None:
-        """STANDARD_WORKFLOWS includes new TEA workflows."""
-        from bmad_assist.compiler.workflow_discovery import STANDARD_WORKFLOWS
+        """The dispatch registry knows every TEA workflow alias."""
+        from bmad_assist.compiler.workflow_discovery import WORKFLOW_TO_SKILL_ID
 
         expected_tea_workflows = {
             "testarch-atdd",
@@ -600,7 +600,9 @@ class TestWorkflowDiscoveryUpdate:
         }
 
         for workflow in expected_tea_workflows:
-            assert workflow in STANDARD_WORKFLOWS, f"{workflow} not in STANDARD_WORKFLOWS"
+            assert workflow in WORKFLOW_TO_SKILL_ID, (
+                f"{workflow} not registered in WORKFLOW_TO_SKILL_ID"
+            )
 
     def test_workflow_to_bmad_dir_has_new_mappings(self) -> None:
         """WORKFLOW_TO_BMAD_DIR has mappings for new TEA workflows."""

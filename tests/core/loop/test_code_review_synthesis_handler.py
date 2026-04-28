@@ -421,7 +421,9 @@ This is a synthesis of code reviews.
             paths = get_paths()
             # Report filename includes timestamp: synthesis-{epic}-{story}-{timestamp}.md
             synthesis_files = list(paths.code_reviews_dir.glob("synthesis-14-10-*.md"))
-            assert len(synthesis_files) == 1, f"Expected 1 synthesis file, found {len(synthesis_files)}"
+            assert len(synthesis_files) == 1, (
+                f"Expected 1 synthesis file, found {len(synthesis_files)}"
+            )
             report_path = synthesis_files[0]
 
             content = report_path.read_text()
@@ -1097,14 +1099,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-passthrough-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "passthrough-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "passthrough-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             result = compression_handler.render_prompt(compression_state)
@@ -1183,14 +1187,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-step0-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "step0-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "step0-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             compression_handler.render_prompt(compression_state)
@@ -1237,9 +1243,7 @@ class TestCompressionPipelineIntegration:
             patch(
                 "bmad_assist.core.loop.handlers.synthesis_utils.pre_extract_reviews"
             ) as mock_pre_extract,
-            patch(
-                "bmad_assist.providers.registry.get_provider"
-            ) as mock_get_provider,
+            patch("bmad_assist.providers.registry.get_provider") as mock_get_provider,
             patch(
                 "bmad_assist.core.loop.handlers.code_review_synthesis.get_paths"
             ) as mock_get_paths,
@@ -1275,14 +1279,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-step1-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "step1-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "step1-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             compression_handler.render_prompt(compression_state)
@@ -1334,9 +1340,7 @@ class TestCompressionPipelineIntegration:
             patch(
                 "bmad_assist.core.loop.handlers.synthesis_utils.progressive_synthesize"
             ) as mock_progressive,
-            patch(
-                "bmad_assist.providers.registry.get_provider"
-            ) as mock_get_provider,
+            patch("bmad_assist.providers.registry.get_provider") as mock_get_provider,
             patch(
                 "bmad_assist.core.loop.handlers.code_review_synthesis.get_paths"
             ) as mock_get_paths,
@@ -1372,14 +1376,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-skip-step2-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "skip-step2-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "skip-step2-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             compression_handler.render_prompt(compression_state)
@@ -1427,9 +1433,7 @@ class TestCompressionPipelineIntegration:
             patch(
                 "bmad_assist.core.loop.handlers.synthesis_utils.progressive_synthesize"
             ) as mock_progressive,
-            patch(
-                "bmad_assist.providers.registry.get_provider"
-            ) as mock_get_provider,
+            patch("bmad_assist.providers.registry.get_provider") as mock_get_provider,
             patch(
                 "bmad_assist.core.loop.handlers.code_review_synthesis.get_paths"
             ) as mock_get_paths,
@@ -1466,14 +1470,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-step1-step2-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "step1-step2-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "step1-step2-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             compression_handler.render_prompt(compression_state)
@@ -1485,10 +1491,7 @@ class TestCompressionPipelineIntegration:
             # Verify progressive reviews passed to compiler
             compile_call_args = mock_compile.call_args
             compiler_context = compile_call_args[0][1]
-            assert (
-                compiler_context.resolved_variables["anonymized_reviews"]
-                is progressive_reviews
-            )
+            assert compiler_context.resolved_variables["anonymized_reviews"] is progressive_reviews
 
     def test_render_prompt_extraction_failure_fallback(
         self,
@@ -1548,9 +1551,7 @@ class TestCompressionPipelineIntegration:
             patch(
                 "bmad_assist.core.loop.handlers.synthesis_utils.progressive_synthesize"
             ) as mock_progressive,
-            patch(
-                "bmad_assist.providers.registry.get_provider"
-            ) as mock_get_provider,
+            patch("bmad_assist.providers.registry.get_provider") as mock_get_provider,
             patch(
                 "bmad_assist.core.loop.handlers.code_review_synthesis.get_paths"
             ) as mock_get_paths,
@@ -1590,14 +1591,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-fallback-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "fallback-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "fallback-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             result = compression_handler.render_prompt(compression_state)
@@ -1610,9 +1613,7 @@ class TestCompressionPipelineIntegration:
             compiler_context = compile_call_args[0][1]
             reviews_in_context = compiler_context.resolved_variables["anonymized_reviews"]
             # Check that [RAW] prefix is preserved (indicating fallback)
-            assert all(
-                r.validator_id.startswith("[RAW]") for r in reviews_in_context
-            )
+            assert all(r.validator_id.startswith("[RAW]") for r in reviews_in_context)
 
     def test_compression_metrics_stored(
         self,
@@ -1652,9 +1653,7 @@ class TestCompressionPipelineIntegration:
             patch(
                 "bmad_assist.core.loop.handlers.synthesis_utils.pre_extract_reviews"
             ) as mock_pre_extract,
-            patch(
-                "bmad_assist.providers.registry.get_provider"
-            ) as mock_get_provider,
+            patch("bmad_assist.providers.registry.get_provider") as mock_get_provider,
             patch(
                 "bmad_assist.core.loop.handlers.code_review_synthesis.get_paths"
             ) as mock_get_paths,
@@ -1690,14 +1689,16 @@ class TestCompressionPipelineIntegration:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file = cache_dir / "code-reviews-metrics-session.json"
             cache_file.write_text(
-                json.dumps({
-                    "cache_version": 2,
-                    "session_id": "metrics-session",
-                    "timestamp": "2026-02-20T00:00:00Z",
-                    "reviews": [],
-                    "failed_reviewers": [],
-                    "evidence_score": None,
-                })
+                json.dumps(
+                    {
+                        "cache_version": 2,
+                        "session_id": "metrics-session",
+                        "timestamp": "2026-02-20T00:00:00Z",
+                        "reviews": [],
+                        "failed_reviewers": [],
+                        "evidence_score": None,
+                    }
+                )
             )
 
             compression_handler.render_prompt(compression_state)
@@ -1813,52 +1814,49 @@ class TestResolutionMarkerOrdering:
     """
 
     def test_resolution_markers_before_end_marker_in_instructions(self) -> None:
-        """SYNTHESIS_RESOLUTION_START must appear before CODE_REVIEW_SYNTHESIS_END
-        in the installed workflow instructions."""
+        """SYNTHESIS_RESOLUTION_START must appear before the *terminal*
+        CODE_REVIEW_SYNTHESIS_END in the bundled SKILL.md (Phase 6:
+        legacy instructions.xml removed). We compare against the LAST
+        occurrence of the END marker because earlier mentions are just
+        prose describing the contract."""
         from pathlib import Path
 
-        import bmad_assist.workflows
+        import bmad_assist.skills
 
-        workflows_dir = Path(bmad_assist.workflows.__file__).parent
-        instructions_path = (
-            workflows_dir / "code-review-synthesis" / "instructions.xml"
+        skill_md = (
+            Path(bmad_assist.skills.__file__).parent / "bmad-code-review-synthesis" / "SKILL.md"
         )
-        content = instructions_path.read_text()
+        content = skill_md.read_text()
 
-        # Search for the actual marker directives (XML-escaped in the instructions)
         resolution_start_pos = content.find("SYNTHESIS_RESOLUTION_START --")
-        end_marker_pos = content.find("CODE_REVIEW_SYNTHESIS_END --")
+        end_marker_pos = content.rfind("CODE_REVIEW_SYNTHESIS_END --")
 
-        assert resolution_start_pos != -1, (
-            "SYNTHESIS_RESOLUTION_START marker not found in instructions"
-        )
-        assert end_marker_pos != -1, (
-            "CODE_REVIEW_SYNTHESIS_END marker not found in instructions"
-        )
+        assert resolution_start_pos != -1, "SYNTHESIS_RESOLUTION_START marker not found in SKILL.md"
+        assert end_marker_pos != -1, "CODE_REVIEW_SYNTHESIS_END marker not found in SKILL.md"
         assert resolution_start_pos < end_marker_pos, (
-            "SYNTHESIS_RESOLUTION_START must appear BEFORE CODE_REVIEW_SYNTHESIS_END "
-            "in instructions.xml, otherwise providers terminate early and truncate "
-            "the resolution block"
+            "SYNTHESIS_RESOLUTION_START must appear BEFORE the terminal "
+            "CODE_REVIEW_SYNTHESIS_END in SKILL.md, otherwise providers "
+            "terminate early and truncate the resolution block"
         )
 
     def test_metrics_markers_before_end_marker_in_instructions(self) -> None:
-        """METRICS_JSON_START must appear before CODE_REVIEW_SYNTHESIS_END."""
+        """METRICS_JSON_START must appear before the terminal CODE_REVIEW_SYNTHESIS_END."""
         from pathlib import Path
 
-        import bmad_assist.workflows
+        import bmad_assist.skills
 
-        workflows_dir = Path(bmad_assist.workflows.__file__).parent
-        instructions_path = (
-            workflows_dir / "code-review-synthesis" / "instructions.xml"
+        skill_md = (
+            Path(bmad_assist.skills.__file__).parent / "bmad-code-review-synthesis" / "SKILL.md"
         )
-        content = instructions_path.read_text()
+        content = skill_md.read_text()
 
         metrics_start_pos = content.find("METRICS_JSON_START --")
-        end_marker_pos = content.find("CODE_REVIEW_SYNTHESIS_END --")
+        end_marker_pos = content.rfind("CODE_REVIEW_SYNTHESIS_END --")
 
-        assert metrics_start_pos != -1, "METRICS_JSON_START marker not found in instructions"
-        assert end_marker_pos != -1, "CODE_REVIEW_SYNTHESIS_END marker not found in instructions"
+        assert metrics_start_pos != -1, "METRICS_JSON_START marker not found in SKILL.md"
+        assert end_marker_pos != -1, "CODE_REVIEW_SYNTHESIS_END marker not found in SKILL.md"
         assert metrics_start_pos < end_marker_pos, (
-            "METRICS_JSON_START must appear BEFORE CODE_REVIEW_SYNTHESIS_END "
-            "so structured metrics are emitted before providers terminate the stream"
+            "METRICS_JSON_START must appear BEFORE the terminal "
+            "CODE_REVIEW_SYNTHESIS_END so structured metrics are emitted "
+            "before providers terminate the stream"
         )

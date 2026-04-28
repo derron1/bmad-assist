@@ -91,35 +91,37 @@ def test_fresh_project_auto_bootstraps_new_layout(tmp_path: Path) -> None:
 
 def test_init_skill_layout_new_bootstraps_on_fresh(tmp_path: Path) -> None:
     """Forcing --skill-layout=new on a fresh project bootstraps."""
-    result = ensure_project_setup(
-        tmp_path, console=_quiet(), skill_layout="new"
-    )
+    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
     assert result.layout == "new"
     assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
 
 
 def test_existing_v64_install_is_not_clobbered(tmp_path: Path) -> None:
     """A pre-existing .claude/skills/bmad-* skill is preserved on auto."""
-    # Simulate an existing v6.4+ install.
-    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
-    skill_dir.mkdir(parents=True)
-    sentinel = skill_dir / "SKILL.md"
-    sentinel.write_text("EXISTING USER SKILL\n", encoding="utf-8")
-    (skill_dir / "customize.toml").write_text("", encoding="utf-8")
+    # Simulate an existing v6.4+ install in BOTH mirrors so the
+    # bootstrap has nothing to do for create-story.
+    for mirror in (".claude/skills", ".agents/skills"):
+        skill_dir = tmp_path / mirror / "bmad-create-story"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("EXISTING USER SKILL\n", encoding="utf-8")
+        (skill_dir / "customize.toml").write_text("", encoding="utf-8")
 
     result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
 
     assert result.layout == "new"
-    # No clobber — sentinel still present.
-    assert sentinel.read_text(encoding="utf-8") == "EXISTING USER SKILL\n"
+    # No clobber — sentinel still present in both mirrors.
+    for mirror in (".claude/skills", ".agents/skills"):
+        sentinel = tmp_path / mirror / "bmad-create-story" / "SKILL.md"
+        assert sentinel.read_text(encoding="utf-8") == "EXISTING USER SKILL\n"
     # Should not have done the legacy copy.
     assert not result.workflows_copied
-    # And should not have force-bootstrapped without --force.
-    assert not result.skills_bootstrapped
+    # The pre-existing skill is reported as skipped, not bootstrapped.
+    assert "bmad-create-story" in result.skills_skipped
+    assert "bmad-create-story" not in result.skills_bootstrapped
 
 
-def test_existing_legacy_install_keeps_legacy_path(tmp_path: Path) -> None:
-    """A project with legacy _bmad/bmm/workflows runs the legacy code path."""
+def test_existing_legacy_install_still_bootstraps_new_layout(tmp_path: Path) -> None:
+    """Phase 6: a legacy install no longer suppresses the new-layout bootstrap."""
     # Simulate an existing legacy install.
     legacy = tmp_path / "_bmad" / "bmm" / "workflows" / "4-implementation" / "create-story"
     legacy.mkdir(parents=True)
@@ -127,20 +129,18 @@ def test_existing_legacy_install_keeps_legacy_path(tmp_path: Path) -> None:
 
     result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
 
-    assert result.layout == "old"
-    # Legacy config should be created.
-    assert (tmp_path / "_bmad" / "bmm" / "config.yaml").is_file()
-    # No new-layout bootstrap.
-    assert not result.skills_bootstrapped
-    assert not (tmp_path / ".claude" / "skills" / "bmad-create-story").exists()
+    assert result.layout == "new"
+    # New-layout bootstrap proceeded even though _bmad/... is present.
+    assert result.skills_bootstrapped
+    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
 
 
-def test_skill_layout_old_forces_legacy(tmp_path: Path) -> None:
-    """Explicit --skill-layout=old uses the legacy copy path."""
+def test_skill_layout_old_is_a_no_op(tmp_path: Path) -> None:
+    """Phase 6: ``skill_layout='old'`` is accepted but ignored."""
     result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="old")
-    assert result.layout == "old"
-    assert (tmp_path / "_bmad" / "bmm" / "config.yaml").is_file()
-    assert not (tmp_path / ".claude" / "skills" / "bmad-create-story").exists()
+    # Always new layout, regardless of the requested mode.
+    assert result.layout == "new"
+    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
 
 
 def test_bootstrap_then_discovery_resolves_skill(tmp_path: Path) -> None:
@@ -165,9 +165,7 @@ def test_force_on_existing_v64_re_bootstraps(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text("OLD\n", encoding="utf-8")
     (skill_dir / "customize.toml").write_text("", encoding="utf-8")
 
-    result = ensure_project_setup(
-        tmp_path, console=_quiet(), skill_layout="auto", force=True
-    )
+    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto", force=True)
 
     assert result.layout == "new"
     assert result.skills_bootstrapped, "force=True should re-bootstrap"

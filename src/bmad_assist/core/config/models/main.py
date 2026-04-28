@@ -152,13 +152,12 @@ class Config(BaseModel):
     )
     skill_layout: Literal["auto", "new", "old"] = Field(
         default="auto",
-        description="Skill layout mode for BMAD v6.4+. 'auto' (default) "
-        "detects via _bmad/scripts/resolve_customization.py presence or "
-        "bootstrapped .claude/skills/bmad-*/customize.toml; 'new' forces "
-        "the v6.4+ skill layout; 'old' forces the legacy workflow.yaml + "
-        "instructions.xml layout. The new layout is the default — legacy "
-        "support remains as a fallback and emits a DeprecationWarning per "
-        "workflow per process.",
+        description="DEPRECATED since Phase 6. The legacy 'old' layout "
+        "was removed; all workflows now route through the v6.4+ skill "
+        "compilers. The field is accepted for backwards compatibility "
+        "with existing bmad-assist.yaml configs but is no longer "
+        "consulted. A DeprecationWarning is emitted when the value is "
+        "set to 'old'. Will be removed in the next major release.",
         json_schema_extra={"security": "safe"},
     )
 

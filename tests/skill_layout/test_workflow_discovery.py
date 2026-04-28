@@ -1,8 +1,12 @@
-"""Tests for layout-aware workflow discovery (Phase 4).
+"""Tests for workflow discovery after the Phase 6 simplification.
 
-Verifies that :func:`discover_workflow_source` returns the unified
-:class:`WorkflowSource` shape and selects the correct branch based on
-the project layout.
+Phase 6 removed the bundled-source fallback and the
+``discover_workflow_dir`` wrapper. :func:`discover_workflow_source` now
+probes only:
+
+1. ``.bmad-assist/workflows/<name>/`` override
+2. ``.claude/skills/<bmad-id>/`` and ``.agents/skills/<bmad-id>/``
+3. ``_bmad/...`` legacy install
 """
 
 from __future__ import annotations
@@ -14,7 +18,6 @@ import pytest
 from bmad_assist.compiler.types import WorkflowSource
 from bmad_assist.compiler.workflow_discovery import (
     WORKFLOW_TO_SKILL_ID,
-    discover_workflow_dir,
     discover_workflow_source,
 )
 
@@ -59,20 +62,17 @@ def test_source_carries_layout_old_for_legacy(tmp_path: Path) -> None:
     """A legacy match returns layout='old' and includes the skill_id mapping."""
     workflow_dir = _make_legacy_workflow(tmp_path, "create-story")
 
-    source = discover_workflow_source("create-story", tmp_path, layout="old")
+    source = discover_workflow_source("create-story", tmp_path)
     assert source is not None
     assert source.layout == "old"
     assert source.path == workflow_dir
-    # skill_id mapping is still populated for downstream telemetry.
     assert source.skill_id == "bmad-create-story"
 
 
-def test_source_marks_bundled_when_no_install(tmp_path: Path) -> None:
-    """A bare project falls back to bundled with layout='bundled'."""
-    source = discover_workflow_source("create-story", tmp_path, layout="old")
-    assert source is not None
-    assert source.layout == "bundled"
-    assert source.path.is_dir()
+def test_no_install_returns_none(tmp_path: Path) -> None:
+    """A bare project (no override, no skill, no legacy install) returns None."""
+    source = discover_workflow_source("create-story", tmp_path)
+    assert source is None
 
 
 def test_source_marks_override_when_present(tmp_path: Path) -> None:
@@ -89,52 +89,60 @@ def test_source_marks_override_when_present(tmp_path: Path) -> None:
     assert source.path == override
 
 
-# --- Layout selection --------------------------------------------------------
+# --- Probe order -------------------------------------------------------------
 
 
-def test_new_layout_preferred_when_skill_present(tmp_path: Path) -> None:
-    """When both a skill and a legacy workflow exist, new layout wins on 'new'."""
+def test_new_layout_preferred_over_legacy(tmp_path: Path) -> None:
+    """When both a skill and a legacy workflow exist, new layout wins."""
     skill_dir = _make_new_skill(tmp_path, "bmad-create-story")
     _make_legacy_workflow(tmp_path, "create-story")
 
-    source = discover_workflow_source("create-story", tmp_path, layout="new")
+    source = discover_workflow_source("create-story", tmp_path)
     assert source is not None
     assert source.layout == "new"
     assert source.path == skill_dir
 
 
-def test_legacy_layout_skips_new_probe(tmp_path: Path) -> None:
-    """An explicit layout='old' must not pick up a v6.4+ skill mirror."""
-    _make_new_skill(tmp_path, "bmad-create-story")
+def test_falls_through_to_legacy_when_no_skill(tmp_path: Path) -> None:
+    """When the new-layout probe misses, the legacy install is used."""
     legacy_dir = _make_legacy_workflow(tmp_path, "create-story")
 
-    source = discover_workflow_source("create-story", tmp_path, layout="old")
+    source = discover_workflow_source("create-story", tmp_path)
     assert source is not None
     assert source.layout == "old"
     assert source.path == legacy_dir
 
 
-def test_new_layout_falls_through_to_legacy(tmp_path: Path) -> None:
-    """When new-layout probe misses, we still match the legacy workflow."""
-    legacy_dir = _make_legacy_workflow(tmp_path, "create-story")
-
-    source = discover_workflow_source("create-story", tmp_path, layout="new")
-    assert source is not None
-    assert source.layout == "old"
-    assert source.path == legacy_dir
-
-
-def test_new_layout_uses_agents_mirror_when_claude_missing(tmp_path: Path) -> None:
+def test_uses_agents_mirror_when_claude_missing(tmp_path: Path) -> None:
     """``.agents/skills`` is probed when ``.claude/skills`` lacks the skill."""
     skill_dir = _make_new_skill(tmp_path, "bmad-create-story", mirror=".agents/skills")
 
-    source = discover_workflow_source("create-story", tmp_path, layout="new")
+    source = discover_workflow_source("create-story", tmp_path)
     assert source is not None
     assert source.layout == "new"
     assert source.path == skill_dir
 
 
-# --- Equivalence with legacy callers ----------------------------------------
+# --- Layout argument is a no-op ---------------------------------------------
+
+
+def test_layout_argument_is_a_no_op(tmp_path: Path) -> None:
+    """``layout=`` is preserved for signature compat but no longer functional."""
+    skill_dir = _make_new_skill(tmp_path, "bmad-create-story")
+
+    source_default = discover_workflow_source("create-story", tmp_path)
+    source_old = discover_workflow_source("create-story", tmp_path, layout="old")
+    source_new = discover_workflow_source("create-story", tmp_path, layout="new")
+
+    assert source_default is not None
+    assert source_old is not None
+    assert source_new is not None
+    assert source_default.path == skill_dir
+    assert source_old.path == skill_dir
+    assert source_new.path == skill_dir
+
+
+# --- Registry -----------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -151,24 +159,3 @@ def test_known_workflows_have_skill_id_mapping(workflow_name: str) -> None:
     """Every standard workflow we ship has a corresponding skill id mapping."""
     assert workflow_name in WORKFLOW_TO_SKILL_ID
     assert WORKFLOW_TO_SKILL_ID[workflow_name].startswith("bmad-")
-
-
-def test_discover_workflow_dir_returns_same_path(tmp_path: Path) -> None:
-    """Backward-compat: discover_workflow_dir == discover_workflow_source().path."""
-    legacy_dir = _make_legacy_workflow(tmp_path, "create-story")
-
-    direct = discover_workflow_dir("create-story", tmp_path)
-    source = discover_workflow_source("create-story", tmp_path)
-    assert direct == legacy_dir
-    assert source is not None and source.path == direct
-
-
-def test_custom_workflow_always_bundled(tmp_path: Path) -> None:
-    """Custom workflows ignore project install state and use bundled."""
-    # Even with both layouts present, custom workflow goes bundled.
-    _make_legacy_workflow(tmp_path, "validate-story")
-    _make_new_skill(tmp_path, "bmad-validate-story")
-
-    source = discover_workflow_source("validate-story", tmp_path)
-    assert source is not None
-    assert source.layout == "bundled"

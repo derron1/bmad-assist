@@ -349,10 +349,9 @@ def run(
     skill_layout: str = typer.Option(
         "auto",
         "--skill-layout",
-        help="Skill layout mode: 'auto' (detect; default), 'new' (force v6.4+), "
-        "'old' (force legacy workflow.yaml + instructions.xml). Overrides "
-        "config.skill_layout. Auto detects via _bmad/scripts/resolve_customization.py "
-        "or bootstrapped .claude/skills/bmad-*/customize.toml.",
+        help="Deprecated since Phase 6 — accepted for backwards "
+        "compatibility but ignored. All workflows route through the "
+        "v6.4+ skill-layout compilers.",
     ),
 ) -> None:
     """Execute the main BMAD development loop.
@@ -470,25 +469,37 @@ def run(
         )
         logger.debug("Configuration loaded successfully")
 
-        # Validate and apply --skill-layout override (Phase 1: stored only,
-        # no consumer reads this yet — Phase 2 will wire consumption).
+        # Validate --skill-layout value early. Phase 6 makes the flag a
+        # no-op, but we still reject obviously malformed inputs so users
+        # spotting typos see a clear error instead of silent acceptance.
         if skill_layout not in ("auto", "new", "old"):
             _error(
-                f"Invalid --skill-layout value '{skill_layout}'. "
-                "Expected one of: auto, new, old."
+                f"Invalid --skill-layout value '{skill_layout}'. Expected one of: auto, new, old."
             )
             raise typer.Exit(code=EXIT_CONFIG_ERROR)
-        if skill_layout != loaded_config.skill_layout:
-            loaded_config = loaded_config.model_copy(update={"skill_layout": skill_layout})
-            # Phase 2 consumes ``config.skill_layout`` from the loaded
-            # singleton (via ``compile_workflow(skill_layout="auto")``),
-            # so push the override into the singleton as well — the
-            # ``loaded_config`` local would otherwise diverge from what
-            # downstream callers see.
-            from bmad_assist.core.config.loaders import load_config
+        if skill_layout != "auto":
+            import warnings
 
-            load_config(loaded_config.model_dump())
-            logger.debug("skill_layout overridden via CLI: %s", skill_layout)
+            warnings.warn(
+                "--skill-layout is a no-op since Phase 6 (legacy layout "
+                "removed). Flag will be removed in next major.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        # Warn (once) when the on-disk config still pins the legacy
+        # layout. The model accepts the value to keep old configs from
+        # erroring; Phase 6 simply ignores it.
+        if loaded_config.skill_layout == "old":
+            import warnings
+
+            warnings.warn(
+                "config.skill_layout = 'old' is ignored since Phase 6 "
+                "(legacy layout removed). Remove the field to silence "
+                "this warning. The setting will be dropped in the next "
+                "major release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Initialize project paths singleton
         paths_config: dict[str, str | None] = {
@@ -507,17 +518,12 @@ def run(
         # Implicit project setup (without gitignore modification)
         from bmad_assist.core.project_setup import check_gitignore_warning, ensure_project_setup
 
-        # Phase 5: ``run`` defaults to ``skill_layout="auto"`` so projects
-        # with bootstrapped ``.claude/skills/bmad-*`` skills (or a v6.4+
-        # BMAD install) automatically use the new layout. Legacy projects
-        # remain on the old path. The user's ``--skill-layout`` flag (and
-        # the per-project ``skill_layout`` config) still override.
+        # Phase 6: setup always bootstraps the v6.4+ skill layout.
         setup_result = ensure_project_setup(
             project_path,
             include_gitignore=False,  # run never modifies gitignore
             force=no_interactive,  # In non-interactive, skip differing files silently
             console=console if not quiet else None,
-            skill_layout="auto",
         )
 
         # Show gitignore warning (respects config)

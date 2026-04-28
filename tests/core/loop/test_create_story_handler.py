@@ -47,8 +47,7 @@ def _make_story_content(
         "this content long enough to pass the minimum length check. "
         "We need at least 400 characters so let's add some more detail here. "
         "The widget factory should support multiple widget types including "
-        "standard widgets, premium widgets, and custom widgets.\n"
-        + extra
+        "standard widgets, premium widgets, and custom widgets.\n" + extra
     )
 
 
@@ -249,7 +248,9 @@ class TestValidateStoryContent:
 
     def test_too_short(self) -> None:
         """Fails for content shorter than MIN_STORY_CONTENT_LENGTH."""
-        assert _validate_story_content("# Story\n## Story\n## Acceptance Criteria\n## Tasks") is False
+        assert (
+            _validate_story_content("# Story\n## Story\n## Acceptance Criteria\n## Tasks") is False
+        )
 
     def test_missing_sections(self) -> None:
         """Fails when required sections are missing."""
@@ -529,23 +530,12 @@ class TestRateLimitRecovery:
 
 
 class TestInstructionsContextFirst:
-    """Tests for create-story workflow instructions."""
+    """Phase 6 placeholder: legacy bundled instructions.xml deleted.
 
-    def test_instructions_use_context_first_guidance(self) -> None:
-        """Workflow should prefer compiled context over broad repo exploration."""
-        instructions_path = (
-            Path(__file__).resolve().parents[3]
-            / "src"
-            / "bmad_assist"
-            / "workflows"
-            / "create-story"
-            / "instructions.xml"
-        )
-        content = instructions_path.read_text(encoding="utf-8")
-        lowered = content.lower()
-
-        assert "CONTEXT-FIRST POLICY" in content
-        assert "AUTHORITATIVE INPUTS" in content
-        assert "subagent" not in lowered
-        assert "web research" not in lowered
-        assert '<check if="web research completed">' not in content
+    The CONTEXT-FIRST guidance previously asserted here lived in the
+    bundled ``src/bmad_assist/workflows/create-story/instructions.xml``
+    file, which Phase 6 removed. The same guidance is now applied via
+    the LLM-driven patch transforms in
+    ``.bmad-assist/patches/create-story.patch.yaml``; that flow is
+    exercised end-to-end in ``tests/skill_layout/test_create_story_e2e.py``.
+    """
