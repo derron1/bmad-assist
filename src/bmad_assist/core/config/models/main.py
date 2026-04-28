@@ -150,16 +150,6 @@ class Config(BaseModel):
         default_factory=ToolGuardConfig,
         description="ToolCallGuard watchdog thresholds (optional)",
     )
-    skill_layout: Literal["auto", "new", "old"] = Field(
-        default="auto",
-        description="DEPRECATED since Phase 6. The legacy 'old' layout "
-        "was removed; all workflows now route through the v6.4+ skill "
-        "compilers. The field is accepted for backwards compatibility "
-        "with existing bmad-assist.yaml configs but is no longer "
-        "consulted. A DeprecationWarning is emitted when the value is "
-        "set to 'old'. Will be removed in the next major release.",
-        json_schema_extra={"security": "safe"},
-    )
 
     @model_validator(mode="before")
     @classmethod

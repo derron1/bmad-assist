@@ -118,24 +118,6 @@ class TestSkillLayoutCompileE2E:
         # the bare SKILL.md still mentions in its early steps.
         assert "<action>Update {{sprint_status}}</action>" not in body
 
-    def test_skill_layout_old_routes_through_skill_layout_after_phase6(
-        self, project_root: Path
-    ) -> None:
-        """Phase 6: ``skill_layout="old"`` is a no-op; routing always goes new."""
-        import warnings
-
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            compiler = get_workflow_compiler(
-                "create-story", skill_layout="old", project_root=project_root
-            )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills."), (
-            "Phase 6 routes every workflow through the skill-layout "
-            f"compiler, got {type(compiler).__module__}"
-        )
-
     def test_skill_layout_new_routes_through_new_path(self, project_root: Path) -> None:
         """``skill_layout="new"`` picks the skill-layout compiler."""
         from bmad_assist.compiler.core import get_workflow_compiler
@@ -144,17 +126,6 @@ class TestSkillLayoutCompileE2E:
             "bmad-create-story",
             skill_layout="new",
             project_root=project_root,
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """``create-story`` (legacy name) must also route to the new path."""
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "create-story", skill_layout="new", project_root=project_root
         )
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
 

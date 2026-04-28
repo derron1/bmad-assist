@@ -1,23 +1,18 @@
-"""Tests for the compiler core module after the Phase 6 refactor.
+"""Tests for the compiler core module after the 0.6.0 refactor.
 
-Phase 6 collapsed the dispatch table — every accepted name now resolves
-to a v6.4+ skill-layout compiler under
-:mod:`bmad_assist.compiler.skills`. The legacy compilers in
-:mod:`bmad_assist.compiler.workflows` remain as private delegation
-targets only.
+The dispatch table accepts only canonical ``bmad-`` prefixed ids;
+legacy short aliases (``"create-story"``, ``"testarch-atdd"``, ...)
+were dropped. Every accepted name resolves to a v6.4+ skill-layout
+compiler under :mod:`bmad_assist.compiler.skills`.
 
 These tests cover:
 
 * Module structure / public API exports.
 * Dispatch through :func:`get_workflow_compiler`.
 * Validation of workflow names.
-* Backwards-compat behaviour for the deprecated ``skill_layout``
-  argument (no-op + ``DeprecationWarning``).
 """
 
 from __future__ import annotations
-
-import warnings
 
 import pytest
 
@@ -61,42 +56,49 @@ class TestModuleStructure:
         assert parse_workflow is not None
         assert compile_workflow is not None
 
-    def test_workflow_registry_alias_count(self) -> None:
-        """Every registry entry maps to a bmad-prefixed canonical id."""
+    def test_workflow_registry_only_canonical_ids(self) -> None:
+        """Every registry entry is a canonical ``bmad-`` prefixed self-mapping."""
         assert WORKFLOW_REGISTRY, "WORKFLOW_REGISTRY must not be empty"
-        for value in WORKFLOW_REGISTRY.values():
-            assert value.startswith("bmad-"), f"Registry value '{value}' is not bmad-prefixed"
-
-    def test_workflow_registry_canonical_self_aliases(self) -> None:
-        """Every canonical id maps to itself in the registry."""
-        canonical_ids = set(WORKFLOW_REGISTRY.values())
-        for canonical in canonical_ids:
-            assert WORKFLOW_REGISTRY.get(canonical) == canonical, f"{canonical} must map to itself"
+        for key, value in WORKFLOW_REGISTRY.items():
+            assert key.startswith("bmad-"), f"Registry key '{key}' is not bmad-prefixed"
+            assert value == key, f"Registry entry '{key}' must self-map (got '{value}')"
 
 
 class TestDispatch:
     """Dispatch from :func:`get_workflow_compiler`."""
 
-    def test_dispatch_routes_legacy_alias(self) -> None:
-        """A legacy alias resolves to the bmad-prefixed compiler."""
-        compiler = get_workflow_compiler("create-story")
+    def test_dispatch_routes_canonical_id(self) -> None:
+        """Canonical ``bmad-`` prefixed id dispatches to the skill-layout compiler."""
+        compiler = get_workflow_compiler("bmad-create-story")
         assert compiler.workflow_name == "bmad-create-story"
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
 
-    def test_dispatch_routes_canonical_id(self) -> None:
-        """Canonical ``bmad-`` prefixed id also dispatches."""
-        compiler = get_workflow_compiler("bmad-create-story")
-        assert compiler.workflow_name == "bmad-create-story"
-
     def test_dispatch_normalises_underscores(self) -> None:
-        """Underscored aliases (legacy module names) resolve too."""
-        compiler = get_workflow_compiler("create_story")
+        """Underscored module-style names (``bmad_create_story``) resolve too."""
+        compiler = get_workflow_compiler("bmad_create_story")
         assert compiler.workflow_name == "bmad-create-story"
 
     def test_dispatch_strips_whitespace(self) -> None:
         """Surrounding whitespace is tolerated."""
-        compiler = get_workflow_compiler("  create-story  ")
+        compiler = get_workflow_compiler("  bmad-create-story  ")
         assert compiler.workflow_name == "bmad-create-story"
+
+    def test_legacy_short_alias_auto_prefixes(self) -> None:
+        """An un-prefixed name auto-prepends ``bmad-`` for internal dispatch.
+
+        The 0.6.0 registry simplification dropped explicit alias entries,
+        but production code still routes via the Phase enum (which emits
+        un-prefixed names like ``"create-story"``). The dispatcher
+        auto-prepends ``bmad-`` as a fallback so internal callers don't
+        need a sweeping rewrite.
+        """
+        compiler = get_workflow_compiler("create-story")
+        assert compiler.workflow_name == "bmad-create-story"
+
+    def test_unknown_unprefixed_name_still_raises(self) -> None:
+        """Auto-prefix only fires for *known* skill ids; unknowns still raise."""
+        with pytest.raises(CompilerError):
+            get_workflow_compiler("definitely-not-a-workflow")
 
     def test_dispatch_unknown_workflow_raises(self) -> None:
         """Unknown workflows raise :class:`CompilerError` with a hint."""
@@ -140,40 +142,32 @@ class TestDispatch:
         assert "invalid workflow name" in str(exc_info.value).lower()
 
 
-class TestSkillLayoutDeprecation:
-    """The ``skill_layout`` parameter is a no-op-with-warning since Phase 6."""
+class TestBackwardsCompatKwargs:
+    """Pre-0.6.0 callers may pass ``skill_layout=...`` — accept and ignore."""
 
-    def setup_method(self) -> None:
-        """Reset the per-process dedup flag so each test sees a fresh warning."""
-        import bmad_assist.compiler.core as core
+    def test_skill_layout_kwarg_silently_ignored(self) -> None:
+        """``skill_layout`` is swallowed by ``**_legacy_kwargs`` without error."""
+        compiler = get_workflow_compiler("bmad-create-story", skill_layout="new")
+        assert compiler.workflow_name == "bmad-create-story"
 
-        core._SKILL_LAYOUT_FLAG_WARNING_EMITTED = False
+    def test_compile_workflow_skill_layout_kwarg_silently_ignored(self, tmp_path) -> None:
+        """``compile_workflow(..., skill_layout=...)`` still accepts the kwarg.
 
-    def test_default_does_not_warn(self) -> None:
-        """``skill_layout="auto"`` (default) emits no DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            get_workflow_compiler("create-story")
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        skill_layout_warnings = [w for w in deprecations if "skill-layout" in str(w.message)]
-        assert not skill_layout_warnings
-
-    def test_explicit_value_warns_once(self) -> None:
-        """Passing ``"old"`` triggers exactly one DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            get_workflow_compiler("create-story", skill_layout="old")
-            get_workflow_compiler("create-story", skill_layout="old")
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        skill_layout_warnings = [w for w in deprecations if "skill-layout" in str(w.message)]
-        assert len(skill_layout_warnings) == 1
-
-    def test_explicit_value_still_dispatches(self) -> None:
-        """Even with ``"old"`` we still get a skill-layout compiler."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            compiler = get_workflow_compiler("create-story", skill_layout="old")
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
+        The compile call itself fails (no skill installed in tmp_path),
+        but the failure must NOT be a ``TypeError`` from an unexpected
+        keyword argument — that would mean the back-compat shim broke.
+        """
+        ctx = CompilerContext(
+            project_root=tmp_path,
+            output_folder=tmp_path,
+            project_knowledge=tmp_path,
+        )
+        try:
+            compile_workflow("bmad-create-story", ctx, skill_layout="auto")
+        except TypeError as exc:  # pragma: no cover — guard against regression
+            pytest.fail(f"skill_layout kwarg should be swallowed, got TypeError: {exc}")
+        except Exception:  # noqa: BLE001 — any other failure is fine
+            pass
 
 
 class TestProtocolCompliance:
@@ -181,12 +175,12 @@ class TestProtocolCompliance:
 
     def test_implements_protocol(self) -> None:
         """Dispatched compiler satisfies the WorkflowCompiler protocol."""
-        compiler = get_workflow_compiler("create-story")
+        compiler = get_workflow_compiler("bmad-create-story")
         assert isinstance(compiler, WorkflowCompiler)
 
     def test_required_methods_callable(self) -> None:
         """All five protocol members are bound on the dispatched compiler."""
-        compiler = get_workflow_compiler("create-story")
+        compiler = get_workflow_compiler("bmad-create-story")
         assert callable(compiler.get_required_files)
         assert callable(compiler.get_variables)
         assert callable(compiler.validate_context)

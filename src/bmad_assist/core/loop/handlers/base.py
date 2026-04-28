@@ -8,13 +8,13 @@ Provides common functionality for all phase handlers:
 DEPRECATION NOTICE:
 -------------------
 Handler YAML configuration files (~/.bmad-assist/handlers/*.yaml) are DEPRECATED.
-The workflow compiler now handles prompt generation with bundled workflows.
+The workflow compiler now handles prompt generation via the v6.4+ skill layout.
 
 The old YAML-based system is retained only for fallback compatibility but should
-not be used for new development. All workflows should use the compiler system
-with bundled workflow templates in src/bmad_assist/workflows/.
+not be used for new development. All workflows route through the skill-layout
+compilers under :mod:`bmad_assist.compiler.skills`.
 
-See: src/bmad_assist/compiler/workflow_discovery.py for the new discovery system.
+See: src/bmad_assist/compiler/workflow_discovery.py for the discovery system.
 
 """
 

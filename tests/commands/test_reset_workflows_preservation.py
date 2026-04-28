@@ -85,7 +85,7 @@ def test_reset_skills_force_overwrites_customize_toml(tmp_path: Path) -> None:
 def test_ensure_project_setup_preserves_customize_by_default(tmp_path: Path) -> None:
     """ensure_project_setup(force=True) preserves customize.toml by default."""
     # Bootstrap baseline.
-    ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
+    ensure_project_setup(tmp_path, console=_quiet())
     customize = tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
     user_marker = "# USER OVERRIDE\n"
     customize.write_text(user_marker, encoding="utf-8")
@@ -94,7 +94,6 @@ def test_ensure_project_setup_preserves_customize_by_default(tmp_path: Path) -> 
     ensure_project_setup(
         tmp_path,
         console=_quiet(),
-        skill_layout="auto",
         force=True,
     )
     assert customize.read_text(encoding="utf-8") == user_marker
@@ -102,14 +101,13 @@ def test_ensure_project_setup_preserves_customize_by_default(tmp_path: Path) -> 
 
 def test_ensure_project_setup_destructive_reset(tmp_path: Path) -> None:
     """preserve_customizations=False overwrites customize.toml."""
-    ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
+    ensure_project_setup(tmp_path, console=_quiet())
     customize = tmp_path / ".claude" / "skills" / "bmad-create-story" / "customize.toml"
     customize.write_text("# USER OVERRIDE\n", encoding="utf-8")
 
     ensure_project_setup(
         tmp_path,
         console=_quiet(),
-        skill_layout="auto",
         force=True,
         preserve_customizations=False,
     )

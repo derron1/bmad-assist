@@ -135,18 +135,6 @@ class TestSkillLayoutCompileE2E:
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
         assert type(compiler).__name__ == "BmadTestarchAtddCompiler"
 
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """``testarch-atdd`` (legacy name) must also route to the new path."""
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "testarch-atdd", skill_layout="new", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-        assert type(compiler).__name__ == "BmadTestarchAtddCompiler"
-
 
 # --------------------------------------------------------------------------- #
 # Cache lifecycle                                                             #

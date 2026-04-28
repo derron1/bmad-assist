@@ -4,7 +4,6 @@ Initializes a project for bmad-assist usage by bootstrapping the
 v6.4+ skill layout into ``.claude/skills/`` and ``.agents/skills/``.
 """
 
-import warnings
 from pathlib import Path
 
 import typer
@@ -52,15 +51,6 @@ def init_command(
         "-w",
         help="Run interactive configuration wizard after initialization",
     ),
-    skill_layout: str = typer.Option(
-        "auto",
-        "--skill-layout",
-        help=(
-            "Deprecated since Phase 6 — accepted for backwards "
-            "compatibility but ignored. The init command always "
-            "bootstraps the v6.4+ skill layout."
-        ),
-    ),
 ) -> None:
     """Initialize a project for bmad-assist.
 
@@ -96,20 +86,6 @@ def init_command(
     if not project_path.is_dir():
         _error(f"Path is not a directory: {project_path}")
         raise typer.Exit(code=EXIT_ERROR)
-
-    # Validate --skill-layout value early. We accept the value for
-    # backwards compatibility but emit a DeprecationWarning so users
-    # learn the flag is now a no-op (Phase 6).
-    if skill_layout not in ("auto", "new", "old"):
-        _error(f"Invalid --skill-layout value '{skill_layout}'. Allowed: 'auto', 'new', 'old'.")
-        raise typer.Exit(code=EXIT_ERROR)
-    if skill_layout != "auto":
-        warnings.warn(
-            "--skill-layout is a no-op since Phase 6 (legacy layout "
-            "removed). Flag will be removed in next major.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
     # Run interactive config wizard FIRST if requested (before any other setup)
     if wizard and not dry_run:

@@ -346,13 +346,6 @@ def run(
         "--plain",
         help="Force plain text output (no interactive TUI)",
     ),
-    skill_layout: str = typer.Option(
-        "auto",
-        "--skill-layout",
-        help="Deprecated since Phase 6 — accepted for backwards "
-        "compatibility but ignored. All workflows route through the "
-        "v6.4+ skill-layout compilers.",
-    ),
 ) -> None:
     """Execute the main BMAD development loop.
 
@@ -468,38 +461,6 @@ def run(
             cwd_config_path=False if config is not None else None,
         )
         logger.debug("Configuration loaded successfully")
-
-        # Validate --skill-layout value early. Phase 6 makes the flag a
-        # no-op, but we still reject obviously malformed inputs so users
-        # spotting typos see a clear error instead of silent acceptance.
-        if skill_layout not in ("auto", "new", "old"):
-            _error(
-                f"Invalid --skill-layout value '{skill_layout}'. Expected one of: auto, new, old."
-            )
-            raise typer.Exit(code=EXIT_CONFIG_ERROR)
-        if skill_layout != "auto":
-            import warnings
-
-            warnings.warn(
-                "--skill-layout is a no-op since Phase 6 (legacy layout "
-                "removed). Flag will be removed in next major.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        # Warn (once) when the on-disk config still pins the legacy
-        # layout. The model accepts the value to keep old configs from
-        # erroring; Phase 6 simply ignores it.
-        if loaded_config.skill_layout == "old":
-            import warnings
-
-            warnings.warn(
-                "config.skill_layout = 'old' is ignored since Phase 6 "
-                "(legacy layout removed). Remove the field to silence "
-                "this warning. The setting will be dropped in the next "
-                "major release.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         # Initialize project paths singleton
         paths_config: dict[str, str | None] = {

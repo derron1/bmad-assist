@@ -23,7 +23,6 @@ Public API:
     CompiledWorkflow: Final compiled output
     WorkflowIR: Intermediate representation
     GeneratedOutput: Return type for generate_output
-    ValidateStoryCompiler: Compiler for validate-story workflow
 """
 
 from bmad_assist.compiler.core import (
@@ -49,9 +48,6 @@ from bmad_assist.compiler.output import (
 from bmad_assist.compiler.parser import parse_workflow
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext, WorkflowIR
 from bmad_assist.compiler.variables import resolve_variables
-from bmad_assist.compiler.workflows.validate_story import (
-    ValidateStoryCompiler,
-)
 from bmad_assist.core.exceptions import (
     AmbiguousFileError,
     CompilerError,
@@ -83,5 +79,4 @@ __all__ = [
     "DEFAULT_SOFT_LIMIT_TOKENS",
     "DEFAULT_HARD_LIMIT_TOKENS",
     "SOFT_LIMIT_RATIO",
-    "ValidateStoryCompiler",
 ]

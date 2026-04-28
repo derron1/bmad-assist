@@ -754,3 +754,138 @@ class TestParametrized:
         label = _smart_truncate_label(name)
         assert label == expected_label
         assert len(label) <= MAX_LABEL_LENGTH
+
+
+class TestSkillMdProbe:
+    """v6.4+ ``SKILL.md`` description probe (post-Phase-7 fix).
+
+    Before 0.6.0, ``_compute_config`` only consulted the legacy
+    ``_bmad/.../workflow.yaml`` for non-predefined workflows, so v6.4+
+    users got fallback labels for any workflow not in
+    ``PREDEFINED_LABELS``. The probe added in 0.6.0 reads the
+    ``description`` field from ``.claude/skills/bmad-<name>/SKILL.md``
+    (or the ``.agents`` mirror, or the bundled fallback) so v6.4+
+    users see the workflow's actual description as its label.
+    """
+
+    def setup_method(self) -> None:
+        """Reset the cache so each probe test starts clean."""
+        clear_workflow_label_cache()
+
+    def teardown_method(self) -> None:
+        """Drop any cached results recorded by the probe."""
+        clear_workflow_label_cache()
+
+    def _write_skill_md(self, root: Path, skill_id: str, description: str) -> Path:
+        """Write a minimal valid SKILL.md and return its path."""
+        skill_dir = root / skill_id
+        skill_dir.mkdir(parents=True)
+        skill_md = skill_dir / "SKILL.md"
+        skill_md.write_text(
+            f"---\nname: {skill_id}\ndescription: {description}\n---\n\n# {skill_id}\n",
+            encoding="utf-8",
+        )
+        return skill_md
+
+    def test_probe_reads_claude_skills_description(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """v6.4+ users get a label sourced from ``.claude/skills/.../SKILL.md``."""
+        monkeypatch.chdir(tmp_path)
+        self._write_skill_md(
+            tmp_path / ".claude" / "skills",
+            "bmad-custom-flow",
+            "Custom Flow",
+        )
+
+        # ``custom-flow`` is not in PREDEFINED_LABELS so the probe runs.
+        config = get_workflow_notification_config("custom-flow")
+        assert config.label == "Custom Flow"
+        # Icon comes from pattern matching since SKILL.md frontmatter
+        # doesn't carry a notification.icon — and "custom-flow" matches
+        # no pattern, so the default neutral icon wins.
+        assert config.icon == DEFAULT_ICON
+
+    def test_probe_falls_back_to_agents_skills(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``.agents/skills`` is consulted when ``.claude/skills`` lacks the skill."""
+        monkeypatch.chdir(tmp_path)
+        self._write_skill_md(
+            tmp_path / ".agents" / "skills",
+            "bmad-custom-flow",
+            "Agents Mirror Description",
+        )
+
+        config = get_workflow_notification_config("custom-flow")
+        # _smart_truncate_label keeps first 15 chars then appends "…".
+        assert config.label == "Agents Mirror D…"
+        assert len(config.label) == MAX_LABEL_LENGTH
+
+    def test_probe_falls_back_to_bundled(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Bundled ``src/bmad_assist/skills/...`` fallback wins when no project install."""
+        monkeypatch.chdir(tmp_path)
+
+        # ``bmad-create-story`` is bundled — but it's also predefined,
+        # so we need a name that bypasses PREDEFINED_LABELS to actually
+        # exercise the SKILL.md probe path. We patch PREDEFINED_LABELS
+        # to drop the predefined entry for this assertion only.
+        monkeypatch.setattr(
+            "bmad_assist.notifications.workflow_labels.PREDEFINED_LABELS",
+            {},
+        )
+        clear_workflow_label_cache()
+
+        config = get_workflow_notification_config("create-story")
+        # The bundled SKILL.md description for bmad-create-story is
+        # non-empty; we just assert the probe found *something* and did
+        # not fall through to the smart-truncated workflow name.
+        assert config.label != "Create-story"
+        assert len(config.label) <= MAX_LABEL_LENGTH
+
+    def test_probe_does_not_consult_legacy_yaml_for_v64_users(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When SKILL.md resolves, the legacy ``_bmad/...`` YAML is not read.
+
+        This pins the post-Phase-7 ordering: SKILL.md wins over the
+        legacy workflow.yaml notification fields when both exist.
+        """
+        monkeypatch.chdir(tmp_path)
+        # SKILL.md wins.
+        self._write_skill_md(
+            tmp_path / ".claude" / "skills",
+            "bmad-custom-flow",
+            "Wins From SKILL.md",
+        )
+        # Legacy YAML present but should not be consulted.
+        legacy = tmp_path / "_bmad" / "bmm" / "workflows" / "4-implementation" / "custom-flow"
+        legacy.mkdir(parents=True)
+        (legacy / "workflow.yaml").write_text(
+            "notification:\n  label: 'Legacy Loses'\n  icon: '💥'\n",
+            encoding="utf-8",
+        )
+
+        config = get_workflow_notification_config("custom-flow")
+        # _smart_truncate_label keeps first 15 chars then appends "…".
+        assert config.label == "Wins From SKILL…"
+        assert len(config.label) == MAX_LABEL_LENGTH
+        # Icon is pattern-derived, not the legacy "💥".
+        assert config.icon != "💥"
+
+    def test_probe_skips_malformed_skill_md(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A SKILL.md without valid frontmatter is silently skipped."""
+        monkeypatch.chdir(tmp_path)
+        skill_dir = tmp_path / ".claude" / "skills" / "bmad-custom-flow"
+        skill_dir.mkdir(parents=True)
+        # No frontmatter delimiters — parse_skill raises MalformedSkill.
+        (skill_dir / "SKILL.md").write_text("# No frontmatter here\n", encoding="utf-8")
+
+        # No SKILL.md, no legacy YAML, no predefined entry — fall back
+        # to pattern + truncation.
+        config = get_workflow_notification_config("custom-flow")
+        assert config.label == _smart_truncate_label("custom-flow")

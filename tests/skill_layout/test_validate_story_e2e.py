@@ -119,18 +119,6 @@ class TestSkillLayoutCompileE2E:
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
         assert type(compiler).__name__ == "BmadValidateStoryCompiler"
 
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """``validate-story`` (legacy name) must also route to the new path."""
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "validate-story", skill_layout="new", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-        assert type(compiler).__name__ == "BmadValidateStoryCompiler"
-
     def test_compiled_body_contains_validation_markers(self, project_root: Path) -> None:
         """The compiled body keeps the validator-output markers required downstream."""
         result = compile_workflow(

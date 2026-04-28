@@ -585,38 +585,36 @@ class TestWorkflowDiscoveryUpdate:
         assert _is_valid_workflow_dir(workflow_dir) is False
 
     def test_standard_workflows_includes_new_tea(self) -> None:
-        """The dispatch registry knows every TEA workflow alias."""
-        from bmad_assist.compiler.workflow_discovery import WORKFLOW_TO_SKILL_ID
+        """The dispatch registry knows every TEA workflow (canonical ids)."""
+        from bmad_assist.compiler.core import WORKFLOW_REGISTRY
 
         expected_tea_workflows = {
-            "testarch-atdd",
-            "testarch-trace",
-            "testarch-test-review",
-            "testarch-automate",
-            "testarch-ci",
-            "testarch-framework",
-            "testarch-nfr-assess",
-            "testarch-test-design",
+            "bmad-testarch-atdd",
+            "bmad-testarch-trace",
+            "bmad-testarch-test-review",
+            "bmad-testarch-automate",
+            "bmad-testarch-ci",
+            "bmad-testarch-framework",
+            "bmad-testarch-nfr",
+            "bmad-testarch-test-design",
         }
 
         for workflow in expected_tea_workflows:
-            assert workflow in WORKFLOW_TO_SKILL_ID, (
-                f"{workflow} not registered in WORKFLOW_TO_SKILL_ID"
-            )
+            assert workflow in WORKFLOW_REGISTRY, f"{workflow} not registered in WORKFLOW_REGISTRY"
 
     def test_workflow_to_bmad_dir_has_new_mappings(self) -> None:
         """WORKFLOW_TO_BMAD_DIR has mappings for new TEA workflows."""
         from bmad_assist.compiler.workflow_discovery import WORKFLOW_TO_BMAD_DIR
 
         expected_mappings = {
-            "testarch-atdd": "atdd",
-            "testarch-trace": "trace",
-            "testarch-test-review": "test-review",
-            "testarch-automate": "automate",
-            "testarch-ci": "ci",
-            "testarch-framework": "framework",
-            "testarch-nfr-assess": "nfr-assess",
-            "testarch-test-design": "test-design",
+            "bmad-testarch-atdd": "atdd",
+            "bmad-testarch-trace": "trace",
+            "bmad-testarch-test-review": "test-review",
+            "bmad-testarch-automate": "automate",
+            "bmad-testarch-ci": "ci",
+            "bmad-testarch-framework": "framework",
+            "bmad-testarch-nfr": "nfr-assess",
+            "bmad-testarch-test-design": "test-design",
         }
 
         for workflow, bmad_dir in expected_mappings.items():

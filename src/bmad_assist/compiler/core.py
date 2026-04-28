@@ -5,89 +5,43 @@ This module provides:
 - get_workflow_compiler: Dynamic loader for workflow compiler modules
 - compile_workflow: High-level function to compile a workflow by name
 
-Phase 6: the legacy routing path (``workflow_name → bmad_assist.compiler.workflows``)
-was removed. Every supported workflow now routes through a v6.4+
-skill-layout compiler under :mod:`bmad_assist.compiler.skills`.
-:data:`WORKFLOW_REGISTRY` is the sole dispatch table — it maps every
-accepted name (legacy alias *and* canonical ``bmad-`` prefixed id) to
-the canonical skill id used to instantiate the compiler.
+Every supported workflow routes through a v6.4+ skill-layout compiler
+under :mod:`bmad_assist.compiler.skills`. :data:`WORKFLOW_REGISTRY` is
+the sole dispatch table — only canonical ``bmad-`` prefixed ids are
+accepted (legacy short aliases were dropped in 0.6.0).
 """
 
 import logging
 import re
-import warnings
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext
 from bmad_assist.core.exceptions import CompilerError
 
-# Per-process dedup set for the ``--skill-layout`` deprecation warning.
-# We emit at most one warning per process so chatty loops don't spam.
-_SKILL_LAYOUT_FLAG_WARNING_EMITTED: bool = False
-
-
-def _emit_skill_layout_flag_deprecation() -> None:
-    """Warn (once per process) that the ``--skill-layout`` flag is deprecated."""
-    global _SKILL_LAYOUT_FLAG_WARNING_EMITTED
-    if _SKILL_LAYOUT_FLAG_WARNING_EMITTED:
-        return
-    _SKILL_LAYOUT_FLAG_WARNING_EMITTED = True
-    warnings.warn(
-        "--skill-layout / config.skill_layout is a no-op since Phase 6 "
-        "(legacy layout removed). All workflows route through the v6.4+ "
-        "skill-layout compilers. The flag will be removed in the next "
-        "major release.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
-# TODO: drop legacy aliases in next major. Phase 6 keeps the un-prefixed
-# names (``"create-story"``, ``"testarch-atdd"``, etc.) as aliases for
-# one more release so existing CLI invocations and configs keep working.
+# Single source of truth for skill-layout dispatch + discovery. Only
+# canonical ``bmad-`` prefixed ids are accepted; legacy short aliases
+# (``"create-story"``, ``"testarch-atdd"``, ...) were dropped in 0.6.0.
+# Each entry is a self-mapping kept so callers that historically did
+# ``WORKFLOW_REGISTRY[name]`` continue to work as a registered-id check.
 WORKFLOW_REGISTRY: dict[str, str] = {
-    # Maps any accepted name (legacy alias or canonical bmad-prefixed
-    # id) to the canonical bmad-prefixed skill id. Single source of
-    # truth for skill-layout dispatch + discovery + deprecation hints.
-    # Entries grouped by canonical skill id, alphabetical.
-    "code-review": "bmad-code-review",
     "bmad-code-review": "bmad-code-review",
-    "code-review-synthesis": "bmad-code-review-synthesis",
     "bmad-code-review-synthesis": "bmad-code-review-synthesis",
-    "create-story": "bmad-create-story",
     "bmad-create-story": "bmad-create-story",
-    "dev-story": "bmad-dev-story",
     "bmad-dev-story": "bmad-dev-story",
-    "qa-plan-execute": "bmad-qa-plan-execute",
     "bmad-qa-plan-execute": "bmad-qa-plan-execute",
-    "qa-plan-generate": "bmad-qa-plan-generate",
     "bmad-qa-plan-generate": "bmad-qa-plan-generate",
-    "retrospective": "bmad-retrospective",
     "bmad-retrospective": "bmad-retrospective",
-    "security-review": "bmad-security-review",
     "bmad-security-review": "bmad-security-review",
-    "testarch-atdd": "bmad-testarch-atdd",
     "bmad-testarch-atdd": "bmad-testarch-atdd",
-    "testarch-automate": "bmad-testarch-automate",
     "bmad-testarch-automate": "bmad-testarch-automate",
-    "testarch-ci": "bmad-testarch-ci",
     "bmad-testarch-ci": "bmad-testarch-ci",
-    "testarch-framework": "bmad-testarch-framework",
     "bmad-testarch-framework": "bmad-testarch-framework",
-    # Phase 3.2-B rename: legacy ``testarch-nfr-assess`` collapses into
-    # the canonical ``bmad-testarch-nfr`` skill id.
-    "testarch-nfr-assess": "bmad-testarch-nfr",
     "bmad-testarch-nfr": "bmad-testarch-nfr",
-    "testarch-test-design": "bmad-testarch-test-design",
     "bmad-testarch-test-design": "bmad-testarch-test-design",
-    "testarch-test-review": "bmad-testarch-test-review",
     "bmad-testarch-test-review": "bmad-testarch-test-review",
-    "testarch-trace": "bmad-testarch-trace",
     "bmad-testarch-trace": "bmad-testarch-trace",
-    "validate-story": "bmad-validate-story",
     "bmad-validate-story": "bmad-validate-story",
-    "validate-story-synthesis": "bmad-validate-story-synthesis",
     "bmad-validate-story-synthesis": "bmad-validate-story-synthesis",
 }
 
@@ -213,11 +167,6 @@ def _build_skill_layout_compiler(skill_id: str) -> "WorkflowCompiler":
     )
 
 
-# ``SkillLayoutMode`` retained for backwards-compatible signatures.
-# Phase 6 makes the value a no-op-with-warning; all routing goes through
-# the skill-layout compilers. Will be deleted in the next major release.
-SkillLayoutMode = Literal["auto", "new", "old"]
-
 logger = logging.getLogger(__name__)
 
 
@@ -225,25 +174,22 @@ logger = logging.getLogger(__name__)
 class WorkflowCompiler(Protocol):
     """Protocol for workflow-specific compilers.
 
-    Each workflow (create-story, validate-story, etc.) implements this
-    protocol to provide workflow-specific compilation logic.
+    Each workflow (bmad-create-story, bmad-validate-story, etc.)
+    implements this protocol to provide workflow-specific compilation
+    logic.
 
     Attributes:
-        workflow_name: Unique workflow identifier (e.g., 'create-story').
+        workflow_name: Unique workflow identifier (e.g. ``'bmad-create-story'``).
 
     """
 
     @property
     def workflow_name(self) -> str:
-        """Unique workflow identifier (e.g., 'create-story')."""
+        """Unique workflow identifier (e.g. ``'bmad-create-story'``)."""
         ...
 
     def get_workflow_dir(self, context: CompilerContext) -> Path:
         """Return the workflow directory for this compiler.
-
-        The workflow directory contains workflow.yaml and instructions.xml.
-        This is typically a path relative to project_root like:
-        .bmad/bmm/workflows/4-implementation/create-story
 
         Args:
             context: The compilation context with project paths.
@@ -259,7 +205,6 @@ class WorkflowCompiler(Protocol):
 
         Returns:
             List of glob patterns for files this workflow needs.
-            Example: ['**/epics*.md', '**/prd*.md']
 
         """
         ...
@@ -269,7 +214,6 @@ class WorkflowCompiler(Protocol):
 
         Returns:
             Dictionary of variable names to their values or resolution hints.
-            Values can be str, Path, int, or other types as needed.
 
         """
         ...
@@ -291,8 +235,6 @@ class WorkflowCompiler(Protocol):
 
         Args:
             context: The compilation context with resolved variables and files.
-                context.workflow_ir: Pre-loaded WorkflowIR (from cache or original).
-                context.patch_path: Path to patch file (for post_process).
 
         Returns:
             CompiledWorkflow: The compiled workflow ready for output.
@@ -309,23 +251,21 @@ _WORKFLOW_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 def get_workflow_compiler(
     workflow_name: str,
     *,
-    skill_layout: SkillLayoutMode = "auto",
     project_root: Path | None = None,
+    **_legacy_kwargs: Any,
 ) -> WorkflowCompiler:
     """Load workflow compiler by name.
 
-    Phase 6: every accepted name in :data:`WORKFLOW_REGISTRY` resolves
-    to a v6.4+ skill-layout compiler. The legacy
-    ``bmad_assist.compiler.workflows`` modules remain as private
-    delegation targets only.
+    Every accepted name in :data:`WORKFLOW_REGISTRY` resolves to a
+    v6.4+ skill-layout compiler under :mod:`bmad_assist.compiler.skills`.
 
     Args:
-        workflow_name: Workflow identifier (e.g., 'create-story').
-        skill_layout: Accepted for backwards compatibility but a no-op
-            since Phase 6. Passing any value emits a
-            :class:`DeprecationWarning` (once per process).
-        project_root: Accepted for backwards compatibility. Phase 6
-            does not consume the value (routing is layout-independent).
+        workflow_name: Canonical ``bmad-`` prefixed workflow id
+            (e.g. ``'bmad-create-story'``).
+        project_root: Accepted for backwards compatibility. Not consumed
+            (routing is layout-independent).
+        **_legacy_kwargs: Swallows deprecated keyword arguments
+            (``skill_layout``) that pre-0.6.0 callers may still pass.
 
     Returns:
         WorkflowCompiler instance for the workflow.
@@ -335,20 +275,14 @@ def get_workflow_compiler(
             registered for it.
 
     """
-    del project_root  # No longer consulted; kept for signature compat.
+    del project_root, _legacy_kwargs  # kept for backwards-compat signature.
 
     if not workflow_name or not workflow_name.strip():
         raise CompilerError(
             "Workflow name cannot be empty\n"
             "  Why it's needed: Workflow name is required to load the compiler module\n"
-            "  How to fix: Provide a valid workflow name (e.g., 'create-story')"
+            "  How to fix: Provide a valid workflow name (e.g., 'bmad-create-story')"
         )
-
-    # Phase 6: ``skill_layout`` is no longer functional. Emit a
-    # DeprecationWarning the first time a non-default value is passed,
-    # then continue routing through the skill-layout compiler regardless.
-    if skill_layout != "auto":
-        _emit_skill_layout_flag_deprecation()
 
     normalized_name = workflow_name.strip()
 
@@ -359,17 +293,28 @@ def get_workflow_compiler(
             f"  How to fix: Use lowercase letters, digits, hyphens, underscores only"
         )
 
-    # Normalize underscores → hyphens so legacy module-style names
-    # (``create_story``) and BMAD canonical hyphen names
-    # (``create-story``) both resolve through the registry.
+    # Normalize underscores → hyphens so module-style names
+    # (``bmad_create_story``) and BMAD canonical hyphen names
+    # (``bmad-create-story``) both resolve through the registry.
     lookup_name = normalized_name.replace("_", "-")
+
+    # Internal callers (Phase enum → phase name → workflow name pipeline)
+    # still pass un-prefixed names like ``"create-story"``. Auto-prepend
+    # the canonical ``bmad-`` prefix when the lookup misses, so existing
+    # handlers / orchestrators don't need to be retrofitted with the
+    # canonical id at every call site. The 0.6.0 break only affects
+    # *external* surfaces (CLI args, user configs, public docs) that
+    # callers control; internal dispatch stays seamless.
     skill_id = WORKFLOW_REGISTRY.get(lookup_name)
+    if skill_id is None and not lookup_name.startswith("bmad-"):
+        skill_id = WORKFLOW_REGISTRY.get(f"bmad-{lookup_name}")
+
     if skill_id is None:
         raise CompilerError(
             f"Workflow not found: '{normalized_name}'\n"
             f"  Suggestion: register the workflow in `WORKFLOW_REGISTRY` "
             f"in compiler/core.py, or use one of the supported names "
-            f"({', '.join(sorted(set(WORKFLOW_REGISTRY)))})."
+            f"({', '.join(sorted(WORKFLOW_REGISTRY))})."
         )
 
     logger.debug("Routing '%s' through skill-layout compiler '%s'", normalized_name, skill_id)
@@ -415,22 +360,18 @@ def _check_interactive_elements(
 def compile_workflow(
     workflow_name: str,
     context: CompilerContext,
-    *,
-    skill_layout: SkillLayoutMode = "auto",
+    **_legacy_kwargs: Any,
 ) -> CompiledWorkflow:
     """Compile a workflow by name with given context.
 
-    Phase 6: all workflows route through the v6.4+ skill-layout
-    compilers. The skill-layout compiler manages its own IR / cache
-    lifecycle, so :func:`load_workflow_ir` is no longer invoked from
-    this function.
+    All workflows route through the v6.4+ skill-layout compilers. The
+    skill-layout compiler manages its own IR / cache lifecycle.
 
     Args:
-        workflow_name: Workflow identifier (e.g., 'create-story').
+        workflow_name: Canonical ``bmad-`` prefixed workflow id.
         context: The compilation context with project paths.
-        skill_layout: Accepted for backwards compatibility but a no-op
-            since Phase 6. Passing any non-default value emits a
-            :class:`DeprecationWarning` (once per process).
+        **_legacy_kwargs: Swallows deprecated keyword arguments
+            (``skill_layout``) that pre-0.6.0 callers may still pass.
 
     Returns:
         CompiledWorkflow: The compiled workflow ready for output.
@@ -439,9 +380,10 @@ def compile_workflow(
         CompilerError: If workflow invalid or compilation fails.
 
     """
+    del _legacy_kwargs  # kept for backwards-compat signature.
+
     compiler = get_workflow_compiler(
         workflow_name,
-        skill_layout=skill_layout,
         project_root=context.project_root,
     )
 

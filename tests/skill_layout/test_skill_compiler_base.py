@@ -26,10 +26,20 @@ import yaml
 
 from bmad_assist.compiler.skills._base import SkillLayoutCompilerBase
 from bmad_assist.compiler.types import CompilerContext
-from bmad_assist.compiler.workflows.create_story import CreateStoryCompiler
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLED_SKILL = REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-create-story"
+
+
+class _FakeLegacyCompiler:
+    """Test stand-in for the deleted ``CreateStoryCompiler`` class.
+
+    The base-class contract tests only need *something* truthy to pass
+    the ``legacy_compiler_class`` slot — the actual class is never
+    instantiated by these tests.
+    """
+
+    workflow_name = "fake"
 
 
 # --------------------------------------------------------------------------- #
@@ -47,7 +57,7 @@ class TestSubclassContract:
             class MissingSkillId(SkillLayoutCompilerBase):
                 # Deliberately empty skill_id.
                 legacy_workflow_name = "anything"
-                legacy_compiler_class = CreateStoryCompiler
+                legacy_compiler_class = _FakeLegacyCompiler
 
                 def build_extra_vars(self, context, customization):
                     return {}
@@ -59,7 +69,7 @@ class TestSubclassContract:
             class MissingLegacy(SkillLayoutCompilerBase):
                 skill_id = "bmad-anything"
                 # legacy_workflow_name deliberately omitted.
-                legacy_compiler_class = CreateStoryCompiler
+                legacy_compiler_class = _FakeLegacyCompiler
 
                 def build_extra_vars(self, context, customization):
                     return {}
@@ -122,7 +132,7 @@ class TestSubclassContract:
         class GoodSub(SkillLayoutCompilerBase):
             skill_id = "bmad-good"
             legacy_workflow_name = "good"
-            legacy_compiler_class = CreateStoryCompiler
+            legacy_compiler_class = _FakeLegacyCompiler
 
             def build_extra_vars(self, context, customization):
                 return {}

@@ -384,24 +384,16 @@ def freeze_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(epic_story_mod, "datetime", _FrozenDatetime)
 
     # Synthesis compilers compute date directly via `from datetime import date`.
-    # Patch both the legacy compiler modules and the inlined skill-layout
-    # compiler modules so Phase 7 inlined compilers stay deterministic.
+    # Patch the inlined skill-layout compiler modules.
     import bmad_assist.compiler.skills.bmad_code_review_synthesis as inlined_crs_mod
     import bmad_assist.compiler.skills.bmad_validate_story_synthesis as inlined_vss_mod
-    import bmad_assist.compiler.workflows.code_review_synthesis as crs_mod
-    import bmad_assist.compiler.workflows.validate_story_synthesis as vss_mod
 
-    monkeypatch.setattr(vss_mod, "date", _FrozenDate)
-    monkeypatch.setattr(crs_mod, "date", _FrozenDate)
     monkeypatch.setattr(inlined_vss_mod, "date", _FrozenDate)
     monkeypatch.setattr(inlined_crs_mod, "date", _FrozenDate)
 
     # validate_story uses datetime.now() for a timestamp variable.
-    # Patch both the legacy and the Phase 7.2 inlined module.
     import bmad_assist.compiler.skills.bmad_validate_story as inlined_vs_mod
-    import bmad_assist.compiler.workflows.validate_story as vs_mod
 
-    monkeypatch.setattr(vs_mod, "datetime", _FrozenDatetime)
     monkeypatch.setattr(inlined_vs_mod, "datetime", _FrozenDatetime)
 
 

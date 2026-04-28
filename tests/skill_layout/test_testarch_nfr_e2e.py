@@ -101,24 +101,6 @@ class TestSkillLayoutCompileE2E:
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
         assert type(compiler).__name__ == "BmadTestarchNfrCompiler"
 
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """Legacy un-prefixed name ``testarch-nfr-assess`` must also route here.
-
-        The Phase 3.2-B rename collapsed ``testarch-nfr-assess`` →
-        ``bmad-testarch-nfr``: both keys map to the same compiler in
-        ``compiler/core.py::_SKILL_LAYOUT_COMPILERS``.
-        """
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "testarch-nfr-assess", skill_layout="new", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-        assert type(compiler).__name__ == "BmadTestarchNfrCompiler"
-
-
 class TestSkillLayoutCacheLifecycle:
     """Cache write + invalidation behaviour for the skill-layout path."""
 

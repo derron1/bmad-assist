@@ -53,8 +53,7 @@ def resolve_tea_index_path(project_root: Path) -> Path | None:
     5. The bundled fallback shipped under
        ``bmad_assist.testarch.knowledge_base``.
 
-    The function does **not** require :func:`detect_layout` because both
-    layouts are probed unconditionally. This means the resolver works
+    Both layouts are probed unconditionally, so the resolver works
     correctly during the transition (e.g. a project bootstrapped by
     ``bmad-assist init`` that doesn't yet have a full BMAD install).
 

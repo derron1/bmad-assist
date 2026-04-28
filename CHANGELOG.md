@@ -2,7 +2,9 @@
 
 All notable changes to bmad-assist are documented in this file.
 
-## [Unreleased]
+## [0.6.0] - 2026-04-26
+
+This release completes the BMAD v6.4+ skill-layout refactor. All 18 workflows now compile through the inlined skill-layout compilers under `bmad_assist.compiler.skills`; the legacy compiler tree, the deprecated `--skill-layout` flag, the `config.skill_layout` field, and the legacy workflow-name aliases are gone. Notification labels for v6.4+ users now resolve from the actual `SKILL.md` `description` instead of falling back to the workflow name.
 
 ### Added
 - **BMAD v6.4+ Skill Layout** — bmad-assist now compiles workflows via BMAD's new `SKILL.md` + `customize.toml` format. All 18 BMAD-aligned workflows migrated:
@@ -10,40 +12,52 @@ All notable changes to bmad-assist are documented in this file.
   - **TEA** (8): `bmad-testarch-{atdd,automate,ci,framework,nfr,test-design,test-review,trace}` (note: `testarch-nfr-assess` renamed to `bmad-testarch-nfr` upstream)
   - **bmad-assist internal** (5, no BMAD upstream): `bmad-validate-story`, `bmad-validate-story-synthesis`, `bmad-qa-plan-execute`, `bmad-qa-plan-generate`, `bmad-code-review-synthesis` — authored as outcome-based SKILL.md
   - **`bmad-security-review`** — Phase 6 finished migrating the last legacy workflow (CWE-based vulnerability scanner).
-- **`--skill-layout {auto,new,old}` CLI flag** on `init` and `run` commands to override layout detection. **Phase 6: this flag is now a no-op-with-warning.**
 - **`--reset-skills-force` flag** on `init` for destructive customization reset. The default `--reset-workflows` flow now PRESERVES per-skill `customize.toml` overrides; use `--reset-skills-force` only when you want a completely clean slate.
-- **`bmad-assist init` bootstrap** — copies bundled v6.4+ skills to `.claude/skills/<id>/` and `.agents/skills/<id>/` automatically. Phase 6 made this the only bootstrap mode.
+- **`bmad-assist init` bootstrap** — copies bundled v6.4+ skills to `.claude/skills/<id>/` and `.agents/skills/<id>/` automatically. This is now the only bootstrap mode.
 
 ### Changed
-- **Default workflow layout** flipped to BMAD v6.4+ skill layout (Phase 5).
-- **TEA `tea-index.csv`** path resolution is now layout-aware. The bundled fallback was refreshed to the v6.4+ schema (51 fragments, 6 columns including `tier`). The parser tolerates both 5-col legacy and 6-col v6.4+ schemas.
-- **`bmad-assist init`** is now layout-aware. Detects an existing v6.4+ install (no-clobber) or bootstraps the new layout into a fresh project. Phase 6 removed the legacy `_bmad/bmm/workflows/...` install branch.
+- **Default workflow layout** is the BMAD v6.4+ skill layout (Phase 5 flipped the default; 0.6.0 makes it the only layout).
+- **TEA `tea-index.csv`** path resolution is layout-aware. The bundled fallback was refreshed to the v6.4+ schema (51 fragments, 6 columns including `tier`). The parser tolerates both 5-col legacy and 6-col v6.4+ schemas.
+- **`bmad-assist init`** detects an existing v6.4+ install (no-clobber) or bootstraps the new layout into a fresh project. The legacy `_bmad/bmm/workflows/...` install branch is gone.
 
 ### Removed (Phase 6)
 - **Legacy bundled workflow sources** — `src/bmad_assist/workflows/<name>/` directories deleted. Workflow source bundles now live exclusively under `src/bmad_assist/skills/bmad-<name>/`.
 - **Legacy workflow cache** — `src/bmad_assist/workflows/cache/` deleted (skill-layout cache at `src/bmad_assist/skills/cache/` is the survivor).
-- **Legacy routing** — the `workflow_name → legacy compiler` dispatch path is gone. `get_workflow_compiler` now always returns a v6.4+ skill-layout compiler from `bmad_assist.compiler.skills.*`.
+- **Legacy routing** — the `workflow_name → legacy compiler` dispatch path is gone. `get_workflow_compiler` always returns a v6.4+ skill-layout compiler from `bmad_assist.compiler.skills.*`.
 - **Legacy init bootstrap** — `bmad-assist init` no longer has a legacy-layout fallback. New projects always bootstrap to the v6.4+ skill layout.
-- **Bundled workflow accessors** — `get_bundled_workflow_dir`, `get_bundled_cache`, `list_bundled_workflows`, and `list_bundled_cache` were removed from `bmad_assist.workflows`. The package is now an empty stub kept for import compatibility.
+- **Bundled workflow accessors** — `get_bundled_workflow_dir`, `get_bundled_cache`, `list_bundled_workflows`, and `list_bundled_cache` were removed from `bmad_assist.workflows`. The whole package is gone (see Phase 7 below).
 - **Legacy project-setup helpers** — `copy_bundled_workflows`, `reset_project_cache`, `sync_bundled_cache`, and `_create_bmad_config` removed from `bmad_assist.core.project_setup`.
 - **`discover_workflow_dir`** — the layout-pinned wrapper around `discover_workflow_source`. Use `discover_workflow_source` (or `bmad_assist.skill_layout.find_skill`) directly.
 
-### Deprecated
-- **`--skill-layout` CLI flag** — accepted but a no-op; emits a `DeprecationWarning` once per process when set to anything other than `auto`. Will be removed in next major release.
-- **`config.skill_layout` field** — accepted but ignored; emits a `DeprecationWarning` if set to `"old"`. Will be removed in next major release.
-- **Legacy workflow-name aliases** in dispatch (`"create-story" → "bmad-create-story"`) kept for backwards compatibility for one more release; will be removed in next major. Use canonical `bmad-` prefixed names.
-- **`bmad_assist.skill_layout.detect_layout`** is now a permanent `"new"` shim — preserved as a compatibility surface only. Will be removed in next major.
+### Removed (Phase 7)
+- **Legacy compiler classes** — the entire `bmad_assist.compiler.workflows` package was deleted. All workflows now compile through their inlined skill-layout compilers in `bmad_assist.compiler.skills`. The hook-based `_run_workflow_compile()` pattern absorbed the legacy `compile()` body for each of 18 workflows; legacy classes are gone.
+- **`bmad_assist.workflows`** stub package removed (was an empty shim retained through Phase 6 for import compatibility).
+- **`bmad_assist.compiler.ValidateStoryCompiler`** re-export removed from the public compiler API. Use `bmad_assist.compiler.skills.bmad_validate_story.BmadValidateStoryCompiler`.
+- **`--skill-layout` CLI flag** removed from `init` and `run`. (Was a no-op-with-warning since Phase 6.)
+- **`config.skill_layout` field** removed from the config model. The field is now silently dropped on load (Pydantic's default `extra="ignore"` keeps existing configs valid); remove the field from your `bmad-assist.yaml` to suppress the dead setting.
+- **Legacy workflow-name aliases** in `WORKFLOW_REGISTRY` removed. The registry now contains only canonical `bmad-` prefixed self-mappings. Internal dispatch auto-prepends `bmad-` for un-prefixed names so production handlers (which dispatch via the `Phase` enum's short names) keep working seamlessly; **external** surfaces (CLI args, user configs, public docs) now require the canonical `bmad-` prefix.
+- **`bmad_assist.skill_layout.detect_layout`** removed. The function had been a permanent `"new"` shim since Phase 6; callers were already assuming new layout.
+- **`WORKFLOW_TO_SKILL_ID` re-export** from `compiler.workflow_discovery` removed. Import from `bmad_assist.compiler.core.WORKFLOW_REGISTRY` directly.
+
+### Fixed (Phase 7)
+- **Workflow notification labels** now resolve from the v6.4+ skill source (`.claude/skills/bmad-<name>/SKILL.md` frontmatter `description`, with `.agents/skills/...` and the bundled `src/bmad_assist/skills/...` as fallbacks). Previously, v6.4+ users got smart-truncated workflow names because `_compute_config` only consulted the legacy `_bmad/bmm/workflows/...workflow.yaml` `notification.*` fields. Notifications now display the workflow's actual `description` for v6.4+ installs. The legacy YAML probe is still consulted as a fallback for users with a `_bmad/...` install.
 
 ### Internal
-- **Legacy compiler classes** in `src/bmad_assist/compiler/workflows/*.py` retained as private delegation targets for skill-layout compilers (architectural debt to be addressed in a future release by inlining their logic into the skill-layout compilers).
-- **`WORKFLOW_TO_SKILL_ID` and `_SKILL_LAYOUT_COMPILERS`** collapsed into a single `WORKFLOW_REGISTRY` dispatch table in `bmad_assist.compiler.core`. `WORKFLOW_TO_SKILL_ID` is re-exported from `compiler.workflow_discovery` for callers that historically imported it from there.
-- **`get_workflow_dir()`** in legacy compilers now resolves through `bmad_assist.compiler.workflows.resolve_legacy_workflow_dir`, which probes the project's `_bmad/...` install first and falls back to the bundled skill source under `src/bmad_assist/skills/bmad-<name>/`. The legacy `compile()` body never reads `workflow.yaml` from this path because the skill-layout compiler pre-populates `context.workflow_ir` before delegation.
+- **Inlined all 18 skill-layout compilers** — each absorbed its legacy `compile()` body and helper methods directly. The `_run_workflow_compile()` hook on `SkillLayoutCompilerBase` is the entry point.
+- **Extracted shared bases**: `_synthesis_base.py` (multi-LLM aggregation), `_testarch_base.py` (TEA tri-modal pattern), `_git_helpers.py` (git diff helpers shared by code-review variants). No `_story_workflow_base.py` extracted — story workflows diverge enough that standalone is cleaner.
+- **Snapshot test infrastructure** at `tests/skill_layout/snapshots/` — 18 pinned compiled-output baselines that gate any future skill-layout compiler change.
+- **`WORKFLOW_TO_SKILL_ID` and `_SKILL_LAYOUT_COMPILERS`** collapsed into a single `WORKFLOW_REGISTRY` dispatch table in `bmad_assist.compiler.core`.
 - **`bmad_assist.security.patterns.get_pattern_dir`** retargeted from `bmad_assist/workflows/security-review/patterns/` to `bmad_assist/skills/bmad-security-review/patterns/`.
 
-### Migration
-- **Existing v6.4+ users**: no action needed.
-- **Existing legacy `_bmad/bmm/workflows/...` users**: the legacy install is no longer consulted by routing. Run `bmad-assist init` to bootstrap the v6.4+ skill layout.
-- **Fresh installs**: get the new layout by default.
+### Migration (from 0.5.x to 0.6.0)
+- **Workflow names**: replace any references to legacy short names (e.g. `create-story`) with canonical `bmad-` prefixed names (e.g. `bmad-create-story`) in YAML configs, scripts, and the `--phase` CLI argument. *Internal* dispatch still auto-prepends `bmad-` so the change is only required at user-facing surfaces.
+- **`--skill-layout` flag**: stop passing it; it's removed.
+- **`bmad-assist.yaml` config**: remove any `skill_layout: ...` line; the field is gone (silently ignored on load — no error, but it's dead config).
+- **`bmad_assist.compiler.workflows.*`** imports: update to `bmad_assist.compiler.skills.bmad_*` (e.g., `from bmad_assist.compiler.workflows.create_story import CreateStoryCompiler` → `from bmad_assist.compiler.skills.bmad_create_story import BmadCreateStoryCompiler`).
+- **`bmad_assist.compiler.ValidateStoryCompiler`** import: update to `from bmad_assist.compiler.skills.bmad_validate_story import BmadValidateStoryCompiler`.
+- **`bmad_assist.skill_layout.detect_layout`** callers: drop the call; the v6.4+ skill layout is the only layout.
+- **`bmad_assist.compiler.workflow_discovery.WORKFLOW_TO_SKILL_ID`** callers: import `WORKFLOW_REGISTRY` from `bmad_assist.compiler.core` instead.
+- **Existing legacy `_bmad/bmm/workflows/...` users**: the `bmad-assist patch` dev tool still consults that path, but `bmad-assist run` and `init` use only the v6.4+ skill layout. Run `bmad-assist init` to bootstrap if you haven't.
 
 ## [0.4.34] - 2026-03-07
 

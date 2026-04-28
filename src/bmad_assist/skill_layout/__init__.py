@@ -1,18 +1,15 @@
 """BMAD v6.4+ "skill" layout reader.
 
-This package is consumed by Phase 2+ of the layout refactor. It does
-*not* yet replace the workflow-based compiler — it only exposes the
-primitives Phase 2 will use:
+This package provides primitives for reading and resolving the BMAD
+v6.4+ skill format:
 
 * :func:`parse_skill` — turn ``SKILL.md`` into a structured document.
 * :func:`resolve_customization` / :func:`resolve_central_config` — the
   pure-Python merger that mirrors ``_bmad/scripts/*.py``.
 * :func:`read_skill_manifest` — index ``skill-manifest.csv``.
 * :func:`find_skill` — runtime probe for ``SKILL.md`` files.
-* :func:`detect_layout` — distinguish the new layout from the old one.
 """
 
-from .detection import detect_layout
 from .errors import (
     MalformedSkill,
     ManifestError,
@@ -44,7 +41,6 @@ __all__ = [
     "SkillLayoutError",
     "SkillNotFound",
     "deep_merge",
-    "detect_layout",
     "extract_key",
     "find_bundled_skill",
     "find_skill",

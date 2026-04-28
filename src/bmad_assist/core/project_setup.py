@@ -303,37 +303,34 @@ def ensure_project_setup(
     include_gitignore: bool = False,
     force: bool = False,
     console: Console | None = None,
-    skill_layout: str = "auto",
     *,
     preserve_customizations: bool = True,
+    **_legacy_kwargs: object,
 ) -> SetupResult:
     """Ensure project is set up for bmad-assist.
 
-    Phase 6: the legacy ``_bmad/bmm/workflows/...`` bootstrap path was
-    removed alongside the bundled workflow source tree. Every project —
-    fresh or pre-existing — now bootstraps the v6.4+ skill layout into
-    ``.claude/skills/<id>/`` and ``.agents/skills/<id>/`` from the
-    bundled :mod:`bmad_assist.skills` package.
+    Every project — fresh or pre-existing — bootstraps the v6.4+ skill
+    layout into ``.claude/skills/<id>/`` and ``.agents/skills/<id>/``
+    from the bundled :mod:`bmad_assist.skills` package.
 
     Args:
         project_path: Project root directory.
         include_gitignore: If True, also update .gitignore (init only).
         force: If True, re-bootstrap (re-copy installed skills).
         console: Rich console for output (None = no output).
-        skill_layout: Accepted for backwards compatibility with Phase 4
-            callers but no longer functional. The setup always uses the
-            v6.4+ skill layout. Will be removed in the next major.
         preserve_customizations: When True (default), the v6.4+
             re-bootstrap preserves any per-skill ``customize.toml``
             overrides. The destructive ``--reset-skills-force`` path
             wires this to False to also overwrite ``customize.toml``.
+        **_legacy_kwargs: Swallows deprecated keyword arguments
+            (``skill_layout``) that pre-0.6.0 callers may still pass.
 
     Returns:
         SetupResult with status and details. ``layout`` is always
-        ``"new"`` since Phase 6.
+        ``"new"``.
 
     """
-    del skill_layout  # No longer consulted; signature kept for compat.
+    del _legacy_kwargs  # kept for backwards-compat signature.
 
     from bmad_assist.git import setup_gitignore
 

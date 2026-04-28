@@ -6,9 +6,13 @@ known workflows, and intelligent fallback via pattern matching and smart truncat
 
 Resolution order:
 1. Predefined registry (hardcoded, O(1) lookup)
-2. Workflow YAML `notification.icon` / `notification.label` fields
-3. Pattern-based default icons (matching workflow name patterns)
-4. Smart-truncated name with neutral icon (fallback)
+2. v6.4+ ``SKILL.md`` ``description`` frontmatter (probed in
+   ``.claude/skills/bmad-<name>/`` → ``.agents/skills/bmad-<name>/`` →
+   bundled ``src/bmad_assist/skills/bmad-<name>/``)
+3. Legacy workflow YAML ``notification.icon`` / ``notification.label``
+   fields (still consulted for projects with a ``_bmad/...`` install)
+4. Pattern-based default icons (matching workflow name patterns)
+5. Smart-truncated name with neutral icon (fallback)
 
 Example:
     >>> from bmad_assist.notifications import (
@@ -33,6 +37,10 @@ from pathlib import Path
 import yaml
 
 logger = logging.getLogger(__name__)
+
+# v6.4+ skill mirror prefixes (relative to project root). Probed in
+# order before the bundled fallback under ``src/bmad_assist/skills``.
+_SKILL_LAYOUT_PROJECT_PREFIXES = (".claude/skills", ".agents/skills")
 
 __all__ = [
     "WorkflowNotificationConfig",
@@ -316,13 +324,109 @@ def _load_workflow_notification_config(workflow_name: str) -> WorkflowNotificati
     return None
 
 
+def _canonical_skill_id(workflow_name: str) -> str:
+    """Map a workflow name to its canonical ``bmad-`` skill id.
+
+    Module-prefixed names (``"testarch:nfr"``) collapse to their
+    base name before prefixing. Names that already start with
+    ``bmad-`` are returned unchanged.
+    """
+    base = _strip_module_prefix(workflow_name)
+    if base.startswith("bmad-"):
+        return base
+    return f"bmad-{base}"
+
+
+def _find_skill_md_paths(workflow_name: str) -> list[Path]:
+    """Find possible ``SKILL.md`` paths for a v6.4+ workflow.
+
+    Probes (in order):
+
+    1. ``<cwd>/.claude/skills/bmad-<name>/SKILL.md``
+    2. ``<cwd>/.agents/skills/bmad-<name>/SKILL.md``
+    3. Bundled ``src/bmad_assist/skills/bmad-<name>/SKILL.md``
+
+    Args:
+        workflow_name: Workflow identifier (e.g. ``"create-story"``).
+
+    Returns:
+        Ordered list of candidate ``SKILL.md`` paths. Non-existent
+        paths are still returned — the caller filters them.
+
+    """
+    project_root = Path.cwd()
+    skill_id = _canonical_skill_id(workflow_name)
+
+    candidates = [
+        project_root / prefix / skill_id / "SKILL.md" for prefix in _SKILL_LAYOUT_PROJECT_PREFIXES
+    ]
+
+    # Bundled fallback — always last so project installs win.
+    try:
+        from importlib.resources import files
+
+        bundled = Path(str(files("bmad_assist.skills"))) / skill_id / "SKILL.md"
+    except (ModuleNotFoundError, TypeError, ValueError):
+        # Defensive fallback if importlib.resources is unhappy
+        # (e.g. namespace packages, frozen builds).
+        bundled = Path(__file__).parent.parent / "skills" / skill_id / "SKILL.md"
+    candidates.append(bundled)
+
+    return candidates
+
+
+def _load_skill_md_notification_config(
+    workflow_name: str,
+) -> WorkflowNotificationConfig | None:
+    """Resolve a notification config from a v6.4+ ``SKILL.md`` description.
+
+    Uses :func:`bmad_assist.skill_layout.parse_skill` to read the
+    structured frontmatter. The ``description`` field becomes the
+    label (smart-truncated to the configured maximum); the icon is
+    derived via pattern match on the workflow name. Returns ``None``
+    on any error (missing file, malformed frontmatter, missing
+    description).
+
+    """
+    from bmad_assist.skill_layout import parse_skill
+    from bmad_assist.skill_layout.errors import MalformedSkill
+
+    for candidate in _find_skill_md_paths(workflow_name):
+        if not candidate.is_file():
+            continue
+        try:
+            doc = parse_skill(candidate)
+        except MalformedSkill as exc:
+            logger.debug("SKILL.md probe skipped %s: %s", candidate, exc)
+            continue
+
+        description = doc.frontmatter.description.strip()
+        if not description:
+            continue
+
+        # The frontmatter description is a free-form sentence; we
+        # smart-truncate it the same way fallback labels are formatted
+        # so the notification line stays bounded.
+        label = _smart_truncate_label(description)
+        if not label:
+            continue
+
+        return WorkflowNotificationConfig(
+            icon=_match_icon_pattern(workflow_name),
+            label=label,
+        )
+
+    return None
+
+
 def _compute_config(workflow_name: str) -> WorkflowNotificationConfig:
     """Compute notification config for a workflow.
 
     Resolution order:
-    1. Predefined registry
-    2. Workflow YAML notification fields
-    3. Pattern matching + truncation fallback
+    1. Predefined registry (``PREDEFINED_LABELS``)
+    2. v6.4+ ``SKILL.md`` frontmatter description
+    3. Legacy workflow YAML ``notification.*`` fields
+    4. Pattern matching + truncation fallback
 
     Args:
         workflow_name: Workflow identifier.
@@ -335,12 +439,19 @@ def _compute_config(workflow_name: str) -> WorkflowNotificationConfig:
     if workflow_name in PREDEFINED_LABELS:
         return PREDEFINED_LABELS[workflow_name]
 
-    # 2. Try to load from workflow YAML
+    # 2. v6.4+ SKILL.md description (the post-Phase-7 truth for v6.4+
+    # users; the bundled fallback covers fresh installs that haven't
+    # run ``bmad-assist init`` yet).
+    skill_config = _load_skill_md_notification_config(workflow_name)
+    if skill_config is not None:
+        return skill_config
+
+    # 3. Try to load from legacy workflow YAML (``_bmad/...`` installs).
     yaml_config = _load_workflow_notification_config(workflow_name)
     if yaml_config is not None:
         return yaml_config
 
-    # 3. Fallback: pattern matching + smart truncation
+    # 4. Fallback: pattern matching + smart truncation
     return WorkflowNotificationConfig(
         icon=_match_icon_pattern(workflow_name),
         label=_smart_truncate_label(workflow_name),

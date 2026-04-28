@@ -89,18 +89,6 @@ class TestSkillLayoutCompileE2E:
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
         assert type(compiler).__name__ == "BmadSecurityReviewCompiler"
 
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """Test legacy workflow name routes to new compiler when layout new."""
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "security-review", skill_layout="new", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-        assert type(compiler).__name__ == "BmadSecurityReviewCompiler"
-
     def test_compiled_body_contains_security_report_markers(self, project_root: Path) -> None:
         """SKILL.md authors the SECURITY_REPORT markers — they survive substitution."""
         result = compile_workflow(

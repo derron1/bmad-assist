@@ -1,9 +1,8 @@
-"""Tests for the layout-aware init bootstrap (Phase 4 — Component C).
+"""Tests for the init bootstrap.
 
-Covers the three branches in :func:`bmad_assist.core.project_setup.ensure_project_setup`:
+Covers the two branches in :func:`bmad_assist.core.project_setup.ensure_project_setup`:
 
 * Existing v6.4+ install → no-clobber.
-* Existing legacy ``_bmad/bmm/workflows`` install → legacy copy.
 * Fresh project → bootstrap new layout under
   ``.claude/skills/<id>/`` and ``.agents/skills/<id>/``.
 """
@@ -18,7 +17,6 @@ from bmad_assist.core.project_setup import (
     bootstrap_new_layout,
     ensure_project_setup,
 )
-from bmad_assist.skill_layout import detect_layout
 
 
 def _quiet() -> Console:
@@ -76,28 +74,19 @@ def test_bootstrap_copies_supporting_files(tmp_path: Path) -> None:
 # --- ensure_project_setup branches ------------------------------------------
 
 
-def test_fresh_project_auto_bootstraps_new_layout(tmp_path: Path) -> None:
-    """A fresh project + auto detection bootstraps the new layout."""
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
+def test_fresh_project_bootstraps_new_layout(tmp_path: Path) -> None:
+    """A fresh project bootstraps the new layout."""
+    result = ensure_project_setup(tmp_path, console=_quiet())
 
     assert result.layout == "new"
     assert result.skills_bootstrapped, "expected bundled skills to be bootstrapped"
     # No legacy workflow copy should have happened.
     assert not result.workflows_copied
     assert not result.config_created
-    # Detection should now classify the project as new layout.
-    assert detect_layout(tmp_path) == "new"
-
-
-def test_init_skill_layout_new_bootstraps_on_fresh(tmp_path: Path) -> None:
-    """Forcing --skill-layout=new on a fresh project bootstraps."""
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
-    assert result.layout == "new"
-    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
 
 
 def test_existing_v64_install_is_not_clobbered(tmp_path: Path) -> None:
-    """A pre-existing .claude/skills/bmad-* skill is preserved on auto."""
+    """A pre-existing .claude/skills/bmad-* skill is preserved."""
     # Simulate an existing v6.4+ install in BOTH mirrors so the
     # bootstrap has nothing to do for create-story.
     for mirror in (".claude/skills", ".agents/skills"):
@@ -106,7 +95,7 @@ def test_existing_v64_install_is_not_clobbered(tmp_path: Path) -> None:
         (skill_dir / "SKILL.md").write_text("EXISTING USER SKILL\n", encoding="utf-8")
         (skill_dir / "customize.toml").write_text("", encoding="utf-8")
 
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
+    result = ensure_project_setup(tmp_path, console=_quiet())
 
     assert result.layout == "new"
     # No clobber — sentinel still present in both mirrors.
@@ -121,13 +110,13 @@ def test_existing_v64_install_is_not_clobbered(tmp_path: Path) -> None:
 
 
 def test_existing_legacy_install_still_bootstraps_new_layout(tmp_path: Path) -> None:
-    """Phase 6: a legacy install no longer suppresses the new-layout bootstrap."""
+    """A legacy install does not suppress the new-layout bootstrap."""
     # Simulate an existing legacy install.
     legacy = tmp_path / "_bmad" / "bmm" / "workflows" / "4-implementation" / "create-story"
     legacy.mkdir(parents=True)
     (legacy / "workflow.yaml").write_text("name: create-story\n", encoding="utf-8")
 
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
+    result = ensure_project_setup(tmp_path, console=_quiet())
 
     assert result.layout == "new"
     # New-layout bootstrap proceeded even though _bmad/... is present.
@@ -135,23 +124,13 @@ def test_existing_legacy_install_still_bootstraps_new_layout(tmp_path: Path) -> 
     assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
 
 
-def test_skill_layout_old_is_a_no_op(tmp_path: Path) -> None:
-    """Phase 6: ``skill_layout='old'`` is accepted but ignored."""
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="old")
-    # Always new layout, regardless of the requested mode.
-    assert result.layout == "new"
-    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()
-
-
 def test_bootstrap_then_discovery_resolves_skill(tmp_path: Path) -> None:
     """End-to-end: bootstrap a fresh project, then discover_workflow_source hits 'new'."""
     from bmad_assist.compiler.workflow_discovery import discover_workflow_source
 
-    ensure_project_setup(tmp_path, console=_quiet(), skill_layout="new")
-    # Detection should now classify as new.
-    assert detect_layout(tmp_path) == "new"
+    ensure_project_setup(tmp_path, console=_quiet())
 
-    source = discover_workflow_source("create-story", tmp_path)
+    source = discover_workflow_source("bmad-create-story", tmp_path)
     assert source is not None
     assert source.layout == "new"
     assert source.skill_id == "bmad-create-story"
@@ -165,9 +144,16 @@ def test_force_on_existing_v64_re_bootstraps(tmp_path: Path) -> None:
     (skill_dir / "SKILL.md").write_text("OLD\n", encoding="utf-8")
     (skill_dir / "customize.toml").write_text("", encoding="utf-8")
 
-    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto", force=True)
+    result = ensure_project_setup(tmp_path, console=_quiet(), force=True)
 
     assert result.layout == "new"
     assert result.skills_bootstrapped, "force=True should re-bootstrap"
     # Verify content was overwritten.
     assert "OLD" not in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_legacy_skill_layout_kwarg_swallowed(tmp_path: Path) -> None:
+    """Pre-0.6.0 callers passing ``skill_layout=`` keyword are tolerated."""
+    result = ensure_project_setup(tmp_path, console=_quiet(), skill_layout="auto")
+    assert result.layout == "new"
+    assert (tmp_path / ".claude" / "skills" / "bmad-create-story" / "SKILL.md").is_file()

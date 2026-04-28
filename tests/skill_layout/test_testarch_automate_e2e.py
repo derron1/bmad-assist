@@ -107,19 +107,6 @@ class TestSkillLayoutCompileE2E:
         assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
         assert type(compiler).__name__ == "BmadTestarchAutomateCompiler"
 
-    def test_legacy_workflow_name_routes_to_new_compiler_when_layout_new(
-        self, project_root: Path
-    ) -> None:
-        """Legacy un-prefixed name must also route to the new compiler."""
-        from bmad_assist.compiler.core import get_workflow_compiler
-
-        compiler = get_workflow_compiler(
-            "testarch-automate", skill_layout="new", project_root=project_root
-        )
-        assert type(compiler).__module__.startswith("bmad_assist.compiler.skills.")
-        assert type(compiler).__name__ == "BmadTestarchAutomateCompiler"
-
-
 class TestSkillLayoutCacheLifecycle:
     """Cache write + invalidation behaviour for the testarch-automate skill path."""
 
