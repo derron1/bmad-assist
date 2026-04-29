@@ -442,6 +442,48 @@ class TestExecuteIntegration:
         assert result.error == "Provider crashed"
         mock_invoke.assert_called_once_with("prompt")
 
+    def test_retry_mutates_prompt_for_cache_busting(self, tmp_path: Path) -> None:
+        """Each no-file retry sends a different prompt to bypass prompt cache.
+
+        Anthropic's server-side prompt cache returns a deterministic shallow
+        response (~5 min TTL) when the same prompt is sent repeatedly. The
+        handler appends a per-attempt recovery suffix on each miss so the
+        bytes change and the cache misses.
+        """
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        bad_result = _make_provider_result(stdout="random noise")
+
+        prompts_sent: list[str] = []
+
+        def mock_invoke(prompt: str) -> ProviderResult:
+            prompts_sent.append(prompt)
+            return bad_result
+
+        with (
+            patch.object(handler, "render_prompt", return_value="BASE_PROMPT"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke),
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=None,
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            handler.execute(state)
+
+        # MAX_RETRIES + 1 = 4 attempts total.
+        assert len(prompts_sent) == MAX_RETRIES + 1
+        # First attempt: base prompt unchanged.
+        assert prompts_sent[0] == "BASE_PROMPT"
+        # Subsequent attempts: each appends a fresh nudge with the upcoming
+        # attempt number embedded.
+        for i in range(1, len(prompts_sent)):
+            assert prompts_sent[i].startswith("BASE_PROMPT")
+            assert "NO-FILE RECOVERY" in prompts_sent[i]
+            assert f"retry {i + 1} of {MAX_RETRIES + 1}" in prompts_sent[i]
+        # All prompts after the first must differ from each other (cache-bust).
+        assert len(set(prompts_sent)) == len(prompts_sent)
+
 
 class TestRateLimitRecovery:
     """Tests for ToolCallGuard termination recovery."""

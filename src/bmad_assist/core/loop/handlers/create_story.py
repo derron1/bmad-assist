@@ -63,6 +63,45 @@ _FINALIZATION_SUFFIX = (
 )
 
 
+def _no_file_recovery_suffix(next_attempt: int, max_attempts: int, state: State) -> str:
+    """Build a per-retry suffix for the no-file rescue loop.
+
+    Each retry needs a distinct suffix for two reasons:
+
+    1. Anthropic's prompt cache returns a deterministic shallow response
+       (~5 min TTL) when the same prompt is sent repeatedly — that's what
+       produces the 5–17s "Claude exited but wrote no file" misses we see
+       on attempts 1-3 before attempt 4 finally does real work. Embedding
+       the attempt number in the suffix changes the bytes, busting the
+       cache.
+    2. It also gives the LLM explicit feedback ("you didn't write the
+       file") plus the expected output path for the Write tool, and an
+       inline-rescue fallback so we can recover from stdout if Write is
+       blocked.
+    """
+    epic = state.current_epic or "?"
+    story_num = (
+        state.current_story.split(".")[-1]
+        if state.current_story and "." in state.current_story
+        else "?"
+    )
+    try:
+        stories_dir_hint = f"{get_paths().stories_dir}/"
+    except RuntimeError:
+        # Paths not initialized (e.g. unit tests). Skip the path hint.
+        stories_dir_hint = ""
+    return (
+        f"\n\n--- NO-FILE RECOVERY (retry {next_attempt} of {max_attempts}) ---\n"
+        f"The previous attempt did NOT save the story file to disk. "
+        f"Stop exploration and write the story now using the Write tool. "
+        f"Save to: {stories_dir_hint}{epic}-{story_num}-<slug>.md "
+        f"(slug = kebab-case of story title).\n"
+        f"If you cannot use Write, output the COMPLETE story markdown "
+        f"inline starting with `# Story {epic}.{story_num}: <title>` so "
+        f"the orchestrator can rescue it from stdout."
+    )
+
+
 def _find_story_file(state: State) -> Path | None:
     """Find the story file on disk after LLM execution.
 
@@ -359,6 +398,17 @@ class CreateStoryHandler(BaseHandler):
                         "Story file not found and rescue failed (attempt %d/%d), retrying...",
                         attempt + 1,
                         MAX_RETRIES + 1,
+                    )
+                    next_attempt = attempt + 2  # 1-indexed for display
+                    prompt = prompt + _no_file_recovery_suffix(
+                        next_attempt, MAX_RETRIES + 1, state
+                    )
+                    save_prompt(
+                        self.project_path,
+                        epic,
+                        story,
+                        f"{self.phase_name}_retry{next_attempt}",
+                        prompt,
                     )
         except Exception as e:
             logger.error("Handler execution failed: %s", e, exc_info=True)
