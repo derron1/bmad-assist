@@ -63,6 +63,96 @@ _FINALIZATION_SUFFIX = (
 )
 
 
+def _check_slug_consistency(state: State) -> str | None:
+    """Detect a slug mismatch between sprint-status and the epic file's
+    Story X.Y title. Returns a `<critical>` warning block to prepend to
+    the prompt, or None if everything is consistent / can't be checked.
+
+    Why this matters: when an epic is course-corrected (story 12.3
+    rewritten from "build filterable listing" to "update class admin
+    management") the sprint-status key keeps the old slug. The LLM
+    then burns 3-5 minutes mid-prompt diagnosing the divergence by
+    reading the epic, sprint-status, and any change-proposal docs.
+    Surfacing the divergence upfront — with the canonical title — lets
+    Claude skip the investigation and start writing immediately.
+
+    Failure mode is silent: if any expected file is missing, the helper
+    returns None and the prompt goes through unaltered. We only inject
+    a warning when we have high-confidence evidence of a mismatch.
+    """
+    if state.current_epic is None or state.current_story is None:
+        return None
+    story_id = state.current_story
+    if "." not in story_id:
+        return None
+    epic = state.current_epic
+    story_num = story_id.split(".")[-1]
+
+    try:
+        from bmad_assist.bmad.parser import parse_epic_file
+        from bmad_assist.sprint.generator import generate_story_slug
+        from bmad_assist.sprint.parser import parse_sprint_status
+
+        paths = get_paths()
+    except (ImportError, RuntimeError):
+        return None
+
+    # Find the epic file (e.g. epic-12-class-booking.md).
+    epics_dir = paths.epics_dir
+    if not epics_dir.exists():
+        return None
+    matches = list(epics_dir.glob(f"epic-{epic}-*.md"))
+    if not matches:
+        return None
+    try:
+        epic_doc = parse_epic_file(matches[0])
+    except Exception as exc:
+        logger.debug("Slug check: could not parse epic %s: %s", matches[0], exc)
+        return None
+
+    # Find the matching story heading inside the epic.
+    epic_title: str | None = None
+    for s in epic_doc.stories:
+        if str(s.number) == story_id:
+            epic_title = s.title
+            break
+    if not epic_title:
+        return None
+    expected_slug = generate_story_slug(epic_title)
+
+    # Find the current sprint-status key for this story.
+    sprint_path = paths.find_sprint_status()
+    if sprint_path is None or not sprint_path.exists():
+        return None
+    try:
+        status = parse_sprint_status(sprint_path)
+    except Exception as exc:
+        logger.debug("Slug check: could not parse sprint-status: %s", exc)
+        return None
+    prefix = f"{epic}-{story_num}-"
+    current_keys = [k for k in status.entries if k.startswith(prefix)]
+    if not current_keys:
+        return None
+    current_key = current_keys[0]
+    current_slug = current_key[len(prefix):]
+
+    if current_slug == expected_slug:
+        return None  # consistent
+
+    canonical_key = f"{prefix}{expected_slug}"
+    return (
+        "<critical>STORY-SLUG MISMATCH (course correction detected)\n"
+        f"  sprint-status.yaml key:  {current_key}\n"
+        f"  epic file Story {story_id} title: {epic_title}\n"
+        f"  canonical key from title: {canonical_key}\n"
+        "  Treat the epic file's title as authoritative. The sprint-status "
+        "slug was retained from pre-correction planning and is stale. "
+        "Do not re-investigate this divergence — write the new story per "
+        "the canonical title and let downstream sync update the key.\n"
+        "</critical>\n\n"
+    )
+
+
 def _no_file_recovery_suffix(next_attempt: int, max_attempts: int, state: State) -> str:
     """Build a per-retry suffix for the no-file rescue loop.
 
@@ -334,6 +424,20 @@ class CreateStoryHandler(BaseHandler):
 
         epic = state.current_epic or "unknown"
         story = state.current_story or "unknown"
+
+        # Pre-flight slug check: if the sprint-status key disagrees with
+        # the epic file's Story X.Y title, prepend a `<critical>` block
+        # so the LLM doesn't burn minutes mid-prompt re-discovering the
+        # divergence (observed: ~3-5 min on epic-12 course correction).
+        slug_warning = _check_slug_consistency(state)
+        if slug_warning:
+            logger.info(
+                "Pre-flight slug mismatch detected for story %s — "
+                "prepending canonical-title warning to prompt",
+                story,
+            )
+            prompt = slug_warning + prompt
+
         save_prompt(self.project_path, epic, story, self.phase_name, prompt)
 
         # Snapshot any pre-existing story file's mtime so the freshness

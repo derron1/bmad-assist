@@ -448,6 +448,142 @@ class TestExecuteIntegration:
         assert result.error == "Provider crashed"
         mock_invoke.assert_called_once_with("prompt")
 
+    def test_slug_mismatch_prepends_warning_to_prompt(self, tmp_path: Path) -> None:
+        """When sprint-status's slug disagrees with the epic file's Story
+        X.Y title, the handler prepends a STORY-SLUG MISMATCH critical
+        block so the LLM doesn't burn minutes mid-prompt re-discovering it.
+        """
+        from bmad_assist.core.paths import init_paths
+
+        # Set up an epic file with the *new* story title
+        paths = init_paths(tmp_path)
+        paths.ensure_directories()
+        epics_dir = paths.epics_dir
+        epics_dir.mkdir(parents=True, exist_ok=True)
+        (epics_dir / "epic-3-test-epic.md").write_text(
+            "---\nepic_num: 3\ntitle: Test Epic\n---\n\n"
+            "# Epic 3: Test Epic\n\n"
+            "## Story 3.2: Newly Renamed Story\n\n"
+            "As a user, I want X.\n"
+        )
+        # Sprint-status with the *old* slug
+        sprint_path = paths.implementation_artifacts / "sprint-status.yaml"
+        sprint_path.parent.mkdir(parents=True, exist_ok=True)
+        sprint_path.write_text(
+            "metadata:\n"
+            "  generated: '2026-04-29T00:00:00+00:00'\n"
+            "development_status:\n"
+            "  3-2-old-slug-from-pre-correction: in-progress\n"
+        )
+
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        good_result = _make_provider_result(stdout="done")
+
+        captured_prompts: list[str] = []
+
+        def mock_invoke(prompt: str) -> ProviderResult:
+            captured_prompts.append(prompt)
+            return good_result
+
+        with (
+            patch.object(handler, "render_prompt", return_value="BASE_PROMPT"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke),
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=tmp_path / "3-2-anything.md",
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            handler.execute(state)
+
+        assert captured_prompts, "Provider was not invoked"
+        first = captured_prompts[0]
+        assert "STORY-SLUG MISMATCH" in first
+        assert "3-2-old-slug-from-pre-correction" in first
+        assert "Newly Renamed Story" in first
+        # Canonical key derived from the new title
+        assert "3-2-newly-renamed-story" in first
+        # Base prompt is preserved after the warning
+        assert first.endswith("BASE_PROMPT")
+
+    def test_slug_match_does_not_alter_prompt(self, tmp_path: Path) -> None:
+        """When sprint-status's slug matches the epic title, no warning."""
+        from bmad_assist.core.paths import init_paths
+
+        paths = init_paths(tmp_path)
+        paths.ensure_directories()
+        epics_dir = paths.epics_dir
+        epics_dir.mkdir(parents=True, exist_ok=True)
+        (epics_dir / "epic-3-test-epic.md").write_text(
+            "---\nepic_num: 3\ntitle: Test Epic\n---\n\n"
+            "# Epic 3: Test Epic\n\n"
+            "## Story 3.2: Aligned Story\n\n"
+            "As a user, I want X.\n"
+        )
+        sprint_path = paths.implementation_artifacts / "sprint-status.yaml"
+        sprint_path.parent.mkdir(parents=True, exist_ok=True)
+        sprint_path.write_text(
+            "metadata:\n"
+            "  generated: '2026-04-29T00:00:00+00:00'\n"
+            "development_status:\n"
+            "  3-2-aligned-story: in-progress\n"
+        )
+
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        good_result = _make_provider_result(stdout="done")
+
+        captured_prompts: list[str] = []
+
+        def mock_invoke(prompt: str) -> ProviderResult:
+            captured_prompts.append(prompt)
+            return good_result
+
+        with (
+            patch.object(handler, "render_prompt", return_value="BASE_PROMPT"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke),
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=tmp_path / "3-2-aligned-story.md",
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            handler.execute(state)
+
+        assert captured_prompts == ["BASE_PROMPT"]
+
+    def test_slug_check_silent_on_missing_artifacts(self, tmp_path: Path) -> None:
+        """No epic file / no sprint-status entry — handler runs unaltered."""
+        from bmad_assist.core.paths import init_paths
+
+        # Initialize paths but leave epics_dir + sprint-status empty.
+        paths = init_paths(tmp_path)
+        paths.ensure_directories()
+
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        good_result = _make_provider_result(stdout="done")
+
+        captured_prompts: list[str] = []
+
+        def mock_invoke(prompt: str) -> ProviderResult:
+            captured_prompts.append(prompt)
+            return good_result
+
+        with (
+            patch.object(handler, "render_prompt", return_value="BASE_PROMPT"),
+            patch.object(handler, "invoke_provider", side_effect=mock_invoke),
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=tmp_path / "3-2-anything.md",
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            handler.execute(state)
+
+        assert captured_prompts == ["BASE_PROMPT"]
+
     def test_stale_file_does_not_short_circuit_success(self, tmp_path: Path) -> None:
         """A leftover story file from a previous run must not satisfy success.
 
