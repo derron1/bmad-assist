@@ -255,8 +255,11 @@ def stage_all_changes(project_path: Path) -> bool:
     return True
 
 
-def commit_changes(project_path: Path, message: str) -> bool:
+def commit_changes(project_path: Path, message: str, *, _retried: bool = False) -> bool:
     """Create a git commit with the given message.
+
+    If pre-commit hooks modify files (e.g. ruff format), automatically
+    re-stages and retries once.
 
     Args:
         project_path: Path to git repository.
@@ -276,11 +279,41 @@ def commit_changes(project_path: Path, message: str) -> bool:
         if "nothing to commit" in stdout or "nothing to commit" in stderr:
             logger.info("Nothing to commit")
             return True
+
+        # Pre-commit hooks reformatted files — re-stage and retry once
+        combined = stdout + stderr
+        if not _retried and "files were modified by this hook" in combined:
+            logger.info("Pre-commit hook modified files, re-staging and retrying commit")
+            stage_all_changes(project_path)
+            return commit_changes(project_path, message, _retried=True)
+
         logger.error("Failed to commit: %s", stderr)
         return False
 
     logger.info("Created commit: %s", message.split("\n")[0])
     return True
+
+
+# Extensions the pre-commit hook's ESLint / typecheck pass will inspect.
+# Used to short-circuit _run_precommit_fix on docs/config-only commits
+# (sprint-status.yaml, .bundle-version stamps, .md story files, etc.) —
+# running ESLint + tsc across the project for ~10 s when no code changed
+# is pure overhead, repeated once per phase auto-commit.
+_LINT_RELEVANT_EXTENSIONS = (
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".vue",
+    ".svelte",
+)
+
+
+def _has_lint_relevant_changes(modified_files: list[str]) -> bool:
+    """True if any modified file would be inspected by ESLint or tsc."""
+    return any(f.endswith(_LINT_RELEVANT_EXTENSIONS) for f in modified_files)
 
 
 def _run_precommit_fix(project_path: Path) -> None:
@@ -548,11 +581,23 @@ def auto_commit_phase(
     if not stage_all_changes(project_path):
         return False
 
-    # Auto-fix pre-commit hook issues (ESLint + typecheck)
-    _run_precommit_fix(project_path)
-
-    # Re-stage after lint fixes (eslint --fix may have modified files)
-    stage_all_changes(project_path)
+    # Auto-fix pre-commit hook issues (ESLint + typecheck). Skip on
+    # docs/config-only commits where the diff has no JS/TS files —
+    # otherwise we burn ~10 s per phase running ESLint + tsc across
+    # the project for nothing (sprint-status.yaml + .bundle-version
+    # stamps don't have lint rules).
+    if _has_lint_relevant_changes(modified_files):
+        _run_precommit_fix(project_path)
+        # Re-stage after lint fixes (eslint --fix may have modified files)
+        stage_all_changes(project_path)
+    else:
+        logger.info(
+            "Skipping pre-commit lint/typecheck: no JS/TS files in diff "
+            "(%d files: %s%s)",
+            len(modified_files),
+            ", ".join(modified_files[:3]),
+            "..." if len(modified_files) > 3 else "",
+        )
 
     # Generate commit message
     message = generate_commit_message(
