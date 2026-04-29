@@ -34,6 +34,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -421,6 +422,18 @@ async def _invoke_validator(
         raw_content = result.stdout
         extracted_content = extract_validation_report(raw_content)
 
+        # Empty stdout (or all-whitespace) is a silent validator failure —
+        # claude-sonnet has been observed to exit 0 with no text blocks when
+        # the prompt activation preamble contradicts its tool sandbox. Treat
+        # this as a hard failure so synthesis isn't fed a 0-token report.
+        if not extracted_content or not extracted_content.strip():
+            error_msg = (
+                f"Validator {provider_id} returned empty output "
+                f"(exit 0, {len(raw_content)} bytes raw, 0 bytes after extraction)"
+            )
+            logger.warning(error_msg)
+            return provider_id, None, None, error_msg
+
         # Use actual provider name for benchmarking, not the display identifier
         actual_provider = provider_name or provider.provider_name
 
@@ -474,6 +487,32 @@ async def _invoke_validator(
         return provider_id, None, None, error_msg
 
 
+# Validators run in a sandbox: tools are restricted to read-only and the
+# subprocess has no `--add-dir` permission. The bmad-validate-story SKILL.md
+# opens with an "## On Activation" preamble that tells the LLM to run a Bash
+# command (`python3 resolve_customization.py`) and read filesystem config —
+# both impossible inside the sandbox. claude-sonnet observes the contradiction
+# (preamble says "do this", `<critical>` says "you can't") and ends the turn
+# with no text blocks, producing a 0-byte stdout that downstream extraction
+# can't recover. Stripping the preamble for validator-mode compilation
+# eliminates the contradiction.
+_ACTIVATION_BLOCK_RE = re.compile(
+    r"## On Activation\n.*?Activation is complete\. Begin the workflow below\.\n",
+    re.DOTALL,
+)
+
+
+def _strip_activation_preamble(prompt: str) -> str:
+    """Remove the "## On Activation" preamble from a compiled validator prompt.
+
+    No-op if the marker isn't present (e.g. workflow was authored without an
+    activation block). The preamble is meaningful when a user activates the
+    skill via Claude Code, but harmful when bmad-assist drives the LLM as a
+    sandboxed validator.
+    """
+    return _ACTIVATION_BLOCK_RE.sub("", prompt, count=1)
+
+
 def _compile_validation_prompt(
     project_path: Path,
     epic_num: EpicId,
@@ -506,7 +545,7 @@ def _compile_validation_prompt(
     )
 
     compiled = compile_workflow("validate-story", context)
-    return compiled.context
+    return _strip_activation_preamble(compiled.context)
 
 
 async def run_validation_phase(

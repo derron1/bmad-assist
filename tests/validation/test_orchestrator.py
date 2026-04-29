@@ -426,6 +426,129 @@ class TestAllFailScenario:
 # =============================================================================
 
 
+class TestStripActivationPreamble:
+    """Tests for _strip_activation_preamble — keeps validator prompts free
+    of the SKILL.md activation block that tells Claude to run Bash and read
+    filesystem files (impossible inside the validator tool sandbox)."""
+
+    def test_strips_canonical_activation_block(self) -> None:
+        from bmad_assist.validation.orchestrator import _strip_activation_preamble
+
+        prompt = (
+            "# Validate Story Workflow\n\n"
+            "## Conventions\n\n"
+            "- Bare paths resolve from the skill root.\n\n"
+            "## On Activation\n\n"
+            "### Step 1: Resolve the Workflow Block\n\n"
+            "Run: `python3 .../resolve_customization.py ...`\n\n"
+            "### Step 5: Greet the User\n\n"
+            "Greet the user.\n\n"
+            "Activation is complete. Begin the workflow below.\n\n"
+            "## Paths\n\n"
+            "- `story_dir` = `{implementation_artifacts}`\n"
+        )
+
+        stripped = _strip_activation_preamble(prompt)
+
+        assert "## On Activation" not in stripped
+        assert "Activation is complete" not in stripped
+        assert "Run: `python3" not in stripped
+        # Surrounding content is preserved.
+        assert "# Validate Story Workflow" in stripped
+        assert "## Conventions" in stripped
+        assert "## Paths" in stripped
+
+    def test_no_op_when_block_absent(self) -> None:
+        from bmad_assist.validation.orchestrator import _strip_activation_preamble
+
+        prompt = "# Some Workflow\n\nNo activation here.\n"
+        assert _strip_activation_preamble(prompt) == prompt
+
+
+class TestInvokeValidatorEmptyOutput:
+    """Tests for the empty-stdout safety net in _invoke_validator. claude-sonnet
+    can exit cleanly with 0 text-block bytes when the prompt activation
+    preamble contradicts its tool sandbox; we treat that as a hard validator
+    failure instead of persisting a 0-token "successful" report."""
+
+    def test_empty_stdout_returns_failure(self, tmp_path: Path) -> None:
+        import asyncio as _asyncio
+
+        from bmad_assist.providers.base import BaseProvider, ProviderResult
+        from bmad_assist.validation.orchestrator import _invoke_validator
+
+        provider = MagicMock(spec=BaseProvider)
+        provider.provider_name = "claude-subprocess"
+        provider.invoke.return_value = ProviderResult(
+            stdout="",
+            stderr="",
+            exit_code=0,
+            duration_ms=7000,
+            model="sonnet",
+            command=("claude",),
+        )
+
+        provider_id, output, _det, error = _asyncio.run(
+            _invoke_validator(
+                provider=provider,
+                prompt="some prompt",
+                provider_id="claude-subprocess-sonnet",
+                provider_name="claude",
+                model="sonnet",
+                settings_file=None,
+                timeout=300,
+                timeout_retries=0,
+                epic_num=12,
+                story_num=3,
+                run_timestamp=datetime.now(UTC),
+                benchmarking_enabled=False,
+            )
+        )
+
+        assert output is None
+        assert error is not None
+        assert "empty output" in error
+        assert provider_id == "claude-subprocess-sonnet"
+
+    def test_whitespace_only_stdout_also_fails(self, tmp_path: Path) -> None:
+        import asyncio as _asyncio
+
+        from bmad_assist.providers.base import BaseProvider, ProviderResult
+        from bmad_assist.validation.orchestrator import _invoke_validator
+
+        provider = MagicMock(spec=BaseProvider)
+        provider.provider_name = "claude-subprocess"
+        provider.invoke.return_value = ProviderResult(
+            stdout="   \n\n   ",
+            stderr="",
+            exit_code=0,
+            duration_ms=7000,
+            model="sonnet",
+            command=("claude",),
+        )
+
+        _pid, output, _det, error = _asyncio.run(
+            _invoke_validator(
+                provider=provider,
+                prompt="some prompt",
+                provider_id="claude-subprocess-sonnet",
+                provider_name="claude",
+                model="sonnet",
+                settings_file=None,
+                timeout=300,
+                timeout_retries=0,
+                epic_num=12,
+                story_num=3,
+                run_timestamp=datetime.now(UTC),
+                benchmarking_enabled=False,
+            )
+        )
+
+        assert output is None
+        assert error is not None
+        assert "empty output" in error
+
+
 class TestInsufficientValidationsError:
     """Tests for InsufficientValidationsError exception."""
 
