@@ -1075,6 +1075,85 @@ def _filter_outlier_validations(
 # =============================================================================
 
 
+# Detailed-section caps for validator-report pre-trim. The reports have a
+# consistent structure with emoji-marked top-level sections:
+#   ## 🚨 Critical Issues (Must Fix)        — keep all (None)
+#   ## ⚡ Enhancement Opportunities          — top 5
+#   ## ✨ Optimizations (Nice to Have)        — top 2
+#   ## 🤖 LLM Optimization Improvements      — top 2
+# Caps drop the *detailed* writeups beyond N per category; the executive
+# summary, evidence-score table, and INVEST/AC sections (which already
+# concisely list every finding) are preserved untouched. Saved disk
+# reports are full; only the cache feeding synthesis is trimmed.
+_VALIDATION_TRIM_CAPS: dict[str, int | None] = {
+    "🚨": None,
+    "⚡": 5,
+    "✨": 2,
+    "🤖": 2,
+}
+
+# Top-level "## <emoji> ..." section heading.
+_VALIDATION_SECTION_RE = re.compile(r"^##\s+([🚨⚡✨🤖])\s+", re.MULTILINE)
+# Individual finding inside a section: "### N. <title>".
+_VALIDATION_FINDING_RE = re.compile(r"^###\s+\d+\.\s+", re.MULTILINE)
+
+
+def _trim_validation_report(
+    content: str,
+    caps: dict[str, int | None] | None = None,
+) -> str:
+    """Cap detailed findings in a validator report by category.
+
+    Findings before the first emoji-marked section (executive summary,
+    evidence-score table, INVEST analysis) are preserved untouched.
+    For each "## <emoji> ..." section that has a cap, only the first N
+    "### N. ..." subsections are kept; later subsections are replaced
+    with a one-line note recording how many were trimmed.
+
+    Fail-open: any parsing or unexpected-format issue returns the
+    original content unchanged. We never destroy data when format
+    drifts; the synthesis prompt simply stays large.
+    """
+    if not content:
+        return content
+    effective = caps if caps is not None else _VALIDATION_TRIM_CAPS
+    try:
+        matches = list(_VALIDATION_SECTION_RE.finditer(content))
+        if not matches:
+            return content  # No emoji sections — likely a different format.
+
+        result: list[str] = [content[: matches[0].start()]]
+        for idx, match in enumerate(matches):
+            emoji = match.group(1)
+            section_start = match.start()
+            section_end = (
+                matches[idx + 1].start() if idx + 1 < len(matches) else len(content)
+            )
+            section = content[section_start:section_end]
+
+            cap = effective.get(emoji)
+            if cap is None:
+                result.append(section)
+                continue
+
+            sub_matches = list(_VALIDATION_FINDING_RE.finditer(section))
+            if len(sub_matches) <= cap:
+                result.append(section)
+                continue
+
+            cutoff = sub_matches[cap].start()
+            trimmed_count = len(sub_matches) - cap
+            result.append(
+                section[:cutoff].rstrip()
+                + f"\n\n_(... {trimmed_count} additional finding(s) "
+                f"trimmed for synthesis input — full report saved on disk ...)_\n\n"
+            )
+        return "".join(result)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("validation report trim failed (%s); using full content", exc)
+        return content
+
+
 def save_validations_for_synthesis(
     anonymized: list[AnonymizedValidation],
     project_root: Path,
@@ -1124,7 +1203,9 @@ def save_validations_for_synthesis(
         "validations": [
             {
                 "validator_id": v.validator_id,
-                "content": v.content,
+                # Trim detailed-section findings to keep the synthesis prompt
+                # bounded. Full reports remain on disk in story-validations/.
+                "content": _trim_validation_report(v.content),
                 "original_ref": v.original_ref,
             }
             for v in anonymized

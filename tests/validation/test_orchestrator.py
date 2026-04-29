@@ -549,6 +549,139 @@ class TestInvokeValidatorEmptyOutput:
         assert "empty output" in error
 
 
+class TestTrimValidationReport:
+    """The validator reports feeding the synthesis prompt are pre-trimmed
+    to top-N detailed findings per emoji-marked category. Critical issues
+    are kept in full; enhancements / optimizations / LLM-improvements are
+    capped. The summary table at the top of each report (which lists every
+    finding compactly) is preserved untouched.
+    """
+
+    # A representative finding body is ~300 chars in real reports —
+    # paragraph of prose + a quoted snippet + a recommendation. Use
+    # ~250 chars here so the savings test reflects realistic ratios.
+    _BODY = (
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+        "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. "
+        "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris "
+        "nisi ut aliquip ex ea commodo consequat."
+    )
+
+    @classmethod
+    def _make_report(
+        cls,
+        critical_count: int = 3,
+        enhancement_count: int = 8,
+        optimization_count: int = 4,
+        llm_count: int = 6,
+    ) -> str:
+        sections = [
+            "## Executive Summary\n\nIntro prose preserved.\n",
+            "## Evidence Score Summary\n\n| # | Severity | Description |\n|---|---|---|\n| 1 | 🔴 CRITICAL | item |\n",
+        ]
+        sections.append("## 🚨 Critical Issues (Must Fix)\n")
+        for i in range(1, critical_count + 1):
+            sections.append(f"### {i}. Critical finding {i}\n\n{cls._BODY}\n")
+        sections.append("## ⚡ Enhancement Opportunities (Should Add)\n")
+        for i in range(1, enhancement_count + 1):
+            sections.append(f"### {i}. Enhancement {i}\n\n{cls._BODY}\n")
+        sections.append("## ✨ Optimizations (Nice to Have)\n")
+        for i in range(1, optimization_count + 1):
+            sections.append(f"### {i}. Optimization {i}\n\n{cls._BODY}\n")
+        sections.append("## 🤖 LLM Optimization Improvements\n")
+        for i in range(1, llm_count + 1):
+            sections.append(f"### {i}. LLM imp {i}\n\n{cls._BODY}\n")
+        return "\n".join(sections)
+
+    def test_keeps_summary_and_critical_intact(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        report = self._make_report(critical_count=4)
+        out = _trim_validation_report(report)
+
+        # Pre-emoji sections survive verbatim
+        assert "## Executive Summary" in out
+        assert "## Evidence Score Summary" in out
+        assert "Intro prose preserved." in out
+        # All 4 critical findings kept
+        for i in range(1, 5):
+            assert f"### {i}. Critical finding {i}" in out
+
+    def test_caps_enhancements_to_5(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        out = _trim_validation_report(self._make_report(enhancement_count=8))
+
+        for i in range(1, 6):
+            assert f"### {i}. Enhancement {i}" in out
+        for i in range(6, 9):
+            assert f"### {i}. Enhancement {i}" not in out
+        assert "3 additional finding(s) trimmed" in out
+
+    def test_caps_optimizations_to_2(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        out = _trim_validation_report(self._make_report(optimization_count=4))
+
+        for i in range(1, 3):
+            assert f"### {i}. Optimization {i}" in out
+        for i in range(3, 5):
+            assert f"### {i}. Optimization {i}" not in out
+        assert "2 additional finding(s) trimmed" in out
+
+    def test_caps_llm_to_2(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        out = _trim_validation_report(self._make_report(llm_count=6))
+
+        assert "### 1. LLM imp 1" in out
+        assert "### 2. LLM imp 2" in out
+        assert "### 3. LLM imp 3" not in out
+
+    def test_below_cap_is_preserved(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        # All categories below their caps → no trimming should fire.
+        report = self._make_report(
+            critical_count=2,
+            enhancement_count=3,
+            optimization_count=1,
+            llm_count=2,
+        )
+        out = _trim_validation_report(report)
+
+        for i in range(1, 4):
+            assert f"### {i}. Enhancement {i}" in out
+        # No trim notice when nothing was trimmed in any section
+        assert "additional finding(s) trimmed" not in out
+
+    def test_no_emoji_sections_passes_through(self) -> None:
+        """Different report shape — return original content unchanged."""
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        plain = "## Summary\n\nNo emoji sections here.\n\n## Findings\n- item 1\n- item 2\n"
+        assert _trim_validation_report(plain) == plain
+
+    def test_empty_content_returns_empty(self) -> None:
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        assert _trim_validation_report("") == ""
+
+    def test_byte_savings_on_realistic_size(self) -> None:
+        """End-to-end: trim should shrink a heavy report by a meaningful margin."""
+        from bmad_assist.validation.orchestrator import _trim_validation_report
+
+        report = self._make_report(
+            critical_count=3, enhancement_count=8, optimization_count=4, llm_count=6
+        )
+        trimmed = _trim_validation_report(report)
+        # Summary survives; total length must be smaller.
+        assert len(trimmed) < len(report)
+        # We dropped 3+2+4 = 9 detailed findings.
+        savings_ratio = 1 - (len(trimmed) / len(report))
+        assert savings_ratio > 0.10, f"Expected >10% savings, got {savings_ratio:.1%}"
+
+
 class TestInsufficientValidationsError:
     """Tests for InsufficientValidationsError exception."""
 
