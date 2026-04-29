@@ -15,6 +15,7 @@ Find 3-10 specific issues. Challenge every claim.
 
 Minimal context.
 
+
 ]]></file>
 <file id="ca7a00a8" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
 
@@ -40,6 +41,7 @@ Minimal notes.
 
 - src/example.py
 
+
 ]]></file>
 </context>
 <variables>
@@ -50,16 +52,16 @@ Minimal notes.
 <var name="epic_num">10</var>
 <var name="name">bmad-code-review</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-
+<var name="sprint_status">docs/sprint-artifacts/sprint-status.yaml</var>
 <var name="story_file" file_id="ca7a00a8">embedded in prompt, file id: ca7a00a8</var>
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-
+<var name="template">.claude/skills/bmad-code-review/template.md</var>
 <var name="timestamp">20260115_1200</var>
 <var name="user_skill_level">expert</var>
-
+<var name="validation">.claude/skills/bmad-code-review/checklist.md</var>
 </variables>
 <instructions><![CDATA[
 
@@ -110,7 +112,7 @@ Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-
 - `project_name`, `planning_artifacts`, `implementation_artifacts`, `user_name`
 - `communication_language`, `document_output_language`, `user_skill_level`
 - `date` as system-generated current datetime
-- `sprint_status` = `{implementation_artifacts}/`
+- `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
 - `project_context` = `**/project-context.md` (load if exists)
 - CLAUDE.md / memory files (load if exist)
 - YOU MUST ALWAYS SPEAK OUTPUT in your Agent communication style with the config `English`
@@ -153,6 +155,7 @@ This uses **step-file architecture** for disciplined execution:
 ## FIRST STEP
 
 Read fully and follow: `./steps/step-01-gather-context.md`
+
 
 ]]></instructions>
 <output-template></output-template>

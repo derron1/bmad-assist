@@ -22,12 +22,14 @@ Target: Story 10.1
 
 Minimal context.
 
+
 ]]></file>
 <file id="2971f9e6" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
+
 
 ]]></file>
 <file id="a968a91e" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -49,6 +51,7 @@ ready-for-dev
 ## Dev Notes
 
 Minimal notes.
+
 
 ]]></file>
 </context>
@@ -102,11 +105,11 @@ Execute each entry in `` in order before proceeding.
 
 ### Step 3: Load Persistent Facts
 
-Treat every entry in `- file:**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
 
 ### Step 4: Load Config
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/bmm/config.yaml` and resolve:
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/tea/config.yaml` and resolve:
 
 - `user_name`
 - `communication_language`
@@ -146,6 +149,7 @@ This workflow uses **tri-modal step-file architecture**:
 - **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-c/step-01b-resume.md` (Create-mode continuation)
 - **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-v/step-01-validate.md`
 - **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-e/step-01-assess.md`
+
 
 ]]></instructions>
 <output-template></output-template>

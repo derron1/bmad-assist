@@ -35,6 +35,7 @@ echo ok
 
 <!-- QA_PLAN_END -->
 
+
 ]]></file>
 </context>
 <variables>
@@ -46,9 +47,10 @@ echo ok
 <var name="name">bmad-qa-plan-execute</var>
 <var name="non_interactive">True</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-
+<var name="sprint_status">none</var>
+<var name="template">.claude/skills/bmad-qa-plan-execute/template.md</var>
 <var name="user_skill_level">expert</var>
-
+<var name="validation">.claude/skills/bmad-qa-plan-execute/checklist.md</var>
 </variables>
 <instructions><![CDATA[
 
@@ -136,7 +138,7 @@ Activation is complete. Begin the workflow below.
 
 <workflow>
 
-<critical>NON-INTERACTIVE MODE: This workflow always runs headlessly. Skip every `<ask>` / `<confirm>` / "" prompt. Use the values from the `{variables}` block (`category`, `test_id`, `verbose`, `fail_fast`, `rerun_failed`, `dry_run`, `timeout_seconds`). On test failure, log and continue — never stop unless `fail_fast=true`.</critical>
+<critical>NON-INTERACTIVE MODE: This workflow always runs headlessly. Skip every `<ask>` / `<confirm>` / "Your choice:" prompt. Use the values from the `{variables}` block (`category`, `test_id`, `verbose`, `fail_fast`, `rerun_failed`, `dry_run`, `timeout_seconds`). On test failure, log and continue — never stop unless `fail_fast=true`.</critical>
 
 <critical>BASH OUTPUT DISCIPLINE: NEVER use `run_in_background`. NEVER `pkill` / `kill`. NEVER write wrapper scripts (`cat > /tmp/test.sh`) — execute the test scripts EXACTLY as embedded, in a single Bash call each. If a script's stdout exceeds ~8000 chars, pipe through `| head -c 8000` BEFORE capturing.</critical>
 
@@ -266,6 +268,7 @@ a patch rewrite.
 </step>
 
 </workflow>
+
 
 ]]></instructions>
 <output-template></output-template>

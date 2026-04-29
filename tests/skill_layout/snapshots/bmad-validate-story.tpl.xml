@@ -27,12 +27,14 @@ Focus on STORY QUALITY, not code implementation.
 
 Minimal context.
 
+
 ]]></file>
 <file id="42fa2838" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
+
 
 ]]></file>
 <file id="6af8060c" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
@@ -42,6 +44,7 @@ Layered.
 ## Story 10.1: Initial Setup
 
 Content.
+
 
 ]]></file>
 <file id="5a01e3a9" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -64,6 +67,7 @@ ready-for-validation
 
 Minimal notes.
 
+
 ]]></file>
 </context>
 <variables>
@@ -76,16 +80,16 @@ Minimal notes.
 <var name="model">validator</var>
 <var name="name">bmad-validate-story</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-
+<var name="sprint_status">docs/sprint-artifacts/sprint-status.yaml</var>
 <var name="story_file" file_id="5a01e3a9">embedded in prompt, file id: 5a01e3a9</var>
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-
+<var name="template">.claude/skills/bmad-validate-story/template.md</var>
 <var name="timestamp">20260115_120000</var>
 <var name="user_skill_level">expert</var>
-
+<var name="validation">.claude/skills/bmad-validate-story/checklist.md</var>
 <var name="validation_focus">story_quality</var>
 </variables>
 <instructions><![CDATA[
@@ -289,11 +293,9 @@ Activation is complete. Begin the workflow below.
 
 </workflow>
 
+
 ]]></instructions>
-<critical>TEMPLATE USAGE: The template below shows the STRUCTURE and HEADINGS to follow. You MUST replace ALL {{variable}} placeholders with actual values from your analysis. You MUST expand {{#each X}} loops by listing actual items. NEVER output literal {{...}} syntax.</critical>
-<output-template>
-<!-- VALIDATION_REPORT_START -->
-<![CDATA[
+<output-template><![CDATA[
 
 # 🎯 Story Context Validation Report
 
@@ -582,6 +584,7 @@ No changes were applied to the story file. This report serves as documentation o
 
 **Report Generated:** {{date}}
 **Validation Engine:** BMAD Method Quality Competition v1.0
+
 
 ]]></output-template>
 </compiled-workflow>

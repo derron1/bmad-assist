@@ -22,6 +22,7 @@ Target: Story 10.1
 
 Minimal context.
 
+
 ]]></file>
 <file id="2080c7e8" path="docs/prd.md" label="PRD"><![CDATA[
 
@@ -29,12 +30,14 @@ Minimal context.
 
 Project requirements.
 
+
 ]]></file>
 <file id="b22af8fd" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
+
 
 ]]></file>
 <file id="189e3c1e" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -56,6 +59,7 @@ ready-for-dev
 ## Dev Notes
 
 Minimal notes.
+
 
 ]]></file>
 </context>
@@ -109,11 +113,11 @@ Execute each entry in `` in order before proceeding.
 
 ### Step 3: Load Persistent Facts
 
-Treat every entry in `- file:**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
 
 ### Step 4: Load Config
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj/_bmad/bmm/config.yaml` and resolve:
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj/_bmad/tea/config.yaml` and resolve:
 
 - `user_name`
 - `communication_language`
@@ -155,6 +159,7 @@ This workflow uses **tri-modal step-file architecture**:
 - **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj/.claude/skills/bmad-testarch-test-design/steps-e/step-01-assess.md`
 
 Resume mode reads explicit progress metadata from the progress file (`workflowStatus`, `nextStep`, `totalSteps`) and falls back to legacy `lastStep` data when needed.
+
 
 ]]></instructions>
 <output-template></output-template>

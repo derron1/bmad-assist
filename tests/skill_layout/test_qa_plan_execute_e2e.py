@@ -21,6 +21,21 @@ BUNDLED_SKILL = REPO_ROOT / "src" / "bmad_assist" / "skills" / "bmad-qa-plan-exe
 PATCH_FILE = REPO_ROOT / ".bmad-assist" / "patches" / "qa-plan-execute.patch.yaml"
 
 
+def _install_patch(project_root: Path) -> Path:
+    """Install the project-level patch into the tmp project tree.
+
+    Bundled `default_patches/` no longer ships per-workflow patches
+    (Phase 7 inlined those transforms into SKILL.md). E2E tests that
+    exercise the LLM-transform branch install a project-level patch
+    fixture so :func:`discover_patch` returns a real path.
+    """
+    patches_dir = project_root / ".bmad-assist" / "patches"
+    patches_dir.mkdir(parents=True, exist_ok=True)
+    target = patches_dir / PATCH_FILE.name
+    shutil.copy2(PATCH_FILE, target)
+    return target
+
+
 def _install_skill(project_root: Path) -> Path:
     target = project_root / ".claude" / "skills" / "bmad-qa-plan-execute"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +70,7 @@ def project_root(tmp_path: Path) -> Path:
     proj.mkdir()
     _seed_project_artifacts(proj)
     _install_skill(proj)
+    _install_patch(proj)
     return proj
 
 

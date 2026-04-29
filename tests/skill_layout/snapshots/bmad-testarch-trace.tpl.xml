@@ -24,6 +24,7 @@ Analyze test coverage and make quality gate decision.
 
 Minimal context.
 
+
 ]]></file>
 <file id="7435f609" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
 
@@ -32,6 +33,7 @@ Minimal context.
 ## Story 10.1: Initial Setup
 
 Content.
+
 
 ]]></file>
 <file id="ef16e0c9" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -53,6 +55,7 @@ ready-for-dev
 ## Dev Notes
 
 Minimal notes.
+
 
 ]]></file>
 </context>
@@ -109,11 +112,11 @@ Execute each entry in `` in order before proceeding.
 
 ### Step 3: Load Persistent Facts
 
-Treat every entry in `- file:**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
 
 ### Step 4: Load Config
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/bmm/config.yaml` and resolve:
+Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/tea/config.yaml` and resolve:
 
 - `user_name`
 - `communication_language`
@@ -155,6 +158,7 @@ This workflow uses **tri-modal step-file architecture**:
 - **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/steps-e/step-01-assess.md`
 
 Create mode resolves the coverage oracle automatically in this order: formal requirements, contract/spec artifacts, resolvable external pointers (when `allow_external_pointer_resolution` is enabled), then synthetic journeys/requirements inferred from source (when `allow_synthetic_oracle` is enabled and no formal oracle exists).
+
 
 ]]></instructions>
 <output-template></output-template>

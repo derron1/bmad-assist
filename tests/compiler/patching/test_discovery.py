@@ -135,15 +135,29 @@ class TestDiscoverPatch:
         assert "No patch found for 'nonexistent-workflow'" in caplog.text
 
     def test_package_fallback_finds_default_patches(self, tmp_path: Path) -> None:
-        """Test that patches are found in package default_patches directory."""
-        # When no project/global patches exist, should find package default
-        with patch("pathlib.Path.home", return_value=tmp_path / "global"):
-            result = discover_patch("create-story", tmp_path)
+        """Test that the package-defaults fallback mechanism finds patches.
 
-        # Should find the default patch from package
-        assert result is not None
-        assert "default_patches" in str(result)
-        assert result.name == "create-story.patch.yaml"
+        Phase 7+ no longer ships per-workflow patches in the package
+        (those transforms were inlined into SKILL.md). The fallback
+        mechanism itself is still present, so this test seeds a fake
+        patch into a stand-in package directory and asserts discovery
+        reaches it.
+        """
+        fake_pkg_dir = tmp_path / "fake_default_patches"
+        fake_pkg_dir.mkdir()
+        seeded = fake_pkg_dir / "fake-flow.patch.yaml"
+        seeded.write_text("patch:\n  name: fake\n")
+
+        with (
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+            patch(
+                "bmad_assist.compiler.patching.discovery._PACKAGE_DEFAULTS_DIR",
+                fake_pkg_dir,
+            ),
+        ):
+            result = discover_patch("fake-flow", tmp_path)
+
+        assert result == seeded
 
 
 class TestLoadPatch:
