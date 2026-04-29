@@ -2,7 +2,7 @@
 
 A/B workflow testing compares two configurations side-by-side against the same fixture and story set. It uses git worktree isolation to run each variant independently, then generates a comparison report showing metric differences.
 
-> **Workflow names:** YAML examples in this doc use the canonical `bmad-<name>` skill ids (e.g., `bmad-create-story`, `bmad-code-review`). Legacy short names (`create-story`, `code-review`, …) still work as backwards-compatible aliases in `phases` lists for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+> **Workflow names:** YAML examples in this doc use the canonical `bmad-<name>` skill ids (e.g., `bmad-create-story`, `bmad-code-review`). In 0.5.x and earlier, short names like `create-story` worked as aliases — these were removed in 0.6.0; use `bmad-create-story` everywhere a workflow name appears in user-facing surfaces (CLI args, configs, `phases:` lists). See [CHANGELOG.md](../CHANGELOG.md) `[0.6.0]` for the migration notes.
 
 ## Problem
 
@@ -101,7 +101,7 @@ Story IDs (the `id` field) must contain a dot separator: `epic.story` (e.g., `"3
 
 ### Supported Phases
 
-Phase names accept both kebab-case and snake_case (normalized internally). Legacy short aliases (e.g., `create-story` instead of `bmad-create-story`) are still resolved.
+Phase names accept both kebab-case and snake_case (normalized internally). Use the canonical `bmad-<name>` form — legacy short aliases (e.g., `create-story`) were removed in 0.6.0.
 
 | Phase | Description |
 |-------|-------------|
@@ -200,28 +200,29 @@ Workflow sets and template sets allow per-variant customization of the BMAD work
 
 ### Workflow Sets
 
-A **workflow set** is a directory in `experiments/workflows/` containing raw workflow source files. Each subdirectory represents one workflow and must contain a `workflow.yaml` or `workflow.md` file.
+A **workflow set** is a directory in `experiments/workflows/` containing per-variant skill source. Each subdirectory represents one workflow in the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml`, plus any per-skill assets the workflow needs — `template.md`, `checklist.md`, `steps-c/` for TEA, `patterns/` for security-review).
 
 ```
 experiments/workflows/
 ├── baseline/
 │   ├── bmad-code-review/
-│   │   ├── workflow.yaml
-│   │   └── instructions.xml
+│   │   ├── SKILL.md
+│   │   └── customize.toml
 │   └── bmad-create-story/
-│       ├── workflow.yaml
-│       └── instructions.xml
+│       ├── SKILL.md
+│       ├── customize.toml
+│       └── template.md
 ├── bmad-code-review-test-001/
 │   └── bmad-code-review/
-│       ├── workflow.yaml
-│       └── instructions.xml
+│       ├── SKILL.md
+│       └── customize.toml
 └── minimal-set/
     └── bmad-create-story/
-        ├── workflow.yaml
-        └── instructions.xml
+        ├── SKILL.md
+        └── customize.toml
 ```
 
-When a variant specifies `workflow_set`, the runner copies the workflow directories into the worktree's `.bmad-assist/workflows/` directory. The compiler's existing discovery logic checks this location **first**, before bundled or BMAD workflows.
+When a variant specifies `workflow_set`, the runner copies the skill directories into the worktree's installed skill location (`.claude/skills/<id>/` and `.agents/skills/<id>/`). The compiler's discovery logic (`find_skill()`) checks the installed location first, then falls back to the bundled skill source under `src/bmad_assist/skills/<id>/`.
 
 ### Template Sets
 
@@ -586,7 +587,7 @@ experiments/
 │   ├── opus-solo.yaml            # Legacy: name + providers
 │   └── opus-haiku-gemini-glm.yaml  # Full: config_name + everything
 ├── patch-sets/                   # Patch-set manifests
-├── workflows/                    # Workflow sets for A/B variants
+├── workflows/                    # Workflow sets for A/B variants (SKILL.md + customize.toml per skill)
 │   ├── baseline/
 │   │   └── bmad-code-review/
 │   └── bmad-code-review-test-001/

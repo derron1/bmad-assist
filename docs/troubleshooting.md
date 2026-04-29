@@ -2,7 +2,7 @@
 
 Common issues and their solutions.
 
-> **Workflow names:** Examples below use the canonical `bmad-<name>` skill ids. Legacy short aliases (e.g., `dev-story` → `bmad-dev-story`) still resolve in dispatch for one more release — see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+> **Workflow names:** Examples below use the canonical `bmad-<name>` skill ids. In 0.5.x and earlier, short names like `dev-story` worked as aliases — these were removed in 0.6.0; use `bmad-dev-story` everywhere a workflow name appears in user-facing surfaces (CLI args, configs, docs). See [CHANGELOG.md](../CHANGELOG.md) `[0.6.0]` for the migration notes.
 
 ## "Workflow not found" Error
 
@@ -35,11 +35,11 @@ bmad-assist init  # Shows workflow validation
 
 To customize a workflow for your project:
 
-1. Create `.bmad-assist/workflows/{workflow-name}/` directory
-2. Copy the workflow files (`workflow.yaml`, `instructions.md`, etc.)
-3. Modify as needed
+1. Locate the installed skill at `.claude/skills/bmad-<workflow-name>/` (or `.agents/skills/bmad-<workflow-name>/`)
+2. Copy the per-skill assets you need to modify (`SKILL.md`, `customize.toml`, plus any per-skill files like `template.md`, `checklist.md`, `steps-c/` for TEA, `patterns/` for security-review)
+3. Modify in place — additive changes (new prepend steps, persistent facts, mode toggles) belong in `customize.toml`; subtractive or rewriting changes belong in a workflow patch under `.bmad-assist/patches/<workflow>.patch.yaml`
 
-Project overrides take priority over bundled workflows.
+Installed skills take priority over the bundled fallback (`src/bmad_assist/skills/bmad-<workflow-name>/`).
 
 ## Provider Connection Issues
 
@@ -94,14 +94,14 @@ docs/
 
 **Solution:**
 ```bash
-# Clear patch cache
-rm -rf .bmad-assist/cache/
+# Clear the skill-layout cache (recompiled on next workflow run)
+rm -rf .bmad-assist/cache/skills/
 
-# Recompile patches
-bmad-assist patch compile-all
-
-# Or reset to bundled workflows
+# Or reset bundled skill files (preserves customize.toml overrides)
 bmad-assist init --reset-workflows
+
+# Destructive reset (also overwrites customize.toml)
+bmad-assist init --reset-skills-force
 ```
 
 See [Workflow Patches](workflow-patches.md) for detailed patch configuration.

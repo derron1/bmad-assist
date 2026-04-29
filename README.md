@@ -73,7 +73,7 @@ bmad-assist init --project /path/to/your/project
 bmad-assist run --project /path/to/your/project
 ```
 
-`bmad-assist init` bootstraps the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml` under `.claude/skills/bmad-*/`) by default on fresh projects. Existing v6.4+ or legacy installs are detected and preserved. See [Skill Layout](docs/configuration.md#skill-layout-bmad-v64) for the `--skill-layout` flag and `--reset-workflows` vs `--reset-skills-force` semantics.
+`bmad-assist init` bootstraps the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml` under `.claude/skills/bmad-*/`) on fresh projects. Existing v6.4+ installs are detected and left alone (no-clobber). See [Skill Layout](docs/configuration.md#skill-layout-bmad-v64) for the `--reset-workflows` (preserves `customize.toml`) vs `--reset-skills-force` (destructive) semantics.
 
 **Recommended:** Customize `bmad-assist.yaml` for your provider and model configuration before running. See [Configuration Reference](docs/configuration.md) for available options.
 
@@ -103,7 +103,8 @@ bmad-assist run -g -n -v
 
 # Setup
 bmad-assist init -p ./project             # Initialize project
-bmad-assist init --reset-workflows        # Restore bundled workflows
+bmad-assist init --reset-workflows        # Re-copy bundled skill files (preserves customize.toml)
+bmad-assist init --reset-skills-force     # Destructive reset (overwrites customize.toml too)
 
 # Sprint
 bmad-assist sprint generate
@@ -156,7 +157,7 @@ timeouts:
 
 bmad-assist extends [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) workflows for Multi-LLM automation.
 
-> **Workflow names:** All workflow references below use the canonical `bmad-<name>` form (BMAD v6.4+ skill ids). Legacy short names (e.g., `create-story` instead of `bmad-create-story`) still work as backwards-compatible aliases for one more release — see the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) for the deprecation timeline.
+> **Workflow names:** All workflow references below use the canonical `bmad-<name>` form (BMAD v6.4+ skill ids). In 0.5.x and earlier, short names like `create-story` worked as aliases — these were removed in 0.6.0; use `bmad-create-story` everywhere a workflow name appears in user-facing surfaces (CLI args, configs, docs). See [CHANGELOG.md](CHANGELOG.md) `[0.6.0]` for the migration notes.
 
 ### Modified from BMAD
 

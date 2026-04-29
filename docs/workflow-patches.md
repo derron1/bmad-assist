@@ -1,351 +1,61 @@
 # Workflow Patches
 
-> **Phase 6 status:** This doc describes the legacy patch pipeline that operated on `workflow.yaml` + `instructions.xml`. As of Phase 6, all routing goes through the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml`), and per-skill customization is now expressed in `customize.toml`. The mechanics described below (regex post-process, transforms, `.bmad-assist/patches/*.patch.yaml`) remain in the codebase as a compatibility surface but are no longer the primary customization path. **A full rewrite of this doc is pending.** For canonical workflow names, see [CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`.
+> **Migration note (0.6.0):** Phase 6 retired the legacy `workflow.yaml` + `instructions.xml` pipeline; Phase 7 inlined every workflow compiler under `bmad_assist.compiler.skills.*`. The patch system described below now augments BMAD v6.4+ skill source (`SKILL.md` + `customize.toml`) instead of the old XML workflow tree. Patch file format and discovery are unchanged. In 0.5.x and earlier, short names like `create-story` worked as aliases — these were removed in 0.6.0; use `bmad-create-story` everywhere a workflow name appears in user-facing surfaces (CLI args, configs, docs). Internal dispatch still auto-prepends `bmad-`, so production handlers keep working.
 
-Workflow patches customize BMAD workflow prompts for bmad-assist automation. They transform interactive workflows into automated versions by removing user prompts, embedding compile-time data, and applying deterministic text transformations.
+## Overview
 
-## Problem
+Workflow patches are bmad-assist's compile-time customization layer. They sit on top of upstream BMAD v6.4+ skill source (`SKILL.md` + `customize.toml` + per-skill assets) and apply the bmad-assist-specific transforms that BMAD itself does not need:
 
-BMAD workflows are designed for interactive use with human operators. They include:
-- User prompts and choice menus
-- References to files the LLM must load at runtime
-- Sprint status operations that should be managed programmatically
-- Interactive flow control (goto, anchors, HALT conditions)
+- **Strip interactive elements** that block headless execution (`<ask>` blocks, `<elicit>` prompts, user menus).
+- **Inject compile-time context** (git intelligence, project facts) so the LLM does not need to run those tool calls at runtime.
+- **Remove sprint-status references** that the loop owns programmatically — the LLM should never read or write `sprint-status.yaml`.
+- **Renumber/restructure** the prompt after step removals so the workflow still reads as a linear procedure.
 
-bmad-assist needs these workflows adapted for autonomous execution where:
-- No human is present to answer prompts
-- Context is pre-compiled and embedded
-- Sprint status is managed by the loop handler
-- Execution is linear without user intervention
+The result is a deterministic, automation-friendly prompt that the runner caches under `.bmad-assist/cache/skills/<skill-id>.tpl.xml`.
 
-## Solution
+## Two-tier customization model
 
-Patches define transformations applied at compile time to produce optimized workflow prompts. Each patch targets a specific workflow and specifies:
-- **Transforms**: Natural language instructions for LLM-based modifications
-- **Post-process rules**: Deterministic regex find/replace operations
-- **Git intelligence**: Git commands run at compile time, results embedded
-- **Validation**: Rules to verify patch output correctness
+bmad-assist supports two complementary customization tiers. Pick whichever fits the change:
 
-## Patch File Location
+| Concern | Where it belongs | Why |
+|---|---|---|
+| Add new prepend/append steps, persistent facts, mode toggles, named blocks | `customize.toml` | BMAD-native. Survives upstream skill upgrades cleanly. |
+| Remove an upstream step, renumber, strip `<ask>`/`<elicit>` blocks, rewrite prose, embed git context | `.bmad-assist/patches/<workflow>.patch.yaml` | Subtractive and dynamic transforms that have no `customize.toml` equivalent. |
+
+The base SKILL.md is processed first (variables substituted, `customize.toml` chain merged); then the patch's LLM transforms and regex post-process rules run on the resulting body.
+
+## Patch file location
 
 Patches are discovered in this order (first found wins):
 
-1. **Project**: `.bmad-assist/patches/{workflow}.patch.yaml`
-2. **CWD**: `./bmad-assist/patches/{workflow}.patch.yaml`
-3. **Global**: `~/.bmad-assist/patches/{workflow}.patch.yaml`
+1. **Project**: `.bmad-assist/patches/<workflow>.patch.yaml`
+2. **CWD**: `./bmad-assist/patches/<workflow>.patch.yaml`
+3. **Global**: `~/.bmad-assist/patches/<workflow>.patch.yaml`
 
-Example structure:
-```
-.bmad-assist/
-├── patches/
-│   ├── defaults.yaml              # Shared post-process rules
-│   ├── bmad-create-story.patch.yaml
-│   ├── bmad-dev-story.patch.yaml
-│   ├── bmad-validate-story.patch.yaml
-│   ├── bmad-code-review.patch.yaml
-│   └── bmad-retrospective.patch.yaml
-└── cache/                         # Compiled templates (auto-generated)
-    ├── bmad-create-story.tpl.xml
-    └── bmad-dev-story.tpl.xml
-```
+The patch filename uses the **legacy short name** (e.g., `create-story.patch.yaml`, not `bmad-create-story.patch.yaml`) because patches were authored before the canonical rename. The skill-layout compilers map `bmad-<name>` skill ids back to the short name when probing for a patch.
 
-## Patch File Structure
+A patch is **optional**. Three of the bundled workflows ship with no patch on purpose — they are outcome-based SKILL.md files authored without an upstream BMAD skill to subtract from:
+
+- `bmad-validate-story-synthesis`
+- `bmad-code-review-synthesis`
+- `bmad-security-review`
+
+For these, the substituted SKILL.md body is the final body. No LLM transforms, no regex post-process, no `must_contain` assertions.
+
+## Patch file structure
+
+A complete patch from `.bmad-assist/patches/create-story.patch.yaml`:
 
 ```yaml
-# Metadata
 patch:
-  name: "bmad-create-story-optimizer"
+  name: "create-story-optimizer"
   version: "3.0.0"
-  author: "Your Name"
-  description: "Optimizes bmad-create-story for bmad-assist automation"
-
-# Version requirements
-compatibility:
-  bmad_version: "6.0.0-alpha.22"
-  workflow: "bmad-create-story"
-
-# Compile-time git data (optional)
-git_intelligence:
-  enabled: true
-  embed_marker: "git-intelligence"
-  no_git_message: |
-    This project is not under git version control.
-  commands:
-    - name: "Recent Commits"
-      command: "git log --oneline -5"
-
-# LLM-based transformations
-transforms:
-  - "Remove step 1 (file discovery) - handled by compiler"
-  - "Remove all sprint status operations"
-  - "Renumber remaining steps sequentially"
-
-# Deterministic regex replacements
-post_process:
-  - pattern: '<ask>.*?</ask>'
-    replacement: ""
-    flags: "DOTALL"
-
-# Output validation
-validation:
-  must_contain:
-    - "<step"
-    - "<critical"
-  must_not_contain:
-    - "{installed_path}"
-    - "<ask>"
-```
-
-## Section Reference
-
-### `patch`
-
-Metadata about the patch.
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Unique identifier for the patch |
-| `version` | Yes | Semantic version string |
-| `author` | No | Patch author |
-| `description` | No | Human-readable description |
-
-### `compatibility`
-
-Version requirements for the patch.
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `bmad_version` | Yes | Required bmad-assist version (exact match) |
-| `workflow` | Yes | Target workflow name (e.g., `bmad-create-story`, `bmad-dev-story`) |
-
-### `git_intelligence`
-
-Runs git commands at compile time and embeds results in the prompt. This prevents LLMs from running expensive git archaeology at runtime.
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `enabled` | `true` | Enable/disable git intelligence |
-| `embed_marker` | `git-intelligence` | XML tag name for embedded results |
-| `no_git_message` | (see below) | Message when project has no git |
-| `commands` | `[]` | List of git commands to run |
-
-Each command in `commands`:
-
-| Field | Description |
-|-------|-------------|
-| `name` | Label for this command's output |
-| `command` | Shell command to execute (supports `{{variable}}` placeholders) |
-
-Example:
-```yaml
-git_intelligence:
-  enabled: true
-  embed_marker: "git-intelligence"
-  commands:
-    - name: "Recent Commits (last 5)"
-      command: "git log --oneline -5"
-    - name: "Related Story Commits"
-      command: "git log --grep='{{epic_num}}\\.' --oneline -5 2>/dev/null || echo '(none)'"
-    - name: "Recently Modified Files"
-      command: "git diff --name-only HEAD~5 -- ':!docs/*.md' | head -10"
-```
-
-The output is embedded as:
-```xml
-<git-intelligence>
-## Recent Commits (last 5)
-abc1234 Fix authentication bug
-def5678 Add user profile page
-...
-
-## Related Story Commits
-(none)
-</git-intelligence>
-```
-
-### `transforms`
-
-Natural language instructions for an LLM to modify the workflow content. Each transform is a string describing what change to make.
-
-```yaml
-transforms:
-  - "Remove step 1 (Determine target story) - story discovery is handled by compiler"
-  - "Remove ALL sprint status related content: references to sprint-status.yaml, any operations that read/write sprint status"
-  - "Renumber remaining steps sequentially starting from 1"
-  - "Add instruction in <critical>: Git Intelligence is EMBEDDED - do NOT run git commands"
-  - "Transform HALT instructions to FAILURE CONDITIONS"
-```
-
-Guidelines for writing transforms:
-- Be specific about what to remove, modify, or add
-- Reference step numbers or content patterns when removing
-- Explain why changes are needed (helps LLM understand intent)
-- Use CRITICAL prefix for instructions that must be preserved exactly
-
-### `post_process`
-
-Deterministic regex find/replace rules applied after LLM transforms. Use these for:
-- Cleanup that LLMs often miss
-- Exact pattern matching (step numbers, XML tags)
-- Consistent formatting
-
-```yaml
-post_process:
-  - pattern: '<ask>.*?</ask>'
-    replacement: ""
-    flags: "DOTALL"
-
-  - pattern: '<step n="3"'
-    replacement: '<step n="1"'
-    flags: ""
-
-  - pattern: 'sprint-status\.yaml'
-    replacement: ""
-    flags: "IGNORECASE"
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `pattern` | Yes | Python regex pattern |
-| `replacement` | Yes | Replacement string (can use `\1`, `\2` for groups) |
-| `flags` | No | Space-separated regex flags |
-
-Available flags:
-- `IGNORECASE` or `I` - Case-insensitive matching
-- `MULTILINE` or `M` - `^` and `$` match line boundaries
-- `DOTALL` or `S` - `.` matches newlines
-- Combine with spaces: `"MULTILINE DOTALL IGNORECASE"`
-
-### `validation`
-
-Rules to verify the patched output is correct.
-
-```yaml
-validation:
-  must_contain:
-    - "<step"                    # Substring match
-    - "<critical"
-    - "/[Ii]mplement/"          # Regex (enclosed in /.../)
-    - "/red-green-refactor/"
-  must_not_contain:
-    - "{installed_path}"
-    - "<ask>"
-    - "sprint-status"
-```
-
-| Field | Description |
-|-------|-------------|
-| `must_contain` | Patterns that must exist in output |
-| `must_not_contain` | Patterns that must NOT exist in output |
-
-Pattern format:
-- Plain string: Substring match (case-sensitive)
-- `/pattern/`: Regex match
-
-## Defaults File
-
-The `defaults.yaml` file contains shared post-process rules automatically applied to all patches. Create workflow-specific defaults with `defaults-{category}.yaml`.
-
-```yaml
-# defaults.yaml - shared rules for all patches
-post_process:
-  # Remove template variable references
-  - pattern: '^\s*<var\s+name="template"[^>]*>.*?</var>\s*$'
-    replacement: ""
-    flags: "MULTILINE DOTALL"
-
-  # Remove sprint-status references
-  - pattern: 'sprint-status\.yaml'
-    replacement: ""
-    flags: "IGNORECASE"
-
-  # Remove steps tagged for sprint-status
-  - pattern: '<step[^>]*tag="sprint-status"[^>]*>.*?</step>'
-    replacement: "<!-- step removed: sprint-status managed by loop handler -->"
-    flags: "DOTALL IGNORECASE"
-```
-
-Rules from defaults are applied first, then workflow-specific `post_process` rules extend them.
-
-## Cache System
-
-Compiled patches are cached to avoid recompilation:
-
-```
-.bmad-assist/cache/
-├── bmad-create-story.tpl.xml
-├── bmad-dev-story.tpl.xml
-└── bmad-validate-story.tpl.xml
-```
-
-Cache invalidation occurs when:
-- Patch file is modified (mtime check)
-- Defaults file is modified
-- bmad-assist version changes
-
-To manually clear the cache:
-```bash
-rm -rf .bmad-assist/cache/
-```
-
-## CLI Commands
-
-```bash
-# Compile a specific patch
-bmad-assist patch compile bmad-create-story
-
-# Compile all patches in project
-bmad-assist patch compile-all
-
-# List available patches
-bmad-assist patch list
-
-# Show patch details
-bmad-assist patch show bmad-create-story
-
-# Debug compilation (verbose output)
-bmad-assist compile -w bmad-create-story -e 1 -s 1 --debug
-```
-
-## Example: Minimal Patch
-
-A minimal patch that removes user interaction:
-
-```yaml
-patch:
-  name: "minimal-automation"
-  version: "1.0.0"
+  author: "Pawel N"
+  description: "Optimizes create-story workflow - removes programmatically handled steps, embeds all context"
 
 compatibility:
   bmad_version: "6.0.0-alpha.22"
-  workflow: "bmad-create-story"
-
-transforms:
-  - "Remove all <ask> elements - no interactive user"
-  - "Remove step 1 (file discovery) - handled by compiler"
-
-post_process:
-  - pattern: '<ask>.*?</ask>'
-    replacement: ""
-    flags: "DOTALL"
-
-validation:
-  must_not_contain:
-    - "<ask>"
-```
-
-## Example: Full Patch with Git Intelligence
-
-```yaml
-patch:
-  name: "bmad-dev-story-automation"
-  version: "2.0.0"
-  author: "BMad"
-  description: "Full automation patch for bmad-dev-story workflow"
-
-compatibility:
-  bmad_version: "6.0.0-alpha.22"
-  workflow: "bmad-dev-story"
+  workflow: "create-story"
 
 git_intelligence:
   enabled: true
@@ -354,109 +64,190 @@ git_intelligence:
     This project is not under git version control.
     Do NOT attempt to run git commands - they will fail.
   commands:
-    - name: "Recent Implementation Commits"
-      command: "git log --oneline -10"
-    - name: "Current Branch Status"
-      command: "git status --short"
-    - name: "Uncommitted Changes"
-      command: "git diff --stat -- ':!docs/*.md'"
+    - name: "Recent Commits (last 5)"
+      command: "git log --oneline -5"
+    - name: "Related Story Commits"
+      command: "git log --grep='{{epic_num}}\\.' --oneline -5 2>/dev/null || echo '(no related commits)'"
 
 transforms:
-  - "Add CRITICAL instruction: 'SCOPE: You are the MASTER agent with READ+WRITE permission'"
-  - "CRITICAL: Preserve the EXACT phrase 'red-green-refactor' wherever it appears"
-  - "Remove step 1 (file discovery) - handled by compiler"
-  - "Remove step 4 (sprint-status) - managed by loop handler"
-  - "Remove ALL <goto> and <anchor> elements - workflow executes linearly"
-  - "Transform HALT instructions to FAILURE CONDITIONS"
-  - "Renumber remaining steps sequentially"
+  - "Remove step 1 (Determine target story) completely - story discovery is handled programmatically by the compiler"
+  - "Remove ALL sprint status related content: references to sprint-status.yaml, any operations that read/write/update sprint status"
+  - "Renumber remaining steps sequentially starting from 1"
+  - "Add instruction in <critical> section: Git Intelligence is EMBEDDED at the start of the prompt - do NOT run git commands yourself"
 
 post_process:
-  # Remove user interaction
-  - pattern: '\s*<ask>.*?</ask>\s*'
+  - pattern: '\s*<check if="sprint status[^"]*">.*?</check>\s*'
     replacement: ""
     flags: "DOTALL"
 
-  # Remove goto/anchor
-  - pattern: '<anchor[^/]*/?>\s*'
-    replacement: ""
-    flags: ""
-  - pattern: '<goto[^>]*>.*?</goto>'
-    replacement: ""
+  - pattern: '(<workflow>\s*)'
+    replacement: |
+      \1<critical>SCOPE LIMITATION: Your ONLY task is to create the story markdown file. Sprint tracking is handled programmatically.</critical>
     flags: "DOTALL"
-
-  # Step removal by number
-  - pattern: '<step n="1"[^>]*>.*?</step>'
-    replacement: "<!-- step 1 removed: file discovery -->"
-    flags: "DOTALL"
-  - pattern: '<step n="4"[^>]*>.*?</step>'
-    replacement: "<!-- step 4 removed: sprint-status -->"
-    flags: "DOTALL"
-
-  # Renumber remaining steps
-  - pattern: '<step n="2"'
-    replacement: '<step n="1"'
-    flags: ""
-  - pattern: '<step n="3"'
-    replacement: '<step n="2"'
-    flags: ""
 
 validation:
   must_contain:
     - "<step"
     - "<critical"
-    - "/red-green-refactor/"
   must_not_contain:
+    - "sprint-status"
     - "{installed_path}"
-    - "<ask>"
-    - "<anchor"
-    - "<goto"
 ```
+
+### Section reference
+
+| Section | Purpose |
+|---|---|
+| `patch` | Metadata: `name`, `version`, optional `author`, `description`. |
+| `compatibility` | `bmad_version` + `workflow` (the legacy short name; matches the patch filename stem). |
+| `git_intelligence` | Optional. Compile-time git commands whose output is embedded under a single XML tag (default `<git-intelligence>`). Each command supports `{{variable}}` placeholders resolved against compiler context. |
+| `transforms` | Natural-language instructions for the master LLM to apply (list of strings). The LLM gets all transforms in one call and must return a `<transformed-document>` block. |
+| `post_process` | Deterministic regex find/replace rules applied after LLM transforms. Each rule has `pattern`, `replacement`, optional `flags` (space-separated: `IGNORECASE` `MULTILINE` `DOTALL`, or single letters `I` `M` `S`). |
+| `validation` | `must_contain` / `must_not_contain` assertions. Plain strings are substring matches; values wrapped in `/.../` are regex. |
+
+## Compile pipeline
+
+When `bmad-assist run` reaches a workflow phase, the skill-layout compiler in `bmad_assist.compiler.skills.<skill_module>` executes this pipeline (`SkillLayoutCompilerBase.compile`):
+
+1. **`find_skill()`** — locate `SKILL.md` for the canonical `bmad-<name>` skill id. Probe order: project install (`.claude/skills/<id>/`, `.agents/skills/<id>/`), then bundled fallback (`src/bmad_assist/skills/<id>/`).
+2. **`parse_skill()`** — read frontmatter (`name`, `description`) + body.
+3. **`resolve_customization()`** — merge the `customize.toml` chain (`<skill>/customize.toml` → `_bmad/custom/<skill>.toml` → `_bmad/custom/<skill>.user.toml`) using the BMAD-defined merge rules.
+4. **Variable substitution** — substitute `{skill-root}`, `{project-root}`, workflow path tokens, and `{workflow.*}` prose. Each subclass contributes its own `build_extra_vars()` (e.g., epic/story numbers for `bmad-create-story`, story file context for `bmad-dev-story`). Then `resolve_skill_variables()` produces the final pre-patch body.
+5. **`apply_llm_transforms()`** — if a patch exists and a master provider is configured, send the body + `transforms` list to the master LLM via `PatchSession`. The LLM returns the rewritten body inside `<transformed-document>`. The retry loop runs **up to 3 attempts**: each attempt re-runs the LLM with a "RETRY ATTEMPT N" hint prepended, then the per-attempt validator re-checks XML well-formedness and the patch's `must_contain` rules. If no master provider is configured, the compiler logs that and skips this stage (regex-only mode).
+6. **`post_process_compiled()`** — apply the patch's `post_process` regex rules, plus the shared rules from `defaults.yaml` (and `defaults-testarch.yaml` for TEA workflows).
+7. **`validate_output()`** — enforce the patch's `must_contain` / `must_not_contain` assertions on the post-processed body.
+8. **XML well-formedness** — for workflows whose patched body is XML, `validate_workflow_xml()` parses the result to catch mismatched tags before the runner consumes it.
+9. **Cache write** — persist the patched body and metadata under `<project>/.bmad-assist/cache/skills/<skill-id>.tpl.xml` (+ `.meta.yaml` sidecar).
+
+The workhorse compile step is implemented per-workflow as `_run_workflow_compile()` (a hook on `SkillLayoutCompilerBase`). This is where the workflow-specific glue (context-file building, mission text, XML output) lives — every legacy compiler body was inlined into its respective `_run_workflow_compile()` during Phase 7.
+
+## Defaults files
+
+The `defaults.yaml` and `defaults-testarch.yaml` files in `.bmad-assist/patches/` ship shared `post_process` rules applied to every workflow patch (`defaults-testarch.yaml` only applies to the eight TEA workflows).
+
+Typical contents:
+
+```yaml
+# defaults.yaml — applied to every patch
+post_process:
+  # Cleanup workflow YAML cruft
+  - pattern: '^\s*<var\s+name="template"[^>]*>.*?</var>\s*$'
+    replacement: ""
+    flags: "MULTILINE DOTALL"
+
+  # Sprint-status references the loop owns programmatically
+  - pattern: '<step[^>]*tag="sprint-status"[^>]*>.*?</step>'
+    replacement: "<!-- step removed: sprint-status managed by loop handler -->"
+    flags: "DOTALL IGNORECASE"
+
+  - pattern: 'sprint-status\.yaml'
+    replacement: ""
+    flags: "IGNORECASE"
+```
+
+Defaults are loaded by `load_defaults()` (in `bmad_assist.compiler.patching.discovery`) and concatenated with the patch's own `post_process` rules before the regex pass runs.
+
+## Cache system
+
+Compiled bodies are cached at two levels:
+
+- **Project cache** (`<project>/.bmad-assist/cache/skills/<skill-id>.tpl.xml`) — written on every successful compile.
+- **Bundled cache** (`src/bmad_assist/skills/cache/<skill-id>.tpl.xml`) — empty by default; can be pre-warmed and shipped with the package. When present and valid, the bundled entry is copied into the project cache on first run.
+
+Cache validity is gated on a metadata sidecar (`<skill-id>.tpl.xml.meta.yaml`) containing four keys:
+
+| Key | Purpose |
+|---|---|
+| `skill_md_hash` | SHA-256 of `SKILL.md`. Source change → invalidate. |
+| `customize_toml_hash` | SHA-256 of `customize.toml`. Customization change → invalidate. |
+| `patch_hash` | SHA-256 of the patch file. Transform change → invalidate. |
+| `transform_mode` | `"llm"` (master provider configured) or `"regex_only"` (no master). Switching modes invalidates because the LLM stage produces materially different output. |
+
+To clear the project cache manually:
+
+```bash
+rm -rf .bmad-assist/cache/skills/
+```
+
+The next workflow run will recompile and refill it.
+
+## Snapshot tests
+
+Phase 7 added pinned-output snapshot tests at `tests/skill_layout/snapshots/<skill-id>.tpl.xml` — one snapshot per migrated workflow (18 total). The test (`tests/skill_layout/test_snapshots.py`) compiles each skill against a frozen project context with `freeze_clock` applied (so date/time tokens stay stable) and asserts byte-equality against the snapshot.
+
+Any change to a patch file, `customize.toml`, or skill source that affects the compiled body will fail the snapshot. To accept the new output:
+
+```bash
+UPDATE_SNAPSHOTS=1 pytest tests/skill_layout/test_snapshots.py
+```
+
+Then **review the diff** before committing — the snapshots are the regression safety net for skill-layout compiler refactors.
+
+## CLI commands
+
+The `bmad-assist patch` subcommand group is a developer tool for inspecting and pre-warming patches. Workflow runs (`bmad-assist run`) invoke the compile pipeline directly and do not require these.
+
+```bash
+# Compile a single patch (legacy code path; reads workflow.yaml from a _bmad/ install).
+# Use this only when developing patches against a project with a _bmad/... install.
+bmad-assist patch compile <workflow>
+
+# Compile every patch found in .bmad-assist/patches/.
+bmad-assist patch compile-all
+
+# List discovered patches and their cache status.
+bmad-assist patch list
+
+# Inspect a patch file's parsed contents.
+bmad-assist patch show <workflow>
+```
+
+Note: `bmad-assist patch compile` exercises the legacy `compile_patch()` code path (which expects `_bmad/.../workflow.yaml` + `instructions.xml`), not the skill-layout pipeline used by `bmad-assist run`. The bundled-cache fast path on this code path was removed in 0.6.0 — every invocation hits the LLM. For most users, the implicit cache management performed by `bmad-assist run` is sufficient and `patch compile` is unnecessary.
+
+## Authoring guidelines
+
+When writing or modifying a patch:
+
+- **Prefer `customize.toml` for additive concerns.** Patches should describe what bmad-assist needs to *remove* or *rewrite* in the upstream prompt; net-new prepend steps and persistent facts belong in `customize.toml`.
+- **Make transforms specific.** "Remove step 1 (file discovery) - handled by compiler" beats "remove the file discovery step." LLMs interpret vague instructions inconsistently.
+- **Mirror critical removals in `post_process`.** Use a regex rule as a deterministic safety net for things you absolutely need gone (sprint-status references, `<ask>` blocks). The LLM transform handles intent; the regex handles exactness.
+- **Use `validation` to lock in invariants.** `must_contain: ["<critical"]` catches a transform that accidentally stripped the `<critical>` block; `must_not_contain: ["sprint-status"]` catches a leak through both the transform and the post-process pass.
+- **Refresh snapshots in the same commit as the patch change.** Reviewers will look at the snapshot diff to understand what the patch actually does.
 
 ## Troubleshooting
 
-### Patch not being applied
+### Patch did not apply
 
-1. Verify patch file location matches discovery order
-2. Check `compatibility.workflow` matches the target workflow name
-3. Clear cache and recompile: `rm -rf .bmad-assist/cache/`
+1. Verify the patch file exists at one of the discovery locations and is named `<workflow>.patch.yaml` using the **legacy short name**.
+2. Check `compatibility.workflow` matches the legacy short name (e.g., `create-story`, not `bmad-create-story`).
+3. Clear the cache and recompile: `rm -rf .bmad-assist/cache/skills/`.
+4. Run the workflow with `-v` to see the compile-pipeline log lines (they identify which stage was skipped or failed).
 
-### Validation failures
+### Validation failure during compile
 
 ```
-ValidationError: must_contain failed: /red-green-refactor/
+PatchError: Validation failed after 3 attempts: ['must_contain failed: /red-green-refactor/']
 ```
 
-The patched output is missing required content. Either:
-- Transform instruction didn't preserve the content
-- Post-process rule accidentally removed it
+The LLM transform pass produced output that did not satisfy the patch's `must_contain` rules across all 3 retry attempts. Likely causes:
 
-Debug by examining the compiled template in `.bmad-assist/cache/`.
+- A transform instruction told the LLM to remove content the validation rule expects to keep.
+- A `post_process` regex stripped the required content after the validator passed.
 
-### Post-process regex not matching
+Inspect the cached body in `.bmad-assist/cache/skills/<skill-id>.tpl.xml` and the runner log for the exact LLM output that failed validation.
 
-1. Test regex separately: `python -c "import re; print(re.search(r'pattern', text))"`
-2. Check flags - `DOTALL` needed for patterns spanning lines
-3. Escape special characters: `\.` for literal dot, `\{` for literal brace
+### Regex post-process not matching
 
-### Cache conflicts after updates
+1. Test the pattern in isolation: `python -c "import re; print(re.search(r'pattern', text))"`.
+2. Add `DOTALL` (`S`) when matching across newlines; add `MULTILINE` (`M`) for `^`/`$` anchors per line.
+3. Escape special characters: `\.` for literal dot, `\{` for literal brace, `\\` for backslash inside YAML strings.
 
-```bash
-# Clear all cached templates
-rm -rf .bmad-assist/cache/
+### Transform skipped silently
 
-# Recompile
-bmad-assist patch compile-all
-```
+If the runner log says `Skipping LLM transforms (mode=regex_only, ...)`, no master provider is configured. Add a `providers.master` block to `bmad-assist.yaml` to enable LLM transforms; otherwise the patch runs with `post_process` rules only.
 
-### Transform not applied by LLM
+## See also
 
-Transforms are natural language instructions - LLMs may interpret them differently. If a transform isn't working:
-1. Make the instruction more specific
-2. Add a post-process rule as backup
-3. Use validation rules to catch failures
-
-## See Also
-
-- [Configuration Reference](configuration.md) - Main configuration options
-- [Strategic Context](strategic-context.md) - Document injection settings
-- [Troubleshooting](troubleshooting.md) - Common issues
+- [Configuration Reference](configuration.md) — Provider, timeout, and compiler settings.
+- [Strategic Context](strategic-context.md) — Document injection settings.
+- [Troubleshooting](troubleshooting.md) — Other common issues.
