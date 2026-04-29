@@ -20,11 +20,20 @@ from pathlib import Path
 
 from rich.console import Console
 
+import bmad_assist
 from bmad_assist.core.config import Config
 from bmad_assist.core.exceptions import BmadAssistError
 from bmad_assist.git import check_gitignore
 
 logger = logging.getLogger(__name__)
+
+# Stamp file written into each installed skill directory recording the
+# bmad-assist version that produced the copy. Used by bootstrap to detect
+# stale installs after a release that changes skill content/layout (e.g.
+# the Phase 7 inlining of workflow.md into SKILL.md). Not shipped in the
+# bundle — written post-copy by ``bootstrap_new_layout``.
+_BUNDLE_VERSION_FILE = ".bundle-version"
+_LEGACY_VERSION_LABEL = "legacy"
 
 
 class SetupError(BmadAssistError):
@@ -132,6 +141,25 @@ def check_gitignore_warning(
     console.print("     [dim]  suppress_gitignore: true[/dim]\n")
 
 
+def _read_installed_bundle_version(skill_dir: Path) -> str | None:
+    """Read the stamped bundle version from an installed skill dir.
+
+    Returns ``None`` if the stamp is missing or unreadable, which is
+    treated by the bootstrap as a legacy (pre-stamp) install that needs
+    refreshing.
+    """
+    stamp = skill_dir / _BUNDLE_VERSION_FILE
+    try:
+        return stamp.read_text(encoding="utf-8").strip() or None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_bundle_version(skill_dir: Path, version: str) -> None:
+    """Write the bundle version stamp into an installed skill dir."""
+    (skill_dir / _BUNDLE_VERSION_FILE).write_text(f"{version}\n", encoding="utf-8")
+
+
 def _copy_skill_tree(
     src_dir: Path,
     dst_dir: Path,
@@ -173,6 +201,9 @@ def _copy_skill_tree(
             # Skip Python bytecode artefacts that may be co-located
             # under the bundled skills package.
             if item.name == "__pycache__" or item.name.endswith(".pyc"):
+                continue
+            # The version stamp is written by bootstrap_new_layout, never shipped.
+            if item.name == _BUNDLE_VERSION_FILE:
                 continue
             if item.is_dir():
                 _copy_skill_tree(
@@ -250,6 +281,7 @@ def bootstrap_new_layout(
 
     bootstrapped: list[str] = []
     skipped: list[str] = []
+    current_version = bmad_assist.__version__
 
     for i, skill_id in enumerate(skills, 1):
         src_dir = get_bundled_skill_dir(skill_id)
@@ -259,40 +291,81 @@ def bootstrap_new_layout(
 
         console.print(f"  [{i}/{len(skills)}] {skill_id}...", end=" ")
 
-        any_action = False
+        # Track the most "active" status across both mirrors so the
+        # rendered message reflects what actually happened. Priority:
+        # fresh > forced > refreshed > skipped.
+        skill_status: str | None = None
+        from_version: str | None = None
+
         for mirror_prefix in (".claude/skills", ".agents/skills"):
             dst_dir = project_path / mirror_prefix / skill_id
             if not _validate_path_safe(project_path, dst_dir):
                 console.print(f"[red]SKIPPED {mirror_prefix} (invalid path)[/red]", end=" ")
                 continue
-            if dst_dir.exists():
-                if force:
-                    # Re-copy in place rather than rmtree → copy. The
-                    # _copy_skill_tree call honours preserve_customizations
-                    # (which we want to keep customize.toml intact for the
-                    # default --reset-workflows UX). For the destructive
-                    # --reset-skills-force path, preserve=False allows
-                    # customize.toml to be overwritten too.
-                    _copy_skill_tree(
-                        src_dir,
-                        dst_dir,
-                        preserve_customizations=preserve_customizations,
-                    )
-                    any_action = True
-                # else: no-clobber — leave it alone
-            else:
+
+            if not dst_dir.exists():
                 _copy_skill_tree(
                     src_dir,
                     dst_dir,
                     preserve_customizations=preserve_customizations,
                 )
-                any_action = True
+                _write_bundle_version(dst_dir, current_version)
+                if skill_status not in ("fresh",):
+                    skill_status = "fresh"
+                continue
 
-        if any_action:
+            installed_version = _read_installed_bundle_version(dst_dir)
+
+            if force:
+                # Re-copy in place rather than rmtree → copy. The
+                # _copy_skill_tree call honours preserve_customizations
+                # (which we want to keep customize.toml intact for the
+                # default --reset-workflows UX). For the destructive
+                # --reset-skills-force path, preserve=False allows
+                # customize.toml to be overwritten too.
+                _copy_skill_tree(
+                    src_dir,
+                    dst_dir,
+                    preserve_customizations=preserve_customizations,
+                )
+                _write_bundle_version(dst_dir, current_version)
+                if skill_status != "fresh":
+                    skill_status = "forced"
+                continue
+
+            if installed_version != current_version:
+                # Stale (or unstamped legacy) install — auto-refresh.
+                # customize.toml is preserved; manual edits to other
+                # bundled files are overwritten on version bump.
+                _copy_skill_tree(
+                    src_dir,
+                    dst_dir,
+                    preserve_customizations=preserve_customizations,
+                )
+                _write_bundle_version(dst_dir, current_version)
+                if skill_status not in ("fresh", "forced"):
+                    skill_status = "refreshed"
+                    if from_version is None:
+                        from_version = installed_version or _LEGACY_VERSION_LABEL
+                continue
+
+            # Stamp matches — fully up to date.
+            if skill_status is None:
+                skill_status = "skipped"
+
+        if skill_status == "skipped":
+            console.print("[dim]exists[/dim]")
+            skipped.append(skill_id)
+        elif skill_status == "refreshed":
+            label = from_version or _LEGACY_VERSION_LABEL
+            console.print(f"[green]updated {label} → {current_version}[/green]")
+            bootstrapped.append(skill_id)
+        elif skill_status in ("fresh", "forced"):
             console.print("[green]ok[/green]")
             bootstrapped.append(skill_id)
         else:
-            console.print("[dim]exists[/dim]")
+            # All mirrors had invalid paths (or skill list was empty).
+            console.print("[dim](no-op)[/dim]")
             skipped.append(skill_id)
 
     return bootstrapped, skipped
