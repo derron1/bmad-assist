@@ -238,6 +238,16 @@ def _fx_testarch(proj: Path) -> CompilerContext:
     _seed_epic(docs)
     sprint = _seed_sprint_status(docs, "ready-for-dev")
     _seed_story(sprint, "ready-for-dev")
+    # Seed a minimal _bmad/tea/config.yaml so the compiler emits the
+    # <tea-paths> block (the bug-fix this snapshot covers).
+    tea_dir = proj / "_bmad" / "tea"
+    tea_dir.mkdir(parents=True, exist_ok=True)
+    (tea_dir / "config.yaml").write_text(
+        'test_artifacts: "{project-root}/_bmad-output/test-artifacts"\n'
+        "test_design_output: _bmad-output/test-artifacts/test-design\n"
+        "test_review_output: _bmad-output/test-artifacts/test-reviews\n"
+        "trace_output: _bmad-output/test-artifacts/traceability\n"
+    )
     return CompilerContext(
         project_root=proj,
         output_folder=docs,

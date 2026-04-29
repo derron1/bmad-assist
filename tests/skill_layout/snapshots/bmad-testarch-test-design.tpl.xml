@@ -8,6 +8,13 @@ Mode: None
 Target: Story 10.1
 
 ]]></mission>
+<tea-paths>
+<!-- bmad-assist pre-resolved these from _bmad/tea/config.yaml so step files referencing {test_artifacts} (and FUTURE siblings) have concrete values without needing runtime token resolution. -->
+<test_artifacts>/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-test-design/proj/_bmad-output/test-artifacts</test_artifacts>
+<test_design_output>_bmad-output/test-artifacts/test-design</test_design_output>
+<test_review_output>_bmad-output/test-artifacts/test-reviews</test_review_output>
+<trace_output>_bmad-output/test-artifacts/traceability</trace_output>
+</tea-paths>
 <context>
 <file id="c02adc82" path="docs/project_context.md" label="PROJECT CONTEXT"><![CDATA[
 

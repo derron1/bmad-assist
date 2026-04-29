@@ -260,9 +260,7 @@ Epic number is: {epic_num}
             "epic_num": 25,
         }
 
-        content, context_files = compile_step_chain(
-            step1, resolved, tmp_path
-        )
+        content, context_files = compile_step_chain(step1, resolved, tmp_path)
 
         assert f"Project root is: {tmp_path}" in content
         assert "Epic number is: 25" in content
@@ -291,9 +289,7 @@ Content here
         )
 
         resolved: dict = {}
-        content, context_files = compile_step_chain(
-            step1, resolved, tmp_path
-        )
+        content, context_files = compile_step_chain(step1, resolved, tmp_path)
 
         assert str(index_file) in context_files
         assert resolved.get("knowledgeIndex") == str(index_file)
@@ -322,9 +318,7 @@ Use index: {knowledgeIndex}
         )
 
         resolved: dict = {}
-        content, context_files = compile_step_chain(
-            step1, resolved, tmp_path
-        )
+        content, context_files = compile_step_chain(step1, resolved, tmp_path)
 
         assert str(index_file) in context_files
         assert str(index_file) in content
@@ -387,3 +381,135 @@ Step 2 content with {var2}
         assert "Step 1 content with value1" in content
         assert "<!-- STEP: step-02 -->" in content
         assert "Step 2 content with value2" in content
+
+
+class TestLoadTeaModuleConfig:
+    """Tests for load_tea_module_config().
+
+    The function pre-resolves the TEA module path config (test_artifacts
+    + FUTURE-marked siblings) so the compile-time `<tea-paths>` block
+    can give the LLM concrete paths instead of unresolved tokens.
+    """
+
+    def _write_yaml(self, project_root: Path, body: str) -> None:
+        tea_dir = project_root / "_bmad" / "tea"
+        tea_dir.mkdir(parents=True, exist_ok=True)
+        (tea_dir / "config.yaml").write_text(body)
+
+    def _write_toml(self, project_root: Path, body: str) -> None:
+        bmad_dir = project_root / "_bmad"
+        bmad_dir.mkdir(parents=True, exist_ok=True)
+        (bmad_dir / "config.toml").write_text(body)
+
+    def test_load_tea_module_config_from_yaml(self, tmp_path: Path) -> None:
+        """YAML is the primary source. Returned dict preserves declaration keys."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        self._write_yaml(
+            tmp_path,
+            'test_artifacts: "{project-root}/_bmad-output/test-artifacts"\n'
+            "test_design_output: _bmad-output/test-artifacts/test-design\n",
+        )
+
+        result = load_tea_module_config(tmp_path)
+
+        assert "test_artifacts" in result
+        assert result["test_artifacts"] == str(
+            tmp_path.resolve() / "_bmad-output" / "test-artifacts"
+        )
+        assert result["test_design_output"] == "_bmad-output/test-artifacts/test-design"
+
+    def test_load_tea_module_config_falls_back_to_toml(self, tmp_path: Path) -> None:
+        """Without YAML, the TOML `[modules.tea]` section is used."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        self._write_toml(
+            tmp_path,
+            "[core]\n"
+            'output_folder = "{project-root}/_bmad-output"\n'
+            "\n"
+            "[modules.tea]\n"
+            'test_artifacts = "{project-root}/_bmad-output/test-artifacts"\n'
+            'trace_output = "_bmad-output/test-artifacts/traceability"\n',
+        )
+
+        result = load_tea_module_config(tmp_path)
+
+        assert result["test_artifacts"] == str(
+            tmp_path.resolve() / "_bmad-output" / "test-artifacts"
+        )
+        assert result["trace_output"] == "_bmad-output/test-artifacts/traceability"
+
+    def test_load_tea_module_config_returns_empty_when_neither(self, tmp_path: Path) -> None:
+        """Fresh project with no _bmad install -> empty dict (no injection)."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        assert load_tea_module_config(tmp_path) == {}
+
+    def test_load_tea_module_config_resolves_project_root_token(self, tmp_path: Path) -> None:
+        """`{project-root}` is replaced with the canonical project_root path."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        self._write_yaml(tmp_path, 'test_artifacts: "{project-root}/some/where"\n')
+
+        result = load_tea_module_config(tmp_path)
+
+        assert "{project-root}" not in result["test_artifacts"]
+        assert result["test_artifacts"].endswith("/some/where")
+        assert str(tmp_path.resolve()) in result["test_artifacts"]
+
+    def test_load_tea_module_config_resolves_output_folder_token(self, tmp_path: Path) -> None:
+        """`{output_folder}` is replaced from `[core].output_folder` (TOML)."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        # `{output_folder}` substitution is sourced from the TOML
+        # `[core]` section; YAML configs typically inline the path so
+        # this lives on the TOML branch.
+        self._write_toml(
+            tmp_path,
+            "[core]\n"
+            'output_folder = "{project-root}/_bmad-output"\n'
+            "\n"
+            "[modules.tea]\n"
+            'test_artifacts = "{output_folder}/test-artifacts"\n',
+        )
+
+        result = load_tea_module_config(tmp_path)
+
+        assert "{output_folder}" not in result["test_artifacts"]
+        assert result["test_artifacts"] == str(
+            tmp_path.resolve() / "_bmad-output" / "test-artifacts"
+        )
+
+    def test_load_tea_module_config_skips_unknown_and_empty_keys(self, tmp_path: Path) -> None:
+        """Only TEA_PATH_KEYS are emitted; non-string / blank values dropped."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        self._write_yaml(
+            tmp_path,
+            'test_artifacts: "{project-root}/_bmad-output/test-artifacts"\n'
+            "test_design_output: ''\n"  # blank -> dropped
+            "tea_use_playwright_utils: true\n"  # not a path key -> dropped
+            "risk_threshold: p1\n",  # not a path key -> dropped
+        )
+
+        result = load_tea_module_config(tmp_path)
+
+        assert list(result.keys()) == ["test_artifacts"]
+
+    def test_load_tea_module_config_yaml_wins_over_toml(self, tmp_path: Path) -> None:
+        """When both exist, YAML is the source of truth (matches BMAD v6.4+)."""
+        from bmad_assist.compiler.variables.tea import load_tea_module_config
+
+        self._write_yaml(
+            tmp_path,
+            'test_artifacts: "{project-root}/from-yaml"\n',
+        )
+        self._write_toml(
+            tmp_path,
+            '[modules.tea]\ntest_artifacts = "{project-root}/from-toml"\n',
+        )
+
+        result = load_tea_module_config(tmp_path)
+
+        assert result["test_artifacts"].endswith("/from-yaml")

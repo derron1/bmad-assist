@@ -8,13 +8,31 @@ Public API:
     resolve_tea_variables: Resolve TEA-specific variables for step content
     resolve_knowledge_index: Resolve knowledgeIndex to actual file path
     resolve_knowledge_base: Load workflow-specific knowledge fragments
+    load_tea_module_config: Load TEA module config (test_artifacts + siblings)
 """
 
 import logging
+import tomllib
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Keys we extract from TEA module config for the `<tea-paths>` block.
+# Order is meaningful: it controls emit order in the compiled prompt.
+# Source of truth: BMAD v6.4 module.yaml for the TEA module.
+# - test_artifacts: actively used by step files (target of this fix).
+# - test_design_output / test_review_output / trace_output / test_dir:
+#   declared by BMAD upstream but currently FUTURE-marked (unused by
+#   step files). Included defensively so future BMAD step revisions
+#   don't trigger a token-resolution gap.
+TEA_PATH_KEYS: tuple[str, ...] = (
+    "test_artifacts",
+    "test_design_output",
+    "test_review_output",
+    "trace_output",
+    "test_dir",
+)
 
 # Legacy constants retained for backwards-compat imports. New callers
 # should use :func:`resolve_tea_index_path` from
@@ -272,4 +290,126 @@ def resolve_tea_variables(
         else:
             logger.debug("No knowledge base content for workflow %s", workflow_id)
 
+    return resolved
+
+
+def _resolve_tea_path_token(value: str, project_root: Path, output_folder: str | None) -> str:
+    """Substitute `{project-root}` and `{output_folder}` tokens in a path value.
+
+    BMAD config files express paths with templated tokens (e.g.
+    ``{project-root}/_bmad-output/test-artifacts``). We pre-resolve them
+    so the LLM sees concrete paths and never has to guess.
+
+    Substitution order:
+    1. ``{project-root}`` -> canonical absolute path string of
+       ``project_root`` (symlinks followed via :meth:`Path.resolve`).
+       Matches the form other compile-time substitutions emit, so
+       all paths in the compiled prompt agree on the same prefix.
+    2. ``{output_folder}`` -> ``output_folder`` (which itself may have
+       had ``{project-root}`` substituted upstream — pass the already-
+       resolved value here).
+
+    Args:
+        value: Raw path value from config (may contain tokens).
+        project_root: Project root absolute path.
+        output_folder: Resolved output folder path string, or None.
+
+    Returns:
+        Path string with tokens substituted (idempotent if already resolved).
+
+    """
+    result = value
+    if "{project-root}" in result:
+        result = result.replace("{project-root}", str(project_root.resolve()))
+    if output_folder is not None and "{output_folder}" in result:
+        result = result.replace("{output_folder}", output_folder)
+    return result
+
+
+def _read_yaml_tea_config(project_root: Path) -> tuple[dict[str, Any], str | None] | None:
+    """Read `_bmad/tea/config.yaml`. Returns (data, output_folder) or None."""
+    yaml_path = project_root / "_bmad" / "tea" / "config.yaml"
+    if not yaml_path.is_file():
+        return None
+    try:
+        import yaml
+
+        with open(yaml_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.warning("Failed to parse %s: %s", yaml_path, e)
+        return None
+    if not isinstance(data, dict):
+        return None
+    output_folder = data.get("output_folder")
+    if isinstance(output_folder, str):
+        output_folder = _resolve_tea_path_token(output_folder, project_root, None)
+    else:
+        output_folder = None
+    return data, output_folder
+
+
+def _read_toml_tea_config(project_root: Path) -> tuple[dict[str, Any], str | None] | None:
+    """Read `_bmad/config.toml [modules.tea]`. Returns (data, output_folder) or None."""
+    toml_path = project_root / "_bmad" / "config.toml"
+    if not toml_path.is_file():
+        return None
+    try:
+        with open(toml_path, "rb") as f:
+            parsed = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        logger.warning("Failed to parse %s: %s", toml_path, e)
+        return None
+    modules = parsed.get("modules") or {}
+    tea = modules.get("tea") if isinstance(modules, dict) else None
+    if not isinstance(tea, dict):
+        return None
+    core = parsed.get("core") if isinstance(parsed.get("core"), dict) else {}
+    output_folder = core.get("output_folder") if isinstance(core, dict) else None
+    if isinstance(output_folder, str):
+        output_folder = _resolve_tea_path_token(output_folder, project_root, None)
+    else:
+        output_folder = None
+    return tea, output_folder
+
+
+def load_tea_module_config(project_root: Path) -> dict[str, str]:
+    """Load TEA module path config with `{project-root}` / `{output_folder}` resolved.
+
+    Read order:
+    1. ``_bmad/tea/config.yaml`` (BMAD v6.4+ flat YAML format).
+    2. ``_bmad/config.toml`` ``[modules.tea]`` section (TOML fallback).
+    3. Returns ``{}`` if neither file exists or parses cleanly.
+
+    Only the keys in :data:`TEA_PATH_KEYS` are extracted. Each value
+    has ``{project-root}`` substituted with the absolute project root,
+    and ``{output_folder}`` substituted with the resolved
+    ``[core].output_folder`` (when present in the same source).
+
+    The returned dict preserves the order from :data:`TEA_PATH_KEYS`,
+    and only includes keys whose source value is a non-empty string —
+    callers can iterate it directly to build the ``<tea-paths>`` block.
+
+    Args:
+        project_root: Project root absolute path.
+
+    Returns:
+        Mapping of TEA path key -> resolved path string. Empty if no
+        config source is found or no path keys are present.
+
+    """
+    source = _read_yaml_tea_config(project_root)
+    if source is None:
+        source = _read_toml_tea_config(project_root)
+    if source is None:
+        return {}
+
+    raw, output_folder = source
+
+    resolved: dict[str, str] = {}
+    for key in TEA_PATH_KEYS:
+        value = raw.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        resolved[key] = _resolve_tea_path_token(value, project_root, output_folder)
     return resolved

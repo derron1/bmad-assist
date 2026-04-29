@@ -68,6 +68,7 @@ from bmad_assist.compiler.step_chain import compile_step_chain
 from bmad_assist.compiler.tri_modal import get_workflow_mode, validate_workflow_mode
 from bmad_assist.compiler.types import CompiledWorkflow, CompilerContext, WorkflowIR
 from bmad_assist.compiler.variable_utils import substitute_variables
+from bmad_assist.compiler.variables.tea import load_tea_module_config
 from bmad_assist.core.exceptions import CompilerError
 
 logger = logging.getLogger(__name__)
@@ -196,9 +197,7 @@ class TestarchSkillCompilerBase(SkillLayoutCompilerBase):
 
         with context_snapshot(context):
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(
-                    "Using %s workflow from %s", self.legacy_workflow_name, workflow_dir
-                )
+                logger.debug("Using %s workflow from %s", self.legacy_workflow_name, workflow_dir)
 
             # Build resolved variables.
             resolved = dict(context.resolved_variables)
@@ -299,6 +298,12 @@ class TestarchSkillCompilerBase(SkillLayoutCompilerBase):
 
             # Apply post_process rules if patch exists.
             final_xml = apply_post_process(result.xml, context)
+
+            # Inject pre-resolved TEA paths so step files referencing
+            # `{test_artifacts}` (and FUTURE-marked siblings) have
+            # concrete values in the LLM context window. See
+            # _inject_tea_paths_block() for the rationale.
+            final_xml = _inject_tea_paths_block(final_xml, context.project_root)
 
             return CompiledWorkflow(
                 workflow_name=self.legacy_workflow_name,
@@ -440,6 +445,75 @@ class TestarchSkillCompilerBase(SkillLayoutCompilerBase):
             mission = f"{base_description}\n\nMode: {mode_name}\nTarget: Epic {epic_num}"
 
         return mission
+
+
+# --------------------------------------------------------------------------- #
+# Compile-time injection: <tea-paths>                                         #
+# --------------------------------------------------------------------------- #
+
+
+def _build_tea_paths_block(project_root: Path) -> str:
+    """Build the `<tea-paths>` block from `_bmad/tea/config.yaml`.
+
+    Returns an empty string when no TEA module config is present (or
+    when the config has no recognised path keys). The caller skips
+    injection in that case so the compiled output stays unchanged for
+    projects without a TEA install.
+
+    The block format is:
+
+        <tea-paths>
+          <!-- comment explaining provenance -->
+          <test_artifacts>/abs/path/...</test_artifacts>
+          ...
+        </tea-paths>
+
+    Each child element is one of :data:`TEA_PATH_KEYS`. Values are
+    pre-resolved (``{project-root}`` and ``{output_folder}`` already
+    substituted), so the LLM can use them verbatim.
+    """
+    paths = load_tea_module_config(project_root)
+    if not paths:
+        return ""
+
+    lines = [
+        "<tea-paths>",
+        (
+            "<!-- bmad-assist pre-resolved these from _bmad/tea/config.yaml so "
+            "step files referencing {test_artifacts} (and FUTURE siblings) have "
+            "concrete values without needing runtime token resolution. -->"
+        ),
+    ]
+    for key, value in paths.items():
+        # Values are filesystem paths; XML-escape defensively in case a
+        # path contains an ampersand or angle bracket.
+        escaped = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lines.append(f"<{key}>{escaped}</{key}>")
+    lines.append("</tea-paths>")
+    return "\n".join(lines)
+
+
+def _inject_tea_paths_block(compiled_xml: str, project_root: Path) -> str:
+    """Inject `<tea-paths>` block immediately after `</mission>`.
+
+    Placed near the top of the compiled envelope so the LLM sees the
+    resolved paths before navigating to step files (which reference the
+    same tokens). Returns ``compiled_xml`` unchanged when the project
+    has no TEA module config.
+    """
+    block = _build_tea_paths_block(project_root)
+    if not block:
+        return compiled_xml
+
+    marker = "</mission>"
+    idx = compiled_xml.find(marker)
+    if idx == -1:
+        # Defensive: if no <mission> envelope, prepend after the root opening.
+        logger.debug("No </mission> marker found; skipping <tea-paths> injection")
+        return compiled_xml
+
+    insert_at = idx + len(marker)
+    return compiled_xml[:insert_at] + "\n" + block + compiled_xml[insert_at:]
 
 
 __all__ = ["TestarchSkillCompilerBase"]
