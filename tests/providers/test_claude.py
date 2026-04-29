@@ -505,6 +505,141 @@ class TestClaudeSubprocessProviderInvoke:
         assert call_kwargs.get("shell", False) is False
 
 
+class TestClaudeSubprocessProviderCliErrorDetection:
+    """The Claude Code CLI itself can crash mid-execution (e.g. an
+    unhandled TypeError in cli.js). The subprocess exits 0 with no
+    assistant text emitted, but the stream-json ``result`` message
+    carries ``subtype: error_during_execution`` and an ``errors[]``
+    array with stack traces. Without surfacing this, the empty stdout
+    looks identical to a model that legitimately returned nothing —
+    sending callers down a fruitless rabbit hole on prompt content,
+    caching, retry behaviour, etc.
+    """
+
+    @pytest.fixture
+    def provider(self) -> ClaudeSubprocessProvider:
+        return ClaudeSubprocessProvider()
+
+    @staticmethod
+    def _make_cli_error_stream(
+        error_text: str = (
+            "TypeError: Cannot read properties of null (reading 'effortLevel')\n"
+            "    at uH0 (file:///path/cli.js:1845:3909)"
+        ),
+        session_id: str = "err-session",
+    ) -> str:
+        """Mimic the stream-json the Claude CLI emits when cli.js crashes."""
+        import json as _json
+
+        lines = [
+            _json.dumps({"type": "system", "subtype": "init", "session_id": session_id}),
+            _json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "[Request interrupted by user]"}],
+                    },
+                }
+            ),
+            _json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "duration_ms": 2229,
+                    "is_error": False,
+                    "num_turns": 2,
+                    "session_id": session_id,
+                    "total_cost_usd": 0,
+                    "errors": [error_text, error_text],
+                }
+            ),
+        ]
+        return "\n".join(lines) + "\n"
+
+    def test_cli_error_sets_termination_reason(self, provider: ClaudeSubprocessProvider) -> None:
+        from bmad_assist.providers.claude import CLI_ERROR_TERMINATION_PREFIX
+
+        with patch("bmad_assist.providers.claude.Popen") as mock_popen:
+            mock_popen.return_value = create_mock_process(
+                stdout_content=self._make_cli_error_stream(),
+                stderr_content="",
+                returncode=0,
+            )
+            result = provider.invoke("hello")
+
+        assert result.termination_reason is not None
+        assert result.termination_reason.startswith(CLI_ERROR_TERMINATION_PREFIX)
+        assert "TypeError" in result.termination_reason
+
+    def test_cli_error_populates_termination_info(
+        self, provider: ClaudeSubprocessProvider
+    ) -> None:
+        with patch("bmad_assist.providers.claude.Popen") as mock_popen:
+            mock_popen.return_value = create_mock_process(
+                stdout_content=self._make_cli_error_stream(),
+                stderr_content="",
+                returncode=0,
+            )
+            result = provider.invoke("hello")
+
+        info = result.termination_info or {}
+        assert info.get("subtype") == "error_during_execution"
+        assert "TypeError" in info.get("first_error", "")
+        assert isinstance(info.get("all_errors"), list)
+        assert info.get("all_errors")  # non-empty
+        assert "npm update" in info.get("remediation", "")
+
+    def test_cli_error_appears_in_stderr_when_otherwise_empty(
+        self, provider: ClaudeSubprocessProvider
+    ) -> None:
+        """If the subprocess produces no stderr, we synthesise a line so
+        callers that only surface stderr (some handlers) still see the
+        crash signal.
+        """
+        with patch("bmad_assist.providers.claude.Popen") as mock_popen:
+            mock_popen.return_value = create_mock_process(
+                stdout_content=self._make_cli_error_stream(),
+                stderr_content="",
+                returncode=0,
+            )
+            result = provider.invoke("hello")
+
+        assert "Claude CLI error_during_execution" in result.stderr
+        assert "TypeError" in result.stderr
+
+    def test_cli_error_preserves_existing_stderr(
+        self, provider: ClaudeSubprocessProvider
+    ) -> None:
+        """If the subprocess already wrote stderr, don't overwrite it."""
+        with patch("bmad_assist.providers.claude.Popen") as mock_popen:
+            mock_popen.return_value = create_mock_process(
+                stdout_content=self._make_cli_error_stream(),
+                stderr_content="real stderr line\n",
+                returncode=0,
+            )
+            result = provider.invoke("hello")
+
+        assert "real stderr line" in result.stderr
+
+    def test_normal_result_does_not_set_cli_error_termination(
+        self, provider: ClaudeSubprocessProvider
+    ) -> None:
+        """Successful runs shouldn't get the CLI-error termination_reason."""
+        from bmad_assist.providers.claude import CLI_ERROR_TERMINATION_PREFIX
+
+        with patch("bmad_assist.providers.claude.Popen") as mock_popen:
+            mock_popen.return_value = create_mock_process(
+                response_text="all good",
+                stderr_content="",
+                returncode=0,
+            )
+            result = provider.invoke("hello")
+
+        if result.termination_reason:
+            assert not result.termination_reason.startswith(CLI_ERROR_TERMINATION_PREFIX)
+
+
 class TestClaudeSubprocessProviderErrors:
     """Test AC8, AC9, AC10: Error handling."""
 

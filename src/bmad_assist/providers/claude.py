@@ -54,6 +54,15 @@ from bmad_assist.providers.tool_guard import build_termination_fields
 logger = logging.getLogger(__name__)
 _DISABLE_COMPLETION_PHRASE_TERMINATION_ENV = "BMAD_DISABLE_COMPLETION_PHRASE_TERMINATION"
 
+# Termination-reason prefix for Claude CLI errors that occur *inside* the
+# subprocess (the CLI itself crashes mid-execution: e.g. a TypeError in
+# cli.js), as opposed to the model returning an error or the process
+# exiting non-zero. Detected via stream-json ``result`` messages with
+# ``subtype="error_during_execution"`` or non-empty ``errors[]``. Handlers
+# that want to surface this distinctly check
+# ``startswith(CLI_ERROR_TERMINATION_PREFIX)``.
+CLI_ERROR_TERMINATION_PREFIX = "cli_error:"
+
 # Supported short model names accepted by Claude Code CLI
 SUPPORTED_MODELS: frozenset[str] = frozenset({"opus", "sonnet", "haiku"})
 
@@ -435,6 +444,12 @@ class ClaudeSubprocessProvider(BaseProvider):
         response_text_parts: list[str] = []
         stderr_chunks: list[str] = []
         raw_stdout_lines: list[str] = []
+        # Captures CLI-level errors reported in the stream-json ``result``
+        # message (subtype=error_during_execution or non-empty errors[]).
+        # When set, indicates the Claude Code CLI itself crashed during
+        # execution — distinct from a non-zero exit or a model error.
+        cli_errors_collected: list[str] = []
+        cli_result_subtype: list[str] = []  # Boxed; thread writes via append.
         child_pgid: int | None = None
 
         try:
@@ -627,6 +642,16 @@ class ClaudeSubprocessProvider(BaseProvider):
                             # Extract final result text if present
                             if "result" in msg:
                                 text_parts.append(msg["result"])
+                            # Capture CLI-level errors (cli.js crashes etc.)
+                            # so the caller can surface them clearly. The
+                            # sentinel subtype is "error_during_execution"
+                            # but defensive: any non-empty errors[] counts.
+                            subtype = msg.get("subtype", "") or ""
+                            errors_list = msg.get("errors") or []
+                            if subtype == "error_during_execution" or errors_list:
+                                cli_result_subtype.append(subtype or "error")
+                                for err in errors_list:
+                                    cli_errors_collected.append(str(err))
 
                     except json.JSONDecodeError:
                         # Non-JSON line, just accumulate
@@ -870,6 +895,41 @@ class ClaudeSubprocessProvider(BaseProvider):
 
         # Build termination info from guard if present
         term_info, term_reason = build_termination_fields(guard)
+
+        # CLI-level errors from the stream-json result message override
+        # the guard-based termination fields. The CLI crash (e.g. an
+        # unhandled TypeError in cli.js) is the actionable signal — the
+        # subprocess otherwise exits 0 with an empty assistant turn,
+        # which downstream code can't distinguish from a model that
+        # legitimately produced no text. Surfacing this loudly saves
+        # the next debugging session from going down a fruitless rabbit
+        # hole on prompt content / cache / retry behaviour.
+        if cli_errors_collected:
+            first_err = cli_errors_collected[0].split("\n", 1)[0].strip()
+            subtype_label = cli_result_subtype[0] if cli_result_subtype else "error"
+            term_info = {
+                "subtype": subtype_label,
+                "first_error": first_err,
+                "all_errors": cli_errors_collected[:5],  # cap log volume
+                "remediation": (
+                    "This is a Claude Code CLI bug, not a bmad-assist or model "
+                    "issue. Update with: npm update -g @anthropic-ai/claude-code"
+                ),
+            }
+            term_reason = f"{CLI_ERROR_TERMINATION_PREFIX}{first_err[:160]}"
+            logger.warning(
+                "Claude CLI crashed during execution (subtype=%s): %s. "
+                "Update the CLI: `npm update -g @anthropic-ai/claude-code`",
+                subtype_label,
+                first_err[:200],
+            )
+            # Make the error visible in stderr too for callers that only
+            # surface stderr (existing patterns in some handlers).
+            if not final_stderr.strip():
+                final_stderr = (
+                    f"Claude CLI {subtype_label}: {first_err}\n"
+                    "(update Claude Code CLI to resolve)\n"
+                )
 
         return ProviderResult(
             stdout=final_stdout,
