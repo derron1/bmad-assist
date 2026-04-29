@@ -196,6 +196,8 @@ Legacy templates require a `providers` section. They don't support `phase_models
 
 ## Workflow Sets and Template Sets
 
+If you are A/B testing only providers or models, you can skip this section — both variants will share the bundled workflow source. **Reach for workflow sets when the change you actually want to measure lives inside the prompt itself** — a reworded `bmad-code-review` SKILL.md, a tighter `bmad-create-story` template, a different `customize.toml` per variant. Template sets cover the same need at the *compiled* level: useful when you have already-patched `.tpl.xml` outputs and want to pin one variant to a specific compiled prompt without re-running the LLM transform stage.
+
 Workflow sets and template sets allow per-variant customization of the BMAD workflow source files and pre-compiled templates used during compilation and execution.
 
 ### Workflow Sets

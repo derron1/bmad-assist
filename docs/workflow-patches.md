@@ -4,25 +4,34 @@
 
 ## Overview
 
-Workflow patches are bmad-assist's compile-time customization layer. They sit on top of upstream BMAD v6.4+ skill source (`SKILL.md` + `customize.toml` + per-skill assets) and apply the bmad-assist-specific transforms that BMAD itself does not need:
+Upstream BMAD workflows are written for a human in the loop. They pause to ask questions, present menus, and expect a developer to answer `[c] Continue` between steps. Run one of those workflows headless and it will sit there forever waiting for input that never comes.
+
+Workflow patches are how bmad-assist resolves that tension. Each patch sits on top of an upstream BMAD v6.4+ skill (`SKILL.md` + `customize.toml` + per-skill assets) and applies the bmad-assist-specific transforms BMAD itself does not need:
 
 - **Strip interactive elements** that block headless execution (`<ask>` blocks, `<elicit>` prompts, user menus).
 - **Inject compile-time context** (git intelligence, project facts) so the LLM does not need to run those tool calls at runtime.
 - **Remove sprint-status references** that the loop owns programmatically — the LLM should never read or write `sprint-status.yaml`.
 - **Renumber/restructure** the prompt after step removals so the workflow still reads as a linear procedure.
 
-The result is a deterministic, automation-friendly prompt that the runner caches under `.bmad-assist/cache/skills/<skill-id>.tpl.xml`.
+The result is a deterministic, automation-friendly prompt that the runner caches under `.bmad-assist/cache/skills/<skill-id>.tpl.xml`. If you are debugging a workflow run, that cached file is the real artifact the LLM saw — start there.
+
+> **Reading this doc?** If you are *authoring* a new patch, skip to [Authoring guidelines](#authoring-guidelines). If a patch is *misbehaving*, jump to [Troubleshooting](#troubleshooting). If you want to know *what the compile pipeline actually does* on each run, read [Compile pipeline](#compile-pipeline).
 
 ## Two-tier customization model
 
-bmad-assist supports two complementary customization tiers. Pick whichever fits the change:
+Most customizations have an obvious home; the question is only which tier to use.
 
 | Concern | Where it belongs | Why |
 |---|---|---|
 | Add new prepend/append steps, persistent facts, mode toggles, named blocks | `customize.toml` | BMAD-native. Survives upstream skill upgrades cleanly. |
 | Remove an upstream step, renumber, strip `<ask>`/`<elicit>` blocks, rewrite prose, embed git context | `.bmad-assist/patches/<workflow>.patch.yaml` | Subtractive and dynamic transforms that have no `customize.toml` equivalent. |
 
-The base SKILL.md is processed first (variables substituted, `customize.toml` chain merged); then the patch's LLM transforms and regex post-process rules run on the resulting body.
+A concrete example of the boundary:
+
+- *"Inject our team's coding standards as a persistent fact for `bmad-dev-story`."* → **`customize.toml`**. You are *adding* a fact the upstream skill is happy to consume; the next BMAD upgrade will not touch it.
+- *"Delete the upstream `<elicit>Confirm before proceeding</elicit>` block in step 3, then renumber the steps below it."* → **patch file**. You are *subtracting* and *rewriting* — there is no TOML field for "remove the third step." This is the kind of work an LLM transform plus a deterministic regex safety net handles.
+
+The base SKILL.md is processed first (variables substituted, `customize.toml` chain merged); then the patch's LLM transforms and regex post-process rules run on the resulting body. Reaching for a patch when `customize.toml` would do is a maintenance trap — the next BMAD release will likely move the lines your regex anchors on.
 
 ## Patch file location
 
@@ -107,15 +116,29 @@ validation:
 
 ## Compile pipeline
 
-When `bmad-assist run` reaches a workflow phase, the skill-layout compiler in `bmad_assist.compiler.skills.<skill_module>` executes this pipeline (`SkillLayoutCompilerBase.compile`):
+When `bmad-assist run` reaches a workflow phase, the skill-layout compiler in `bmad_assist.compiler.skills.<skill_module>` executes `SkillLayoutCompilerBase.compile`. The pipeline has three logical phases — *find the source*, *apply the patch*, *cache the result* — but a lot happens inside each.
+
+### Phase 1: Source resolution
+
+Before anything is patched, the compiler has to assemble the canonical pre-patch body — the merged, variable-substituted SKILL.md the patch will operate on.
 
 1. **`find_skill()`** — locate `SKILL.md` for the canonical `bmad-<name>` skill id. Probe order: project install (`.claude/skills/<id>/`, `.agents/skills/<id>/`), then bundled fallback (`src/bmad_assist/skills/<id>/`).
 2. **`parse_skill()`** — read frontmatter (`name`, `description`) + body.
 3. **`resolve_customization()`** — merge the `customize.toml` chain (`<skill>/customize.toml` → `_bmad/custom/<skill>.toml` → `_bmad/custom/<skill>.user.toml`) using the BMAD-defined merge rules.
 4. **Variable substitution** — substitute `{skill-root}`, `{project-root}`, workflow path tokens, and `{workflow.*}` prose. Each subclass contributes its own `build_extra_vars()` (e.g., epic/story numbers for `bmad-create-story`, story file context for `bmad-dev-story`). Then `resolve_skill_variables()` produces the final pre-patch body.
+
+### Phase 2: Patch application
+
+This is where bmad-assist's transforms — the LLM rewrite plus the deterministic regex safety net — actually mutate the body.
+
 5. **`apply_llm_transforms()`** — if a patch exists and a master provider is configured, send the body + `transforms` list to the master LLM via `PatchSession`. The LLM returns the rewritten body inside `<transformed-document>`. The retry loop runs **up to 3 attempts**: each attempt re-runs the LLM with a "RETRY ATTEMPT N" hint prepended, then the per-attempt validator re-checks XML well-formedness and the patch's `must_contain` rules. If no master provider is configured, the compiler logs that and skips this stage (regex-only mode).
 6. **`post_process_compiled()`** — apply the patch's `post_process` regex rules, plus the shared rules from `defaults.yaml` (and `defaults-testarch.yaml` for TEA workflows).
 7. **`validate_output()`** — enforce the patch's `must_contain` / `must_not_contain` assertions on the post-processed body.
+
+### Phase 3: Validation and cache
+
+The body the LLM will eventually consume must be well-formed *and* persisted, otherwise a transient transform glitch turns into a silent regression.
+
 8. **XML well-formedness** — for workflows whose patched body is XML, `validate_workflow_xml()` parses the result to catch mismatched tags before the runner consumes it.
 9. **Cache write** — persist the patched body and metadata under `<project>/.bmad-assist/cache/skills/<skill-id>.tpl.xml` (+ `.meta.yaml` sidecar).
 
@@ -214,22 +237,33 @@ When writing or modifying a patch:
 - **Use `validation` to lock in invariants.** `must_contain: ["<critical"]` catches a transform that accidentally stripped the `<critical>` block; `must_not_contain: ["sprint-status"]` catches a leak through both the transform and the post-process pass.
 - **Refresh snapshots in the same commit as the patch change.** Reviewers will look at the snapshot diff to understand what the patch actually does.
 
+> **Common pitfalls**
+>
+> - **Naming the patch with the canonical id.** The discovery probe uses the legacy short name — `create-story.patch.yaml`, never `bmad-create-story.patch.yaml`. The latter is silently ignored.
+> - **Regex without `DOTALL`.** Most XML blocks span newlines; a pattern that matches by hand against a one-line snippet will fail against the real body. Reach for `DOTALL` (`S`) by default for block-level matches.
+> - **Forgetting to bump the snapshot.** A patch change that affects compiled output but ships without a snapshot refresh will fail CI for everyone else. Run `UPDATE_SNAPSHOTS=1 pytest tests/skill_layout/test_snapshots.py` and review the diff in the same commit.
+> - **Loose `must_contain` strings.** `must_contain: ["story"]` will pass against almost anything. Anchor on something the transform is genuinely supposed to preserve, e.g. `must_contain: ["<critical", "<step n=\"1\""]`.
+
 ## Troubleshooting
 
 ### Patch did not apply
 
-1. Verify the patch file exists at one of the discovery locations and is named `<workflow>.patch.yaml` using the **legacy short name**.
+**What you see:** You modified `.bmad-assist/patches/dev-story.patch.yaml`, ran the workflow, and the cached body in `.bmad-assist/cache/skills/bmad-dev-story.tpl.xml` still looks like the unpatched upstream — `<ask>` blocks intact, your transforms ignored.
+
+1. Verify the patch file exists at one of the discovery locations and is named `<workflow>.patch.yaml` using the **legacy short name** (`dev-story.patch.yaml`, not `bmad-dev-story.patch.yaml`).
 2. Check `compatibility.workflow` matches the legacy short name (e.g., `create-story`, not `bmad-create-story`).
 3. Clear the cache and recompile: `rm -rf .bmad-assist/cache/skills/`.
 4. Run the workflow with `-v` to see the compile-pipeline log lines (they identify which stage was skipped or failed).
 
 ### Validation failure during compile
 
+**What you see:** The compile pipeline keeps retrying the LLM transform stage and finally hard-fails with:
+
 ```
 PatchError: Validation failed after 3 attempts: ['must_contain failed: /red-green-refactor/']
 ```
 
-The LLM transform pass produced output that did not satisfy the patch's `must_contain` rules across all 3 retry attempts. Likely causes:
+Translation: the LLM rewrote the body three times in a row and every result was missing a string the patch said had to be present. Likely causes:
 
 - A transform instruction told the LLM to remove content the validation rule expects to keep.
 - A `post_process` regex stripped the required content after the validator passed.
@@ -238,13 +272,17 @@ Inspect the cached body in `.bmad-assist/cache/skills/<skill-id>.tpl.xml` and th
 
 ### Regex post-process not matching
 
+**What you see:** Your `post_process` rule looks correct in isolation, but the cached body still contains the text you expected the regex to strip. No error — just nothing happened.
+
 1. Test the pattern in isolation: `python -c "import re; print(re.search(r'pattern', text))"`.
 2. Add `DOTALL` (`S`) when matching across newlines; add `MULTILINE` (`M`) for `^`/`$` anchors per line.
 3. Escape special characters: `\.` for literal dot, `\{` for literal brace, `\\` for backslash inside YAML strings.
 
 ### Transform skipped silently
 
-If the runner log says `Skipping LLM transforms (mode=regex_only, ...)`, no master provider is configured. Add a `providers.master` block to `bmad-assist.yaml` to enable LLM transforms; otherwise the patch runs with `post_process` rules only.
+**What you see:** The compile finishes "successfully" but your transforms were never applied — none of the `<ask>` blocks you wanted removed are gone, and the runner log buried this line: `Skipping LLM transforms (mode=regex_only, ...)`.
+
+No master provider is configured, so the LLM stage was skipped entirely. Add a `providers.master` block to `bmad-assist.yaml` to enable LLM transforms; otherwise the patch runs with `post_process` rules only.
 
 ## See also
 

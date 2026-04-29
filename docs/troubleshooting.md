@@ -6,9 +6,14 @@ Common issues and their solutions.
 
 ## "Workflow not found" Error
 
-**Symptoms:**
-- `CompilerError: Workflow 'bmad-dev-story' not found!`
-- `Bundled workflow 'bmad-code-review' not found!`
+**What you see:** You start the loop and it dies before the first phase even runs:
+
+```
+CompilerError: Workflow 'bmad-dev-story' not found!
+Bundled workflow 'bmad-code-review' not found!
+```
+
+The compiler probed every install location it knows about — your project's `.claude/skills/`, `.agents/skills/`, and the bundled `src/bmad_assist/skills/` fallback — and came up empty. Most often this happens after a partial pip install or a checkout where the package data did not get re-shipped.
 
 **Solution:**
 ```bash
@@ -21,8 +26,7 @@ bmad-assist init  # Shows workflow validation
 
 ## "Handler config not found" Error
 
-**Symptoms:**
-- `ConfigError: Handler config not found: ~/.bmad-assist/handlers/...`
+**What you see:** A `ConfigError: Handler config not found: ~/.bmad-assist/handlers/...` after a recent upgrade — usually because old docs or a stale config still point at handler YAML files.
 
 **Cause:** Handler YAML files are deprecated. The compiler handles prompts automatically.
 
@@ -43,9 +47,7 @@ Installed skills take priority over the bundled fallback (`src/bmad_assist/skill
 
 ## Provider Connection Issues
 
-**Symptoms:**
-- `ProviderError: Failed to invoke claude-subprocess`
-- Timeouts during LLM invocation
+**What you see:** A phase that worked yesterday hangs or dies with `ProviderError: Failed to invoke claude-subprocess`, or a long-running invocation just times out without producing output.
 
 **Solutions:**
 
@@ -69,9 +71,7 @@ Installed skills take priority over the bundled fallback (`src/bmad_assist/skill
 
 ## Missing Documentation Error
 
-**Symptoms:**
-- `FileNotFoundError: docs/prd.md not found`
-- `No epic files found`
+**What you see:** `bmad-assist run` exits before the first phase with `FileNotFoundError: docs/prd.md not found` or `No epic files found` — the loop has nothing to read from.
 
 **Solution:**
 
@@ -88,9 +88,7 @@ docs/
 
 ## Cache/Patch Conflicts
 
-**Symptoms:**
-- Unexpected workflow behavior after updates
-- Stale prompts being used
+**What you see:** You upgraded bmad-assist (or edited a patch / `customize.toml`), restarted the loop, and the workflow is *still* behaving the way it did before your change. The runner is reading a cached compiled body that no longer matches the source.
 
 **Solution:**
 ```bash

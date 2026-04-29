@@ -73,7 +73,14 @@ bmad-assist init --project /path/to/your/project
 bmad-assist run --project /path/to/your/project
 ```
 
-`bmad-assist init` bootstraps the BMAD v6.4+ skill layout (`SKILL.md` + `customize.toml` under `.claude/skills/bmad-*/`) on fresh projects. Existing v6.4+ installs are detected and left alone (no-clobber). See [Skill Layout](docs/configuration.md#skill-layout-bmad-v64) for the `--reset-workflows` (preserves `customize.toml`) vs `--reset-skills-force` (destructive) semantics.
+On a fresh project, `bmad-assist init` lays down the BMAD v6.4+ skill layout for you (`SKILL.md` + `customize.toml` under `.claude/skills/bmad-*/`) and gets out of the way. If you already have a v6.4+ install, init detects it and leaves your files alone — no clobber, no surprises.
+
+When you re-run init later (e.g. after upgrading bmad-assist), use the right reset flag for what you actually want:
+
+- **Kept your `customize.toml` overrides and just want fresh upstream skill files?** → `bmad-assist init --reset-workflows`
+- **Clean slate, including your customizations?** → `bmad-assist init --reset-skills-force`
+
+Full semantics in [Skill Layout](docs/configuration.md#skill-layout-bmad-v64).
 
 **Recommended:** Customize `bmad-assist.yaml` for your provider and model configuration before running. See [Configuration Reference](docs/configuration.md) for available options.
 

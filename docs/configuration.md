@@ -12,23 +12,21 @@ Settings are loaded in this order (later overrides earlier):
 
 ## Skill Layout (BMAD v6.4+)
 
-bmad-assist runs every workflow through the BMAD v6.4+ skill layout
-(`SKILL.md` + `customize.toml`). As of 0.6.0, this is the only layout —
-no flag, no config field, no detection. The legacy `workflow.yaml` +
-`instructions.xml` pipeline was removed in Phase 6, and the deprecated
-`--skill-layout` flag and `config.skill_layout` field were removed in
+As of 0.6.0, every workflow runs through the BMAD v6.4+ skill layout
+(`SKILL.md` + `customize.toml`). It is the only layout — no flag to pick,
+no config field to set, no detection logic to second-guess. The legacy
+`workflow.yaml` + `instructions.xml` pipeline was removed in Phase 6,
+along with the `--skill-layout` flag and `config.skill_layout` field in
 Phase 7.
 
 > **Workflow names:** Skill ids are canonical `bmad-<name>` (e.g., `bmad-create-story`, `bmad-dev-story`). In 0.5.x and earlier, short names like `create-story` worked as aliases — these were removed in 0.6.0; use `bmad-create-story` everywhere a workflow name appears in user-facing surfaces (CLI args, configs, docs). See [CHANGELOG.md](../CHANGELOG.md) `[0.6.0]` for the migration notes.
 
-`bmad-assist init` bootstraps the layout automatically:
+What to run, depending on what you are trying to do:
 
-- **Fresh project** → copies bundled skills to `.claude/skills/<id>/` and `.agents/skills/<id>/`.
-- **Existing v6.4+ install** → leaves installed skills alone (no-clobber).
-
-`--reset-workflows` re-copies bundled skill files but **preserves** any
-per-skill `customize.toml` overrides. Use `--reset-skills-force` for the
-destructive reset that also overwrites `customize.toml`.
+- **Bootstrap a fresh project** → `bmad-assist init -p ./my-project`. Copies bundled skills into `.claude/skills/<id>/` and `.agents/skills/<id>/`.
+- **Init against an existing v6.4+ install** → same command. Init detects the install and leaves it alone (no-clobber).
+- **Pull in upstream skill changes after a bmad-assist upgrade, but keep your `customize.toml` tweaks** → `bmad-assist init --reset-workflows`.
+- **Wipe everything and start from the bundled defaults, including your customizations** → `bmad-assist init --reset-skills-force`. Destructive — your `customize.toml` overrides are gone.
 
 ## Providers
 
