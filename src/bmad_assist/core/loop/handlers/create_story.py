@@ -133,6 +133,54 @@ def _find_story_file(state: State) -> Path | None:
     return matches[0] if matches else None
 
 
+def _stat_story_file_mtime(state: State) -> float | None:
+    """Return the mtime of any pre-existing story file, or ``None`` if absent.
+
+    Snapshotted at the top of :meth:`CreateStoryHandler.execute` so the
+    retry loop can detect "the LLM didn't actually write anything but a
+    stale file from a previous run is still on disk." See
+    :func:`_find_fresh_story_file`.
+    """
+    try:
+        path = _find_story_file(state)
+    except RuntimeError:
+        # Paths not initialized (unit tests). Treat as no pre-existing file.
+        return None
+    if path is None:
+        return None
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _find_fresh_story_file(state: State, baseline_mtime: float | None) -> Path | None:
+    """Like :func:`_find_story_file`, but ignores stale leftovers.
+
+    The story file lives at a deterministic path keyed by epic + story
+    number + slug. If a previous create_story run wrote one, the next
+    run finds it via glob even when the current LLM call did zero work
+    (empty 2-turn response, exit 0, no Write tool call). That short-
+    circuits the retry loop into a false success.
+
+    With ``baseline_mtime`` set, we require the matched file's mtime to
+    have advanced — i.e. the LLM actually touched it during this run.
+    A baseline of ``None`` means no pre-existing file, so any match is
+    fresh by definition.
+    """
+    path = _find_story_file(state)
+    if path is None:
+        return None
+    if baseline_mtime is None:
+        return path
+    try:
+        if path.stat().st_mtime <= baseline_mtime:
+            return None
+    except OSError:
+        return None
+    return path
+
+
 def _extract_story_content(output: str) -> tuple[str | None, str | None]:
     """Extract story content from LLM stdout.
 
@@ -288,6 +336,11 @@ class CreateStoryHandler(BaseHandler):
         story = state.current_story or "unknown"
         save_prompt(self.project_path, epic, story, self.phase_name, prompt)
 
+        # Snapshot any pre-existing story file's mtime so the freshness
+        # check can distinguish "LLM wrote a new file" from "stale
+        # leftover from a previous run is still on disk."
+        pre_existing_mtime = _stat_story_file_mtime(state)
+
         finalization_attempted = False
 
         try:
@@ -359,7 +412,7 @@ class CreateStoryHandler(BaseHandler):
                         fail_outputs["termination_metadata"] = term_metadata
                     return PhaseResult(success=False, error=error_msg, outputs=fail_outputs)
 
-                if _find_story_file(state):
+                if _find_fresh_story_file(state, pre_existing_mtime) is not None:
                     outputs: dict[str, Any] = {
                         "response": result.stdout,
                         "model": result.model,

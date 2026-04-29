@@ -1,5 +1,6 @@
 """Tests for CreateStoryHandler."""
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -383,12 +384,17 @@ class TestExecuteIntegration:
             call_count += 1
             return bad_result if call_count == 1 else good_result
 
+        # _find_story_file is called once pre-loop (mtime baseline) and
+        # then once per attempt. Calls 1 (pre-loop) and 2 (attempt 1)
+        # return None — no file present yet — so the attempt-1 fresh
+        # check fails. Call 3 (attempt 2) returns a path: the LLM has
+        # written the file, fresh check passes, handler returns ok.
         find_count = 0
 
         def mock_find(s: State) -> Path | None:
             nonlocal find_count
             find_count += 1
-            return None if find_count == 1 else tmp_path / "3-2-story.md"
+            return None if find_count <= 2 else tmp_path / "3-2-story.md"
 
         with (
             patch.object(handler, "render_prompt", return_value="prompt"),
@@ -441,6 +447,44 @@ class TestExecuteIntegration:
         assert not result.success
         assert result.error == "Provider crashed"
         mock_invoke.assert_called_once_with("prompt")
+
+    def test_stale_file_does_not_short_circuit_success(self, tmp_path: Path) -> None:
+        """A leftover story file from a previous run must not satisfy success.
+
+        Without freshness checking, the handler returned ``ok`` on attempt 1
+        whenever a same-named file existed on disk — even when the current
+        LLM call wrote zero tokens. This test pins the fix: with a stale
+        pre-existing file and an LLM that produces no rescuable content,
+        the handler must exhaust retries and fail.
+        """
+        # Real file on disk so stat() works (mock _find_story_file returns it).
+        stale_file = tmp_path / "3-2-stale.md"
+        stale_file.write_text("# Story 3.2: stale leftover\n\ndoes not match validate.\n")
+        # Backdate mtime so the freshness check sees pre_existing_mtime > 0
+        # and the same-mtime read on subsequent calls is treated as stale.
+        old_mtime = stale_file.stat().st_mtime - 60
+        os.utime(stale_file, (old_mtime, old_mtime))
+
+        handler = _make_handler(tmp_path)
+        state = State(current_epic=3, current_story="3.2")
+        bad_result = _make_provider_result(stdout="random noise")
+
+        with (
+            patch.object(handler, "render_prompt", return_value="prompt"),
+            patch.object(handler, "invoke_provider", return_value=bad_result) as mock_invoke,
+            patch(
+                "bmad_assist.core.loop.handlers.create_story._find_story_file",
+                return_value=stale_file,
+            ),
+            patch("bmad_assist.core.io.save_prompt"),
+        ):
+            result = handler.execute(state)
+
+        # Must NOT short-circuit on the stale file.
+        assert not result.success
+        assert "not created after" in result.error
+        # All MAX_RETRIES + 1 attempts ran.
+        assert mock_invoke.call_count == MAX_RETRIES + 1
 
     def test_retry_mutates_prompt_for_cache_busting(self, tmp_path: Path) -> None:
         """Each no-file retry sends a different prompt to bypass prompt cache.
