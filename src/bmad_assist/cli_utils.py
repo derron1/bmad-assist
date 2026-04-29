@@ -196,22 +196,63 @@ def update_log_level(level: str) -> bool:
     return True
 
 
+# Tracks the log-level file content captured at the first poll so we can
+# distinguish "stale value left over from a previous run" (skip) from "value
+# the dashboard wrote during this run" (apply). Without this, a stale
+# `info` left in `.bmad-assist/runtime/log-level` silently demotes the CLI's
+# `--debug` flag and breaks DEBUG-gated subsystems like DebugJsonLogger.
+_log_level_file_baseline_content: str | None = None
+_log_level_file_baseline_initialized: bool = False
+
+
+def reset_log_level_file_baseline() -> None:
+    """Reset the runtime-file baseline (test-only helper)."""
+    global _log_level_file_baseline_content, _log_level_file_baseline_initialized
+    _log_level_file_baseline_content = None
+    _log_level_file_baseline_initialized = False
+
+
 def check_log_level_file(project_path: Path) -> None:
     """Check control file for log level changes (called periodically by runner).
 
     Reads .bmad-assist/runtime/log-level and updates logging if changed.
     Silent on errors - this is best-effort runtime adjustment.
 
+    The first call captures whatever the file currently holds as the
+    "baseline" without applying it. The CLI's verbosity flags (``--debug``,
+    ``--verbose``, ``--quiet``) always win over that pre-existing value.
+    Subsequent calls only apply changes the dashboard or TUI writes
+    *during* the run.
+
     Args:
         project_path: Project root directory.
 
     """
+    global _log_level_file_baseline_content, _log_level_file_baseline_initialized
     try:
         control_file = project_path / ".bmad-assist" / "runtime" / "log-level"
-        if control_file.exists():
-            level = control_file.read_text().strip().upper()
-            if update_log_level(level):
-                logging.info("Log level changed to: %s", level)
+        if not control_file.exists():
+            if not _log_level_file_baseline_initialized:
+                _log_level_file_baseline_content = None
+                _log_level_file_baseline_initialized = True
+            return
+
+        level = control_file.read_text().strip().upper()
+
+        if not _log_level_file_baseline_initialized:
+            # First poll of this run: capture baseline silently. The CLI
+            # flag has already configured logging; we don't override it
+            # with a value that may have been left behind by a prior run.
+            _log_level_file_baseline_content = level
+            _log_level_file_baseline_initialized = True
+            return
+
+        if level == _log_level_file_baseline_content:
+            return  # No change since last poll — nothing to do.
+
+        if update_log_level(level):
+            logging.info("Log level changed to: %s", level)
+        _log_level_file_baseline_content = level
     except Exception:
         pass  # Silent fail - best effort
 
