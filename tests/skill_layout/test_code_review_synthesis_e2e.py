@@ -278,3 +278,117 @@ class TestValidateContextChecks:
                 ctx,
                 skill_layout="new",
             )
+
+
+# --------------------------------------------------------------------------- #
+# BMAD tag taxonomy alignment                                                 #
+# --------------------------------------------------------------------------- #
+
+
+class TestBmadTagTaxonomyAlignment:
+    """Verify the compiled SKILL emits the BMAD `[Review][...]` tag taxonomy
+    and the deferred-work convention rather than the legacy `[AI-Review]` tag.
+    """
+
+    def _compiled_body(self, project_root: Path) -> str:
+        return compile_workflow(
+            "bmad-code-review-synthesis",
+            _make_context(project_root),
+            skill_layout="new",
+        ).context
+
+    def test_compiled_body_does_not_mention_legacy_ai_review_tag(
+        self, project_root: Path
+    ) -> None:
+        """Synthesis SKILL must no longer emit `[AI-Review]` action items.
+
+        The string may appear inside negated phrasing ("NOT a legacy `[AI-Review]`"),
+        so we assert the legacy tag never appears as an emitted bullet (the
+        common bullet shape that was previously used).
+        """
+        body = self._compiled_body(project_root)
+        # Legacy bullet form must be gone.
+        assert "- [ ] [AI-Review]" not in body
+        assert "- [x] [AI-Review]" not in body
+
+    def test_compiled_body_emits_review_patch_decision_defer_taxonomy(
+        self, project_root: Path
+    ) -> None:
+        """Compiled SKILL must instruct emitting the BMAD tag triple."""
+        body = self._compiled_body(project_root)
+        assert "[Review][Patch]" in body
+        assert "[Review][Decision]" in body
+        assert "[Review][Defer]" in body
+
+    def test_compiled_body_maps_high_critical_to_patch(self, project_root: Path) -> None:
+        """High/critical → `[Review][Patch]`; pre-existing/out-of-scope → `[Review][Defer]`."""
+        body = self._compiled_body(project_root)
+        # CRITICAL/HIGH → Patch
+        assert "**CRITICAL / HIGH**" in body
+        assert "→ `- [ ] [Review][Patch]" in body
+        # LOW / pre-existing / out-of-scope → Defer
+        assert "**LOW / pre-existing / out-of-scope**" in body
+        assert "→ `- [x] [Review][Defer]" in body
+
+    def test_compiled_body_atdd_defect_uses_review_patch(self, project_root: Path) -> None:
+        """ATDD defect check must emit `[Review][Patch]`, not `[AI-Review]`."""
+        body = self._compiled_body(project_root)
+        assert "[Review][Patch] Activate ATDD tests" in body
+
+    def test_compiled_body_appends_deferred_work_step(self, project_root: Path) -> None:
+        """Step 6.6 must instruct appending defers to deferred-work.md."""
+        body = self._compiled_body(project_root)
+        # The new step must be present.
+        assert "Append deferred items to deferred-work.md" in body
+        assert "{implementation_artifacts}/deferred-work.md" in body
+        # Heading format must match BMAD's manual `bmad-code-review` convention.
+        assert "## Deferred from: code review of story-" in body
+
+    def test_action_items_count_uses_new_tags(self, project_root: Path) -> None:
+        """The 'Action Items Created' invariant must reference the new tags."""
+        body = self._compiled_body(project_root)
+        # The wording must refer to the new tags, not the legacy [AI-Review].
+        assert "[Review][Patch]" in body
+        assert "[Review][Decision]" in body
+        # The legacy phrasing tying the count to `[AI-Review]` must be gone.
+        assert (
+            'count MUST equal the number of `[ ] [AI-Review]` tasks' not in body
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Backward-compat: dev-story scanner accepts both old and new tags            #
+# --------------------------------------------------------------------------- #
+
+
+class TestDevStoryScannerBackwardCompat:
+    """The bmad-dev-story SKILL must still recognise legacy `[AI-Review]`
+    follow-ups in story files in the wild, alongside the new BMAD tags.
+    """
+
+    def test_dev_story_skill_recognises_legacy_and_new_tags(self) -> None:
+        skill_md = (
+            REPO_ROOT
+            / "src"
+            / "bmad_assist"
+            / "skills"
+            / "bmad-dev-story"
+            / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        # The check guarding review-follow-up branching must accept both.
+        assert "[Review][Patch]" in skill_md
+        assert "[Review][Decision]" in skill_md
+        assert "legacy [AI-Review]" in skill_md
+
+    def test_dev_story_checklist_recognises_legacy_and_new_tags(self) -> None:
+        checklist_md = (
+            REPO_ROOT
+            / "src"
+            / "bmad_assist"
+            / "skills"
+            / "bmad-dev-story"
+            / "checklist.md"
+        ).read_text(encoding="utf-8")
+        assert "[Review][Patch]" in checklist_md
+        assert "[Review][Decision]" in checklist_md
+        assert "legacy [AI-Review]" in checklist_md

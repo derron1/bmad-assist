@@ -417,13 +417,34 @@ remaining_high: {N}
     ```
   </action>
 
-  <critical>When the verdict is REJECT, you MUST create Review Follow-ups tasks. The "Action Items Created" count MUST equal the number of `[ ] [AI-Review]` tasks. Do NOT skip this step. Do NOT claim all issues are fixed if you reported deferred items above.</critical>
+  <critical>When the verdict is REJECT, you MUST create Review Follow-ups tasks. The "Action Items Created" count MUST equal the number of unchecked `[ ] [Review][Patch]` and `[ ] [Review][Decision]` tasks emitted below. Do NOT skip this step. Do NOT claim all issues are fixed if you reported deferred items above.</critical>
   <action>Find the "## Tasks / Subtasks" section in the story file.</action>
-  <action>Append a `#### Review Follow-ups (AI)` subsection — one `- [ ] [AI-Review] {severity}: {brief description} ({file path})` line per unfixed/deferred issue, ordered by severity Critical → Low.</action>
+  <action>Append a `#### Review Follow-ups (AI)` subsection. Use BMAD's `[Review][...]` tag taxonomy (NOT a legacy `[AI-Review]` tag) and embed the synthesis severity inline so dev-story can prioritize. Map verified-but-unfixed issues to tags as follows, ordered Critical → Low:
+    - **CRITICAL / HIGH** verified-but-unfixed issues → `- [ ] [Review][Patch] {Title} [{file}:{line}] — {SEVERITY}: {one-line detail}`
+    - **MEDIUM** issues that need a human call (rare in autonomous flow) → `- [ ] [Review][Decision] {Title} — {detail}`
+    - **LOW / pre-existing / out-of-scope** items the synthesis chose not to fix → `- [x] [Review][Defer] {Title} [{file}:{line}] — deferred from AI review ({one-line reason})`
+  </action>
 
   <critical>ATDD DEFECT CHECK: Search test directories (`tests/**`) for `test.fixme()` calls in test files related to this story. Any remaining `test.fixme()` is a DEFECT — `dev_story` failed to activate ATDD RED-phase tests. If any remain, append:
-`- [ ] [AI-Review] HIGH: Activate ATDD tests — convert all test.fixme() to test() and ensure they pass ({test file paths})`
+`- [ ] [Review][Patch] Activate ATDD tests [{test file paths}] — HIGH: convert all test.fixme() to test() and ensure they pass`
 Do NOT dismiss `test.fixme()` as "intentional TDD methodology". After `dev_story` completes, ALL story-related `test.fixme()` MUST be converted to `test()`.</critical>
+</step>
+
+<step n="6.6" goal="Append deferred items to deferred-work.md">
+  <critical>Match BMAD's `bmad-code-review` step-04-present convention: every `[Review][Defer]` finding is also recorded in the project-wide deferred-work log so it survives outside the story file.</critical>
+
+  <action>If you emitted no `[Review][Defer]` items in step 6.5, skip this step.</action>
+  <action>Resolve `{deferred_work_file}` = `{implementation_artifacts}/deferred-work.md`. Create the file if it does not exist (no header required — just bullets under per-review headings).</action>
+  <action>Append a heading (do NOT replace existing headings) of the form:
+    ```
+    ## Deferred from: code review of story-10.1 (2026-01-15)
+    ```
+  </action>
+  <action>Under that heading, write one bullet per `[Review][Defer]` finding from step 6.5, format:
+    ```
+    - {Title} [{file}:{line}] — {one-line reason}
+    ```
+  </action>
 </step>
 
 </workflow>

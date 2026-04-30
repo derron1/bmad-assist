@@ -315,7 +315,7 @@ Activation is complete. Begin the workflow below.
         **Action Items:** {{unchecked_review_count}} remaining to address
         **Priorities:** {{high_count}} High, {{med_count}} Medium, {{low_count}} Low
 
-        **Strategy:** Will prioritize review follow-up tasks (marked [AI-Review]) before continuing with regular tasks.
+        **Strategy:** Will prioritize review follow-up tasks (marked [Review][Patch], [Review][Decision], or legacy [AI-Review]) before continuing with regular tasks.
       </output>
     </check>
 
@@ -425,7 +425,7 @@ Activation is complete. Begin the workflow below.
     <action>Run full test suite to ensure NO regressions introduced</action>
 
     <!-- REVIEW FOLLOW-UP HANDLING -->
-    <check if="task is review follow-up (has [AI-Review] prefix)">
+    <check if="task is review follow-up (has [Review][Patch], [Review][Decision], or legacy [AI-Review] prefix)">
       <action>Extract review item details (severity, description, related AC/file)</action>
       <action>Add to resolution tracking list: {{resolved_review_items}}</action>
 
