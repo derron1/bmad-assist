@@ -392,3 +392,44 @@ class TestDevStoryScannerBackwardCompat:
         assert "[Review][Patch]" in checklist_md
         assert "[Review][Decision]" in checklist_md
         assert "legacy [AI-Review]" in checklist_md
+
+    def test_dev_story_scanner_excludes_defer_from_review_followup_branch(self) -> None:
+        """`[Review][Defer]` items are emitted pre-checked (`[x]`) by the
+        synthesis to record acknowledged-but-not-fixed findings. They must
+        NOT be classified as review-follow-up tasks the dev agent should
+        attempt to resolve — that would mean re-doing work the synthesis
+        explicitly chose not to do.
+
+        Guard: the dev-story SKILL's review-follow-up check predicate must
+        list `[Review][Patch]` and `[Review][Decision]` (and legacy
+        `[AI-Review]`) but NOT `[Review][Defer]`. Mixing checked defers and
+        unchecked patches in the same Review Follow-ups section is an
+        expected shape; the scanner must skip the defers cleanly.
+        """
+        skill_md = (
+            REPO_ROOT
+            / "src"
+            / "bmad_assist"
+            / "skills"
+            / "bmad-dev-story"
+            / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        # Find the predicate line that branches on review-follow-up tasks.
+        predicate_lines = [
+            line
+            for line in skill_md.splitlines()
+            if 'check if="task is review follow-up' in line
+        ]
+        assert predicate_lines, (
+            "Expected at least one '<check if=\"task is review follow-up...\">' "
+            "guard in dev-story SKILL.md"
+        )
+        for line in predicate_lines:
+            assert "[Review][Patch]" in line
+            assert "[Review][Decision]" in line
+            assert "[AI-Review]" in line  # legacy compat
+            assert "[Review][Defer]" not in line, (
+                f"[Review][Defer] should NOT appear in the review-follow-up "
+                f"branch predicate (defers are pre-checked, not work items): {line!r}"
+            )
