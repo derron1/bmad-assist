@@ -369,6 +369,42 @@ def resolve_variables(
             elif k not in resolved:
                 resolved[k] = v
 
+    # Step 4.5: Merge upstream BMAD V6 central config (lowest priority — anything
+    # already in `resolved` wins, so workflow.yaml / invocation params / sprint
+    # overrides remain authoritative). Promotes [core] and [modules.bmm] keys
+    # to top-level so SKILL.md tokens like {output_folder}, {planning_artifacts},
+    # {implementation_artifacts}, {project_name}, {user_name} substitute cleanly
+    # instead of reaching the LLM as literal `{token}` strings.
+    if context.project_root is not None:
+        bmad_config_path = context.project_root / "_bmad" / "config.toml"
+        if bmad_config_path.is_file():
+            try:
+                # Lazy import to avoid pulling skill_layout at module-load time.
+                from bmad_assist.skill_layout import resolve_central_config
+
+                central = resolve_central_config(context.project_root)
+
+                def _promote_section(section_name: str, section: Any) -> None:
+                    if not isinstance(section, dict):
+                        return
+                    for k, v in section.items():
+                        if k in resolved:
+                            continue
+                        if isinstance(v, str):
+                            v = _resolve_path_placeholders(v, context, workflow_ir)
+                        resolved[k] = v
+                        logger.debug(
+                            "Set from _bmad/config.toml [%s]: %s", section_name, k
+                        )
+
+                _promote_section("core", central.get("core", {}))
+                modules = central.get("modules", {})
+                if isinstance(modules, dict):
+                    _promote_section("modules.bmm", modules.get("bmm", {}))
+            except Exception as e:
+                # Non-fatal: fall through with whatever we have.
+                logger.debug("Skipped _bmad/config.toml merge: %s", e)
+
     # Step 5: Recursive resolution for remaining placeholders
     resolved = _resolve_all_recursive(resolved, context, workflow_ir)
 
