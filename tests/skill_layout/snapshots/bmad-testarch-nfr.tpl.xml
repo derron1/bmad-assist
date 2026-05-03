@@ -4,7 +4,7 @@
 
 Assess NFRs like performance security and reliability. Use when the user says "lets assess NFRs" or "I want to evaluate non-functional requirements"
 
-Mode: None
+Mode: Create
 Target: Story 10.1
 
 ]]></mission>
@@ -65,98 +65,148 @@ Minimal notes.
 </context>
 <variables>
 <var name="epic_num">10</var>
+<var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
+<var name="step_01_load_context_nextStepFile">.claude/skills/bmad-testarch-nfr/steps-c/{skill-root}/steps-c/step-02-define-thresholds.md</var>
 <var name="story_file" file_id="b4cb733b">embedded in prompt, file id: b4cb733b</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
-<var name="workflow_mode"></var>
+<var name="tea_use_mcp_enhancements">True</var>
+<var name="tea_use_playwright_utils">True</var>
+<var name="workflow_mode">c</var>
 </variables>
 <instructions><![CDATA[
 
+<!-- STEP: step-01-load-context -->
+# Step 1: Load Context & Knowledge Base
+
+## STEP GOAL
+
+Gather NFR requirements, evidence sources, and knowledge fragments needed for assessment.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Halt if implementation or evidence is unavailable
+
 ---
-name: bmad-testarch-nfr
-description: 'Assess NFRs like performance security and reliability. Use when the user says "lets assess NFRs" or "I want to evaluate non-functional requirements"'
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Prerequisites
+
+- Implementation accessible for evaluation
+- Evidence sources available (test results, metrics, logs)
+
+If missing: **HALT** and request the missing inputs.
+
 ---
 
-# Non-Functional Requirements Assessment
+## 2. Load Configuration
 
-**Goal:** Assess non-functional requirements (performance, security, reliability, maintainability) before release with evidence-based validation.
+From `{config_source}`:
 
-**Role:** You are the Master Test Architect.
+- Read `tea_browser_automation`
 
-You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+---
 
-## Conventions
+### Tiered Knowledge Loading
 
-- Bare paths (e.g. `instructions.md`) resolve from the skill root.
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr` resolves to this skill's installed directory (where `customize.toml` lives).
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj`-prefixed paths resolve from the project working directory.
-- `bmad-testarch-nfr` resolves to the skill directory's basename.
-- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr`.
+Load fragments based on their `tier` classification in `tea-index.csv`:
 
-## On Activation
+1. **Core tier** (always load): Foundational fragments required for this workflow
+2. **Extended tier** (load on-demand): Load when deeper analysis is needed or when the user's context requires it
+3. **Specialized tier** (load only when relevant): Load only when the specific use case matches (e.g., contract-testing only for microservices, email-auth only for email flows)
 
-### Step 1: Resolve the Workflow Block
+> **Context Efficiency**: Loading only core fragments reduces context usage by 40-50% compared to loading all fragments.
 
-Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr --key workflow`
+## 3. Load Knowledge Base Fragments
 
-**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+From `/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv` load:
 
-1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr/customize.toml` — defaults
-2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/_bmad/custom/bmad-testarch-nfr.toml` — team overrides
-3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/_bmad/custom/bmad-testarch-nfr.user.toml` — personal overrides
+- `adr-quality-readiness-checklist.md`
+- `ci-burn-in.md`
+- `test-quality.md`
+- `playwright-config.md`
+- `error-handling.md`
 
-Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+**Playwright CLI (if `tea_browser_automation` is "cli" or "auto"):**
 
-### Step 2: Execute Prepend Steps
+- `playwright-cli.md`
 
-Execute each entry in `` in order before proceeding.
+**MCP Patterns (if `tea_browser_automation` is "mcp" or "auto"):**
 
-### Step 3: Load Persistent Facts
+- (existing MCP-related fragments, if any are added in future)
 
-Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+---
 
-### Step 4: Load Config
+## 4. Load Artifacts
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/_bmad/tea/config.yaml` and resolve:
+If available, read:
 
-- `user_name`
-- `communication_language`
+- `tech-spec.md` (primary NFRs)
+- `PRD.md` (product-level NFRs)
+- `story` or `test-design` docs (feature-level NFRs)
 
-### Step 5: Greet the User
+---
 
-Greet `{user_name}`, speaking in `{communication_language}`.
+## 5. Confirm Inputs
 
-### Step 6: Execute Append Steps
+Summarize loaded NFR sources and evidence availability.
 
-Execute each entry in `` in order.
+---
 
-Activation is complete. Begin the workflow below.
+## 6. Save Progress
 
-## Workflow Architecture
+**Save this step's accumulated work to `{outputFile}`.**
 
-This workflow uses **tri-modal step-file architecture**:
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
-- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
-- **Validate mode (steps-v/)**: validation against checklist
-- **Edit mode (steps-e/)**: revise existing outputs
+  ```yaml
+  ---
+  stepsCompleted: ['step-01-load-context']
+  lastStep: 'step-01-load-context'
+  lastSaved: '{date}'
+  ---
+  ```
 
-## Initialization Sequence
+  Then write this step's output below the frontmatter.
 
-### 1. Mode Determination
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-01-load-context'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-01-load-context'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
 
-"Welcome to the workflow. What would you like to do?"
+**Update `inputDocuments`**: Set `inputDocuments` in the output template frontmatter to the list of artifact paths loaded in this step (e.g., knowledge fragments, test design documents, configuration files).
 
-- **[C] Create** — Run the workflow from the beginning
-- **[R] Resume** — Resume an interrupted Create workflow
-- **[V] Validate** — Validate existing outputs
-- **[E] Edit** — Edit existing outputs
+Load next step: `{nextStepFile}`
 
-### 2. Route to First Step
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
-- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr/steps-c/step-01-load-context.md`
-- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr/steps-c/step-01b-resume.md` (Create-mode continuation)
-- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr/steps-v/step-01-validate.md`
-- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-nfr/proj/.claude/skills/bmad-testarch-nfr/steps-e/step-01-assess.md`
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
 
 
 ]]></instructions>

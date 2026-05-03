@@ -434,7 +434,10 @@ class TestarchSkillCompilerBase(SkillLayoutCompilerBase):
             "description", f"Execute {self.legacy_workflow_name} workflow"
         )
 
-        mode = resolved.get("workflow_mode", "c")
+        # `.get(key, default)` returns None when the key exists with a None
+        # value — the `or "c"` defends against that and ensures the mission
+        # never renders "Mode: None" even if upstream resolution is bypassed.
+        mode = resolved.get("workflow_mode") or "c"
         mode_name = {"c": "Create", "v": "Validate", "e": "Edit"}.get(mode, mode)
 
         story_id = resolved.get("story_id")

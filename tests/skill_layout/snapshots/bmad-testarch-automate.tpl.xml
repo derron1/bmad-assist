@@ -4,7 +4,7 @@
 
 Expand test automation coverage for codebase. Use when user says "lets expand test coverage" or "I want to automate tests"
 
-Mode: None
+Mode: Create
 Target: Story 10.1
 
 ]]></mission>
@@ -65,98 +65,247 @@ Minimal notes.
 </context>
 <variables>
 <var name="epic_num">10</var>
+<var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
+<var name="step_01_preflight_and_context_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/{skill-root}/steps-c/step-02-identify-targets.md</var>
 <var name="story_file" file_id="81b514b0">embedded in prompt, file id: 81b514b0</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
-<var name="workflow_mode"></var>
+<var name="tea_use_mcp_enhancements">True</var>
+<var name="tea_use_playwright_utils">True</var>
+<var name="workflow_mode">c</var>
 </variables>
 <instructions><![CDATA[
 
+<!-- STEP: step-01-preflight-and-context -->
+# Step 1: Preflight & Context Loading
+
+## STEP GOAL
+
+Determine execution mode, verify framework readiness, and load the necessary artifacts and knowledge fragments.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Halt if framework scaffolding is missing
+
 ---
-name: bmad-testarch-automate
-description: 'Expand test automation coverage for codebase. Use when user says "lets expand test coverage" or "I want to automate tests"'
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Stack Detection & Verify Framework
+
+**Read `config.test_stack_type`** from `{config_source}`.
+
+**Auto-Detection Algorithm** (when `test_stack_type` is `"auto"` or not configured):
+
+- Scan `{project-root}` for project manifests:
+  - **Frontend indicators**: `package.json` with react/vue/angular/next dependencies, `playwright.config.*`, `vite.config.*`, `webpack.config.*`
+  - **Backend indicators**: `pyproject.toml`, `pom.xml`/`build.gradle`, `go.mod`, `*.csproj`/`*.sln`, `Gemfile`, `Cargo.toml`
+  - **Both present** = `fullstack`; only frontend = `frontend`; only backend = `backend`
+- Explicit `test_stack_type` config value overrides auto-detection
+- **Backward compatibility**: if `test_stack_type` is not in config, treat as `"auto"` (preserves current frontend behavior for existing installs)
+
+Store result as `{detected_stack}` = `frontend` | `backend` | `fullstack`
+
+**Verify framework exists:**
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+- `playwright.config.ts` or `cypress.config.ts`
+- `package.json` includes test dependencies
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+- Relevant test config exists (e.g., `conftest.py`, `src/test/`, `*_test.go`, `.rspec`, test project `*.csproj`)
+
+If missing: **HALT** with message "Run `framework` workflow first."
+
 ---
 
-# Test Automation Expansion
+## 2. Determine Execution Mode
 
-**Goal:** Expand test automation coverage after implementation or analyze existing codebase to generate a comprehensive test suite.
+- **BMad-Integrated** if story/tech-spec/test-design artifacts are provided or found
+- **Standalone** if only source code is available
+- If unclear, ask the user which mode to use
 
-**Role:** You are the Master Test Architect.
+---
 
-You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+## 3. Load Context
 
-## Conventions
+### BMad-Integrated (if available)
 
-- Bare paths (e.g. `instructions.md`) resolve from the skill root.
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate` resolves to this skill's installed directory (where `customize.toml` lives).
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj`-prefixed paths resolve from the project working directory.
-- `bmad-testarch-automate` resolves to the skill directory's basename.
-- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate`.
+- Story with acceptance criteria
+- PRD and/or tech spec
+- Test-design document (if exists)
 
-## On Activation
+### Standalone
 
-### Step 1: Resolve the Workflow Block
+- Skip artifacts; proceed to codebase analysis
 
-Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate --key workflow`
+### Always Load
 
-**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+- Test framework config
+- Existing test structure in `{test_dir}`
+- Existing tests (for coverage gaps)
 
-1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate/customize.toml` — defaults
-2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/_bmad/custom/bmad-testarch-automate.toml` — team overrides
-3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/_bmad/custom/bmad-testarch-automate.user.toml` — personal overrides
+### Read TEA Config Flags
 
-Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+- From `{config_source}` read `tea_use_playwright_utils`
+- From `{config_source}` read `tea_use_pactjs_utils`
+- From `{config_source}` read `tea_pact_mcp`
+- From `{config_source}` read `tea_browser_automation`
+- From `{config_source}` read `test_stack_type`
 
-### Step 2: Execute Prepend Steps
+---
 
-Execute each entry in `` in order before proceeding.
+### Tiered Knowledge Loading
 
-### Step 3: Load Persistent Facts
+Load fragments based on their `tier` classification in `tea-index.csv`:
 
-Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+1. **Core tier** (always load): Foundational fragments required for this workflow
+2. **Extended tier** (load on-demand): Load when deeper analysis is needed or when the user's context requires it
+3. **Specialized tier** (load only when relevant): Load only when the specific use case matches (e.g., contract-testing only for microservices, email-auth only for email flows)
 
-### Step 4: Load Config
+> **Context Efficiency**: Loading only core fragments reduces context usage by 40-50% compared to loading all fragments.
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/_bmad/tea/config.yaml` and resolve:
+### Playwright Utils Loading Profiles
 
-- `user_name`
-- `communication_language`
+**If `tea_use_playwright_utils` is enabled**, select the appropriate loading profile:
 
-### Step 5: Greet the User
+- **API-only profile** (when `{detected_stack}` is `backend` or no `page.goto`/`page.locator` found in test files):
+  Load: `overview`, `api-request`, `auth-session`, `recurse` (~1,800 lines)
 
-Greet `{user_name}`, speaking in `{communication_language}`.
+- **Full UI+API profile** (when `{detected_stack}` is `frontend`/`fullstack` or browser tests detected):
+  Load: all Playwright Utils core fragments (~4,500 lines)
 
-### Step 6: Execute Append Steps
+**Detection**: Scan `{test_dir}` for files containing `page.goto` or `page.locator`. If none found, use API-only profile.
 
-Execute each entry in `` in order.
+### Pact.js Utils Loading
 
-Activation is complete. Begin the workflow below.
+**If `tea_use_pactjs_utils` is enabled** (and `{detected_stack}` is `backend` or `fullstack`, or microservices indicators detected):
 
-## Workflow Architecture
+Load: `pactjs-utils-overview.md`, `pactjs-utils-consumer-helpers.md`, `pactjs-utils-provider-verifier.md`, `pactjs-utils-request-filter.md` (~800 lines)
 
-This workflow uses **tri-modal step-file architecture**:
+**If `tea_use_pactjs_utils` is disabled** but contract testing is relevant (microservices architecture detected, existing Pact config found):
 
-- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
-- **Validate mode (steps-v/)**: validation against checklist
-- **Edit mode (steps-e/)**: revise existing outputs
+Load: `contract-testing.md` (~960 lines)
 
-## Initialization Sequence
+**Detection**: Scan `{project-root}` for Pact indicators: `pact/` directory, `@pact-foundation/pact` in `package.json`, `pactUrls` in test files, `PACT_BROKER` in env files.
 
-### 1. Mode Determination
+### Pact MCP Loading
 
-"Welcome to the workflow. What would you like to do?"
+**If `tea_pact_mcp` is `"mcp"`:**
 
-- **[C] Create** — Run the workflow from the beginning
-- **[R] Resume** — Resume an interrupted Create workflow
-- **[V] Validate** — Validate existing outputs
-- **[E] Edit** — Edit existing outputs
+Load: `pact-mcp.md` (~150 lines) — enables agent to use SmartBear MCP tools for fetching provider states and generating pact tests during automation.
 
-### 2. Route to First Step
+## 4. Load Knowledge Base Fragments
 
-- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate/steps-c/step-01-preflight-and-context.md`
-- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate/steps-c/step-01b-resume.md` (Create-mode continuation)
-- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate/steps-v/step-01-validate.md`
-- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-automate/proj/.claude/skills/bmad-testarch-automate/steps-e/step-01-assess.md`
+Use `/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv` and load only what is required.
+
+**Core (always load):**
+
+- `test-levels-framework.md`
+- `test-priorities-matrix.md`
+- `data-factories.md`
+- `selective-testing.md`
+- `ci-burn-in.md`
+- `test-quality.md`
+
+**Playwright Utils (if enabled):**
+
+- `overview.md`, `api-request.md`, `network-recorder.md`, `auth-session.md`, `intercept-network-call.md`, `recurse.md`, `log.md`, `file-utils.md`, `burn-in.md`, `network-error-monitor.md`, `fixtures-composition.md`
+
+**Traditional Patterns (if Playwright Utils disabled):**
+
+- `fixture-architecture.md`
+- `network-first.md`
+
+**Pact.js Utils (if enabled):**
+
+- `pactjs-utils-overview.md`, `pactjs-utils-consumer-helpers.md`, `pactjs-utils-provider-verifier.md`, `pactjs-utils-request-filter.md`
+
+**Contract Testing (if pactjs-utils disabled but relevant):**
+
+- `contract-testing.md`
+
+**Pact MCP (if tea_pact_mcp is "mcp"):**
+
+- `pact-mcp.md`
+
+**Healing (if auto-heal enabled):**
+
+- `test-healing-patterns.md`
+- `selector-resilience.md`
+- `timing-debugging.md`
+
+**Playwright CLI (if tea_browser_automation is "cli" or "auto"):**
+
+- `playwright-cli.md`
+
+**MCP Patterns (if tea_browser_automation is "mcp" or "auto"):**
+
+- (existing MCP-related fragments, if any are added in future)
+
+---
+
+## 5. Confirm Inputs
+
+Summarize loaded artifacts, framework, and knowledge fragments, then proceed.
+
+---
+
+## 6. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-01-preflight-and-context']
+  lastStep: 'step-01-preflight-and-context'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-01-preflight-and-context'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-01-preflight-and-context'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+**Update `inputDocuments`**: Set `inputDocuments` in the output template frontmatter to the list of artifact paths loaded in this step (e.g., knowledge fragments, test design documents, configuration files).
+
+Load next step: `{nextStepFile}`
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
 
 
 ]]></instructions>

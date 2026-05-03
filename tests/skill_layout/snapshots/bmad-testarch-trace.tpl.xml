@@ -4,7 +4,7 @@
 
 Generate traceability matrix and quality gate decision. Use when the user says "lets create traceability matrix" or "I want to analyze test coverage"
 
-Mode: None
+Mode: Create
 Target: Epic 10
 Gate Type: epic
 Analyze test coverage and make quality gate decision.
@@ -62,102 +62,178 @@ Minimal notes.
 <variables>
 <var name="epic_num">10</var>
 <var name="gate_type">epic</var>
+<var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
 <var name="source_dir">src</var>
+<var name="step_01_load_context_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/{skill-root}/steps-c/step-02-discover-tests.md</var>
 <var name="story_file" file_id="ef16e0c9">embedded in prompt, file id: ef16e0c9</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
+<var name="tea_use_mcp_enhancements">True</var>
+<var name="tea_use_playwright_utils">True</var>
 <var name="test_dir">tests</var>
-<var name="workflow_mode"></var>
+<var name="workflow_mode">c</var>
 </variables>
 <instructions><![CDATA[
 
+<!-- STEP: step-01-load-context -->
+# Step 1: Resolve Coverage Oracle & Load Knowledge Base
+
+## STEP GOAL
+
+Resolve the best available coverage oracle, capture confidence and provenance, and gather supporting artifacts for traceability.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
 ---
-name: bmad-testarch-trace
-description: 'Generate traceability matrix and quality gate decision. Use when the user says "lets create traceability matrix" or "I want to analyze test coverage"'
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, source tree, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Resolve Coverage Oracle
+
+At least one of the following must be usable:
+
+- Formal requirements (story/epic acceptance criteria, PRD, test design)
+- Contract/spec artifacts (OpenAPI, GraphQL schema, protobuf, etc.)
+- External pointers to a requirements source that can be resolved through installed adapters/MCPs
+- Analyzable source code that supports synthetic journey/requirement inference
+
+Tests exist OR gaps are explicitly acknowledged.
+
+Resolve the oracle in this order:
+
+1. **Formal requirements first**
+   - Story/epic acceptance criteria
+   - PRD / test design / tech spec
+   - Inline requirements provided by the user
+
+2. **Contract/spec artifacts second**
+   - OpenAPI / Swagger
+   - GraphQL schema or SDL
+   - Other machine-readable contract definitions
+
+3. **External pointers third**
+   - Placeholder files that point to external trackers or docs such as Jira, Linear, Confluence, shared docs, or other systems of record
+   - Follow the pointer automatically only when a compatible adapter/plugin/MCP is available in the active runtime
+   - Record `externalPointerStatus` as one of: `not_used`, `resolved`, `skipped`, or `unavailable`
+
+4. **Synthetic oracle last**
+   - If no formal oracle exists and `allow_synthetic_oracle` is enabled, inspect `/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/src` to infer a provisional trace target
+   - For UI apps, infer journeys from:
+     - routes/pages/screens/layout entry points
+     - navigation flows and feature entry links
+     - forms, submit actions, create/update/delete paths
+     - auth/session/logout/role-gated flows
+     - loading, empty, validation, error, and permission-denied states
+     - feature flags and major conditional branches
+   - Deduplicate the inferred items into a compact, traceable list (prefer 5-12 items)
+   - Assign stable IDs such as `J-01`, `J-02`, etc.
+   - Assign provisional priorities using `test-priorities-matrix.md`
+     - `P0`: auth, checkout/payment, destructive data changes, revenue-critical, hard blockers to core use
+     - `P1`: primary user journeys and common CRUD paths
+     - `P2`: secondary workflows and edge scenarios
+     - `P3`: low-risk polish or optional flows
+
+Record the resolved oracle metadata in step output/frontmatter using consistent keys:
+
+- `coverageBasis` (`acceptance_criteria` | `synthetic_requirements` | `openapi_endpoints` | `user_journeys`) — the type of oracle selected for coverage tracing
+- `oracleResolutionMode` (`formal_requirements` | `spec_artifact` | `external_pointer` | `synthetic_source`) — how the oracle was discovered/resolved
+- `oracleConfidence` (`high` | `medium` | `low`) — confidence in the resolved oracle as a coverage source
+- `oracleSources` — list of artifact paths, URIs, or references used to resolve the oracle
+- `externalPointerStatus` (`not_used` | `resolved` | `skipped` | `unavailable`) — status of external pointer resolution when pointer files are present
+
+If none of the four oracle types can be resolved, **HALT** and request the smallest missing clarification needed to continue.
+
 ---
 
-# Coverage Traceability & Quality Gate
+## 2. Load Knowledge Base
 
-**Goal:** Generate a requirements-or-journeys-to-tests traceability matrix, analyze coverage, and make a quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
+From `/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv` load:
 
-**Role:** You are the Master Test Architect.
+- `test-priorities-matrix.md`
+- `risk-governance.md`
+- `probability-impact.md`
+- `test-quality.md`
+- `selective-testing.md`
 
-You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+---
 
-## Conventions
+## 3. Load Artifacts
 
-- Bare paths (e.g. `instructions.md`) resolve from the skill root.
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace` resolves to this skill's installed directory (where `customize.toml` lives).
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj`-prefixed paths resolve from the project working directory.
-- `bmad-testarch-trace` resolves to the skill directory's basename.
-- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace`.
+If available:
 
-## On Activation
+- Story file and acceptance criteria
+- Test design doc (priorities)
+- Tech spec / PRD
+- OpenAPI or similar contract/spec files
+- Placeholder files that reference external requirements systems
+- Route maps, page/screen registries, and other source files used for synthetic journey inference
 
-### Step 1: Resolve the Workflow Block
+Summarize what was found and explicitly state the resolved oracle, its confidence, and why that oracle was selected.
 
-Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace --key workflow`
+---
 
-**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+### 4. Save Progress
 
-1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/customize.toml` — defaults
-2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/custom/bmad-testarch-trace.toml` — team overrides
-3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/custom/bmad-testarch-trace.user.toml` — personal overrides
+**Save this step's accumulated work to `{outputFile}`.**
 
-Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
-### Step 2: Execute Prepend Steps
+  ```yaml
+  ---
+  stepsCompleted: ['step-01-load-context']
+  lastStep: 'step-01-load-context'
+  lastSaved: '{date}'
+  coverageBasis: '{resolved coverage_basis}'
+  oracleConfidence: '{resolved oracle_confidence}'
+  oracleResolutionMode: '{resolved oracle_resolution_mode}'
+  oracleSources: ['{resolved oracle source 1}', '{resolved oracle source 2}']
+  externalPointerStatus: '{resolved external_pointer_status}'
+  ---
+  ```
 
-Execute each entry in `` in order before proceeding.
+  Then write this step's output below the frontmatter.
 
-### Step 3: Load Persistent Facts
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-01-load-context'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-01-load-context'`
+  - Set `lastSaved: '{date}'`
+  - Set `coverageBasis` to the resolved oracle basis
+  - Set `oracleConfidence` to the resolved oracle confidence
+  - Set `oracleResolutionMode` to the resolved oracle resolution mode
+  - Set `oracleSources` to the resolved oracle sources
+  - Set `externalPointerStatus` to the resolved external pointer status
+  - Append this step's output to the appropriate section of the document.
 
-Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+Load next step: `{nextStepFile}`
 
-### Step 4: Load Config
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/_bmad/tea/config.yaml` and resolve:
+### ✅ SUCCESS:
 
-- `user_name`
-- `communication_language`
+- Step completed in full with required outputs
 
-### Step 5: Greet the User
+### ❌ SYSTEM FAILURE:
 
-Greet `{user_name}`, speaking in `{communication_language}`.
-
-### Step 6: Execute Append Steps
-
-Execute each entry in `` in order.
-
-Activation is complete. Begin the workflow below.
-
-## Workflow Architecture
-
-This workflow uses **tri-modal step-file architecture**:
-
-- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
-- **Validate mode (steps-v/)**: validation against checklist
-- **Edit mode (steps-e/)**: revise existing outputs
-
-## Initialization Sequence
-
-### 1. Mode Determination
-
-"Welcome to the workflow. What would you like to do?"
-
-- **[C] Create** — Run the workflow from the beginning
-- **[R] Resume** — Resume an interrupted Create workflow
-- **[V] Validate** — Validate existing outputs
-- **[E] Edit** — Edit existing outputs
-
-### 2. Route to First Step
-
-- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/steps-c/step-01-load-context.md`
-- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/steps-c/step-01b-resume.md` (Create-mode continuation)
-- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/steps-v/step-01-validate.md`
-- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/.claude/skills/bmad-testarch-trace/steps-e/step-01-assess.md`
-
-Create mode resolves the coverage oracle automatically in this order: formal requirements, contract/spec artifacts, resolvable external pointers (when `allow_external_pointer_resolution` is enabled), then synthetic journeys/requirements inferred from source (when `allow_synthetic_oracle` is enabled and no formal oracle exists).
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
 
 
 ]]></instructions>

@@ -47,6 +47,7 @@ from typing import Any, ClassVar
 import yaml
 
 from bmad_assist.compiler.core import WorkflowCompiler
+from bmad_assist.compiler.parser import _detect_tri_modal
 from bmad_assist.compiler.patching import (
     discover_patch,
     load_patch,
@@ -284,6 +285,13 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             "template": str(template_md),
             "validation": str(skill_dir / "checklist.md"),
         }
+        # Detect tri-modal step layout (steps-c/, steps-v/, steps-e/) so the
+        # downstream compile knows about Create/Validate/Edit modes. Without
+        # this, get_workflow_mode() returns None for skills that ARE tri-modal
+        # (e.g. bmad-testarch-atdd), the compiled prompt says "Mode: None",
+        # and the agent halts at the SKILL's [C/R/V/E] menu instead of being
+        # routed into step-01-preflight-and-context.md.
+        tri_modal = _detect_tri_modal(skill_dir)
         synthetic_ir = WorkflowIR(
             name=self.skill_id,
             config_path=skill_md,
@@ -293,6 +301,14 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             raw_config=synthetic_config,
             raw_instructions=patched_body,
             output_template=embedded_template,
+            workflow_type=tri_modal["workflow_type"],
+            has_tri_modal=tri_modal["has_tri_modal"],
+            steps_c_dir=tri_modal["steps_c_dir"],
+            steps_v_dir=tri_modal["steps_v_dir"],
+            steps_e_dir=tri_modal["steps_e_dir"],
+            first_step_c=tri_modal["first_step_c"],
+            first_step_v=tri_modal["first_step_v"],
+            first_step_e=tri_modal["first_step_e"],
         )
 
         # 5. Stamp the synthesised IR onto the context and run the

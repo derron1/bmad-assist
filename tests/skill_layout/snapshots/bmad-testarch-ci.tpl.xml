@@ -4,7 +4,7 @@
 
 Scaffold CI/CD quality pipeline with test execution. Use when the user says "lets setup CI pipeline" or "I want to create quality gates"
 
-Mode: None
+Mode: Create
 Target: Story 10.1
 
 ]]></mission>
@@ -57,98 +57,169 @@ Minimal notes.
 </context>
 <variables>
 <var name="epic_num">10</var>
+<var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
+<var name="step_01_preflight_nextStepFile">.claude/skills/bmad-testarch-ci/steps-c/{skill-root}/steps-c/step-02-generate-pipeline.md</var>
 <var name="story_file" file_id="2a706ecd">embedded in prompt, file id: 2a706ecd</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
-<var name="workflow_mode"></var>
+<var name="tea_use_mcp_enhancements">True</var>
+<var name="tea_use_playwright_utils">True</var>
+<var name="workflow_mode">c</var>
 </variables>
 <instructions><![CDATA[
 
+<!-- STEP: step-01-preflight -->
+# Step 1: Preflight Checks
+
+## STEP GOAL
+
+Verify CI prerequisites and determine target CI platform.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Halt if requirements fail
+
 ---
-name: bmad-testarch-ci
-description: 'Scaffold CI/CD quality pipeline with test execution. Use when the user says "lets setup CI pipeline" or "I want to create quality gates"'
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Verify Git Repository
+
+- `.git/` exists
+- Remote configured (if available)
+
+If missing: **HALT** with "Git repository required for CI/CD setup."
+
 ---
 
-# CI/CD Pipeline Setup
+## 2. Detect Test Stack Type
 
-**Goal:** Scaffold CI/CD quality pipeline with test execution, burn-in loops, and artifact collection.
+Determine the project's test stack type (`test_stack_type`) using the following algorithm:
 
-**Role:** You are the Master Test Architect.
+1. If `test_stack_type` is explicitly set in config (not `"auto"`), use that value.
+2. Otherwise, auto-detect by scanning project manifests:
+   - **Frontend indicators**: `playwright.config.*`, `cypress.config.*`, `vite.config.*`, `next.config.*`, `src/components/`, `src/pages/`, `src/app/`
+   - **Backend indicators**: `pyproject.toml`, `pom.xml`/`build.gradle`, `go.mod`, `*.csproj`/`*.sln`, `Gemfile`, `Cargo.toml`, `jest.config.*`, `vitest.config.*`, `src/routes/`, `src/controllers/`, `src/api/`, `Dockerfile`, `serverless.yml`
+   - **Both present** → `fullstack`
+   - **Only frontend** → `frontend`
+   - **Only backend** → `backend`
+   - **Cannot determine** → default to `fullstack` and note assumption
 
-You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+Record detected `test_stack_type` in step output.
 
-## Conventions
+---
 
-- Bare paths (e.g. `instructions.md`) resolve from the skill root.
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci` resolves to this skill's installed directory (where `customize.toml` lives).
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj`-prefixed paths resolve from the project working directory.
-- `bmad-testarch-ci` resolves to the skill directory's basename.
-- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci`.
+## 3. Verify Test Framework
 
-## On Activation
+- Check for framework configuration based on detected stack:
+  - **Frontend/Fullstack**: `playwright.config.*` or `cypress.config.*` exists
+  - **Backend (Node.js)**: `jest.config.*` or `vitest.config.*` or test scripts in `package.json`
+  - **Backend (Python)**: `pyproject.toml` with `[tool.pytest]` or `pytest.ini` or `setup.cfg` with pytest config
+  - **Backend (Java/Kotlin)**: `pom.xml` with surefire/failsafe plugins or `build.gradle` with test task
+  - **Backend (Go)**: `*_test.go` files present (Go convention — no config file needed)
+  - **Backend (C#/.NET)**: `*.csproj` with xUnit/NUnit/MSTest references
+  - **Backend (Ruby)**: `Gemfile` with rspec or `.rspec` config file
+- If `test_framework` is `"auto"`, detect from config files and project manifests found
+- Verify test dependencies are installed (language-appropriate package manager)
 
-### Step 1: Resolve the Workflow Block
+If missing: **HALT** with "Run `framework` workflow first."
 
-Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci --key workflow`
+---
 
-**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+## 4. Ensure Tests Pass Locally
 
-1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci/customize.toml` — defaults
-2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/_bmad/custom/bmad-testarch-ci.toml` — team overrides
-3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/_bmad/custom/bmad-testarch-ci.user.toml` — personal overrides
+- Run the main test command based on detected stack and framework:
+  - **Node.js**: `npm test` or `npm run test:e2e`
+  - **Python**: `pytest` or `python -m pytest`
+  - **Java**: `mvn test` or `gradle test`
+  - **Go**: `go test ./...`
+  - **C#/.NET**: `dotnet test`
+  - **Ruby**: `bundle exec rspec`
+- If failing: **HALT** and request fixes before CI setup
 
-Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+---
 
-### Step 2: Execute Prepend Steps
+## 5. Detect CI Platform
 
-Execute each entry in `` in order before proceeding.
+- If `ci_platform` is explicitly set in config (not `"auto"`), use that value.
+- Otherwise, scan for existing CI configuration files:
+  - `.github/workflows/*.yml` → `github-actions`
+  - `.gitlab-ci.yml` → `gitlab-ci`
+  - `Jenkinsfile` → `jenkins`
+  - `azure-pipelines.yml` → `azure-devops`
+  - `.harness/*.yaml` → `harness`
+  - `.circleci/config.yml` → `circle-ci`
+- If found, ask whether to update or replace
+- If not found, infer from git remote (github.com → `github-actions`, gitlab.com → `gitlab-ci`)
+- If still unresolved, default to `github-actions`
 
-### Step 3: Load Persistent Facts
+Record detected `ci_platform` in step output.
 
-Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+---
 
-### Step 4: Load Config
+## 6. Read Environment Context
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/_bmad/tea/config.yaml` and resolve:
+- Read environment context based on detected stack:
+  - **Node.js**: Read `.nvmrc` if present (default to Node 24+ LTS if missing); read `package.json` for dependency caching strategy
+  - **Python**: Read `.python-version` or `pyproject.toml` for Python version; note `pip`/`poetry`/`pipenv` for caching
+  - **Java**: Read `pom.xml`/`build.gradle` for Java version; note Maven/Gradle for caching
+  - **Go**: Read `go.mod` for Go version; note Go module cache path
+  - **C#/.NET**: Read `*.csproj`/`global.json` for .NET SDK version; note NuGet cache
+  - **Ruby**: Read `.ruby-version` or `Gemfile` for Ruby version; note Bundler cache
 
-- `user_name`
-- `communication_language`
+---
 
-### Step 5: Greet the User
+### 7. Save Progress
 
-Greet `{user_name}`, speaking in `{communication_language}`.
+**Save this step's accumulated work to `{outputFile}`.**
 
-### Step 6: Execute Append Steps
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
 
-Execute each entry in `` in order.
+  ```yaml
+  ---
+  stepsCompleted: ['step-01-preflight']
+  lastStep: 'step-01-preflight'
+  lastSaved: '{date}'
+  ---
+  ```
 
-Activation is complete. Begin the workflow below.
+  Then write this step's output below the frontmatter.
 
-## Workflow Architecture
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-01-preflight'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-01-preflight'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
 
-This workflow uses **tri-modal step-file architecture**:
+Load next step: `{nextStepFile}`
 
-- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
-- **Validate mode (steps-v/)**: validation against checklist
-- **Edit mode (steps-e/)**: revise existing outputs
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
-## Initialization Sequence
+### ✅ SUCCESS:
 
-### 1. Mode Determination
+- Step completed in full with required outputs
 
-"Welcome to the workflow. What would you like to do?"
+### ❌ SYSTEM FAILURE:
 
-- **[C] Create** — Run the workflow from the beginning
-- **[R] Resume** — Resume an interrupted Create workflow
-- **[V] Validate** — Validate existing outputs
-- **[E] Edit** — Edit existing outputs
-
-### 2. Route to First Step
-
-- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci/steps-c/step-01-preflight.md`
-- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci/steps-c/step-01b-resume.md` (Create-mode continuation)
-- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci/steps-v/step-01-validate.md`
-- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-ci/proj/.claude/skills/bmad-testarch-ci/steps-e/step-01-assess.md`
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
 
 
 ]]></instructions>

@@ -4,7 +4,7 @@
 
 Initialize test framework with Playwright or Cypress. Use when the user says "lets setup test framework" or "I want to initialize testing framework"
 
-Mode: None
+Mode: Create
 Target: Story 10.1
 
 ]]></mission>
@@ -57,98 +57,143 @@ Minimal notes.
 </context>
 <variables>
 <var name="epic_num">10</var>
+<var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
+<var name="step_01_preflight_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/{skill-root}/steps-c/step-02-select-framework.md</var>
 <var name="story_file" file_id="a968a91e">embedded in prompt, file id: a968a91e</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
-<var name="workflow_mode"></var>
+<var name="tea_use_mcp_enhancements">True</var>
+<var name="tea_use_playwright_utils">True</var>
+<var name="workflow_mode">c</var>
 </variables>
 <instructions><![CDATA[
 
+<!-- STEP: step-01-preflight -->
+# Step 1: Preflight Checks
+
+## STEP GOAL
+
+Verify the project is ready for framework scaffolding and gather key context.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Halt if preflight requirements fail
+
 ---
-name: bmad-testarch-framework
-description: 'Initialize test framework with Playwright or Cypress. Use when the user says "lets setup test framework" or "I want to initialize testing framework"'
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Stack Detection
+
+**Read `config.test_stack_type`** from `{config_source}`.
+
+**Auto-Detection Algorithm** (when `test_stack_type` is `"auto"` or not configured):
+
+- Scan `{project-root}` for project manifests:
+  - **Frontend indicators**: `package.json` with react/vue/angular/next dependencies, `playwright.config.*`, `vite.config.*`, `webpack.config.*`
+  - **Backend indicators**: `pyproject.toml`, `pom.xml`/`build.gradle`, `go.mod`, `*.csproj`/`*.sln`, `Gemfile`, `Cargo.toml`
+  - **Both present** = `fullstack`; only frontend = `frontend`; only backend = `backend`
+- Explicit `test_stack_type` config value overrides auto-detection
+- **Backward compatibility**: if `test_stack_type` is not in config, treat as `"auto"` (preserves current frontend behavior for existing installs)
+
+Store result as `{detected_stack}` = `frontend` | `backend` | `fullstack`
+
 ---
 
-# Test Framework Setup
+## 2. Validate Prerequisites
 
-**Goal:** Initialize a production-ready test framework architecture (Playwright or Cypress) with fixtures, helpers, and configuration.
+**If {detected_stack} is `frontend` or `fullstack`:**
 
-**Role:** You are the Master Test Architect.
+- `package.json` exists in project root
+- No existing E2E framework (`playwright.config.*`, `cypress.config.*`, `cypress.json`)
 
-You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+**If {detected_stack} is `backend` or `fullstack`:**
 
-## Conventions
+- At least one backend project manifest exists (`pyproject.toml`, `pom.xml`, `build.gradle`, `go.mod`, `*.csproj`, `Gemfile`, `Cargo.toml`)
+- No existing test framework config that conflicts (e.g., `conftest.py` with full pytest suite, `src/test/` with JUnit suite)
 
-- Bare paths (e.g. `instructions.md`) resolve from the skill root.
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework` resolves to this skill's installed directory (where `customize.toml` lives).
-- `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj`-prefixed paths resolve from the project working directory.
-- `bmad-testarch-framework` resolves to the skill directory's basename.
-- Resolve sibling workflow files such as `instructions.md`, `checklist.md`, `steps-c/...`, `steps-e/...`, `steps-v/...`, and templates from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework`.
+- Architecture/stack context available (project type, bundler, dependencies)
 
-## On Activation
+If any fail, **HALT** and report the missing requirement.
 
-### Step 1: Resolve the Workflow Block
+---
 
-Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework --key workflow`
+## 3. Gather Project Context
 
-**If the script fails**, resolve the `workflow` block yourself by reading these three files in base → team → user order and applying the same structural merge rules as the resolver:
+**If {detected_stack} is `frontend` or `fullstack`:**
 
-1. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/customize.toml` — defaults
-2. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/custom/bmad-testarch-framework.toml` — team overrides
-3. `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/custom/bmad-testarch-framework.user.toml` — personal overrides
+- Read `package.json` to identify framework, bundler, dependencies
 
-Any missing file is skipped. Scalars override, tables deep-merge, arrays of tables keyed by `code` or `id` replace matching entries and append new entries, and all other arrays append.
+**If {detected_stack} is `backend` or `fullstack`:**
 
-### Step 2: Execute Prepend Steps
+- Read the relevant project manifest (`pyproject.toml`, `pom.xml`, `go.mod`, `*.csproj`, `Gemfile`, `Cargo.toml`) to identify language, framework, and dependencies
 
-Execute each entry in `` in order before proceeding.
+- Check for architecture docs (`architecture.md`, `tech-spec*.md`) if available
+- Note auth requirements and APIs (if documented)
 
-### Step 3: Load Persistent Facts
+---
 
-Treat every entry in `- file:{project-root}/**/project-context.md` as foundational context you carry for the rest of the workflow run. Entries prefixed `file:` are paths or globs resolved from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj` — expand them and load every matching file in lexical path order as facts. All other entries are facts verbatim.
+## 3. Confirm Findings
 
-### Step 4: Load Config
+Summarize:
 
-Load config from `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/_bmad/tea/config.yaml` and resolve:
+- Project type and bundler
+- Whether a framework is already installed
+- Any relevant context docs found
 
-- `user_name`
-- `communication_language`
+---
 
-### Step 5: Greet the User
+### 4. Save Progress
 
-Greet `{user_name}`, speaking in `{communication_language}`.
+**Save this step's accumulated work to `{outputFile}`.**
 
-### Step 6: Execute Append Steps
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
 
-Execute each entry in `` in order.
+  ```yaml
+  ---
+  stepsCompleted: ['step-01-preflight']
+  lastStep: 'step-01-preflight'
+  lastSaved: '{date}'
+  ---
+  ```
 
-Activation is complete. Begin the workflow below.
+  Then write this step's output below the frontmatter.
 
-## Workflow Architecture
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-01-preflight'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-01-preflight'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
 
-This workflow uses **tri-modal step-file architecture**:
+Load next step: `{nextStepFile}`
 
-- **Create mode (steps-c/)**: primary execution flow for new runs and resume continuation
-- **Validate mode (steps-v/)**: validation against checklist
-- **Edit mode (steps-e/)**: revise existing outputs
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
-## Initialization Sequence
+### ✅ SUCCESS:
 
-### 1. Mode Determination
+- Step completed in full with required outputs
 
-"Welcome to the workflow. What would you like to do?"
+### ❌ SYSTEM FAILURE:
 
-- **[C] Create** — Run the workflow from the beginning
-- **[R] Resume** — Resume an interrupted Create workflow
-- **[V] Validate** — Validate existing outputs
-- **[E] Edit** — Edit existing outputs
-
-### 2. Route to First Step
-
-- **If C:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-c/step-01-preflight.md`
-- **If R:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-c/step-01b-resume.md` (Create-mode continuation)
-- **If V:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-v/step-01-validate.md`
-- **If E:** Load `/private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-framework/proj/.claude/skills/bmad-testarch-framework/steps-e/step-01-assess.md`
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
 
 
 ]]></instructions>
