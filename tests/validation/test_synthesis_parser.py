@@ -614,10 +614,6 @@ class TestCreateSynthesizerRecord:
         assert record.execution.sequence_position == 4
 
 
-# ---------------------------------------------------------------------------
-# Backward scan fallback (Fix 4 regression tests)
-# ---------------------------------------------------------------------------
-
 _VALID_METRICS_JSON = """{
   "quality": {
     "actionable_ratio": 0.8,
@@ -637,11 +633,25 @@ _VALID_METRICS_JSON = """{
 }"""
 
 
-class TestBackwardScanFallback:
-    """Tests for _try_json_backward_extraction and its integration."""
+class TestNoBackwardScan:
+    """Verify backward scan was removed — no JSON extraction without markers or LLM fallback."""
 
-    def test_fenced_json_near_end(self) -> None:
-        """JSON in a ```json fence near end is extracted without markers."""
+    def test_bare_json_without_markers_returns_none(self) -> None:
+        """Bare JSON near end without markers is NOT extracted (backward scan removed)."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "## Synthesis Summary\n\n"
+            "Review complete.\n\n"
+            f"{_VALID_METRICS_JSON}\n"
+        )
+        # Without markers and without llm_fallback, this should fall through
+        # to markdown fallback (which won't find enough headings)
+        result = extract_synthesis_metrics(output)
+        assert result is None
+
+    def test_fenced_json_without_markers_returns_none(self) -> None:
+        """Fenced JSON without markers or contract end is NOT extracted."""
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
         output = (
@@ -650,23 +660,7 @@ class TestBackwardScanFallback:
             f"```json\n{_VALID_METRICS_JSON}\n```\n"
         )
         result = extract_synthesis_metrics(output)
-        assert result is not None
-        assert result.quality is not None
-        assert result.quality.actionable_ratio == 0.8
-
-    def test_bare_json_near_end(self) -> None:
-        """Bare JSON object near end is extracted without markers."""
-        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
-
-        output = (
-            "## Synthesis Summary\n\n"
-            "Review complete.\n\n"
-            f"{_VALID_METRICS_JSON}\n"
-        )
-        result = extract_synthesis_metrics(output)
-        assert result is not None
-        assert result.consensus is not None
-        assert result.consensus.agreement_score == 0.625
+        assert result is None
 
     def test_no_json_still_returns_none(self, caplog: "LogCaptureFixture") -> None:
         """No markers and no JSON anywhere → returns None."""
@@ -677,68 +671,507 @@ class TestBackwardScanFallback:
             result = extract_synthesis_metrics(output)
         assert result is None
 
-    def test_markers_invalid_json_fallback_to_tail(self) -> None:
-        """Markers present with bad JSON, valid JSON elsewhere → fallback recovers."""
+
+# ---------------------------------------------------------------------------
+# LLM fallback extraction
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMetricsViaLlm:
+    """Tests for extract_metrics_via_llm() function."""
+
+    def _make_mock_provider(self, stdout: str, exit_code: int = 0):
+        """Create a mock provider that returns given stdout."""
+        from unittest.mock import MagicMock
+
+        provider = MagicMock()
+        result = MagicMock()
+        result.exit_code = exit_code
+        result.stdout = stdout
+        result.stderr = ""
+        provider.invoke.return_value = result
+        return provider
+
+    def test_success_returns_metrics_with_follows_template_false(self) -> None:
+        """Successful LLM extraction sets follows_template=False."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        valid_response = """{
+  "quality": {
+    "actionable_ratio": 0.7,
+    "specificity_score": 0.6,
+    "evidence_quality": 0.5,
+    "internal_consistency": 0.8
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.75,
+    "false_positive_count": 1
+  }
+}"""
+        mock_provider = self._make_mock_provider(valid_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is False
+        assert result.quality.actionable_ratio == 0.7
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 3
+
+    def test_retries_on_bad_json_then_succeeds(self) -> None:
+        """First attempt returns bad JSON, second returns valid → succeeds."""
+        from unittest.mock import MagicMock, patch
+
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        valid_response = """{
+  "quality": {
+    "actionable_ratio": 0.5,
+    "specificity_score": 0.5,
+    "evidence_quality": 0.5,
+    "internal_consistency": 0.5
+  },
+  "consensus": {
+    "agreed_findings": 1,
+    "unique_findings": 0,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 1.0,
+    "false_positive_count": 0
+  }
+}"""
+        bad_result = MagicMock()
+        bad_result.exit_code = 0
+        bad_result.stdout = "{ not valid json"
+
+        good_result = MagicMock()
+        good_result.exit_code = 0
+        good_result.stdout = valid_response
+
+        mock_provider = MagicMock()
+        mock_provider.invoke.side_effect = [bad_result, good_result]
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+                max_retries=2,
+            )
+
+        assert result is not None
+        assert mock_provider.invoke.call_count == 2
+
+    def test_all_retries_fail_returns_none(self) -> None:
+        """All retry attempts fail → returns None."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        mock_provider = self._make_mock_provider("{ invalid }")
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+                max_retries=2,
+            )
+
+        assert result is None
+        assert mock_provider.invoke.call_count == 2
+
+    def test_preserves_existing_quality(self) -> None:
+        """When existing_quality provided, only consensus is extracted from LLM."""
+        from unittest.mock import patch
+
+        from bmad_assist.benchmarking.schema import QualitySignals
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        existing_quality = QualitySignals(
+            actionable_ratio=0.9,
+            specificity_score=0.8,
+            evidence_quality=0.7,
+            follows_template=True,
+            internal_consistency=0.95,
+        )
+
+        consensus_response = """{
+  "consensus": {
+    "agreed_findings": 4,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.8,
+    "false_positive_count": 2
+  }
+}"""
+        mock_provider = self._make_mock_provider(consensus_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+                existing_quality=existing_quality,
+            )
+
+        assert result is not None
+        # Quality preserved from existing, but follows_template set to False
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.9
+        assert result.quality.follows_template is False
+        # Consensus from LLM
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 4
+
+    def test_both_existing_skips_llm_call(self) -> None:
+        """When both sections already valid, no LLM call is made."""
+        from bmad_assist.benchmarking.schema import ConsensusData, QualitySignals
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        existing_quality = QualitySignals(
+            actionable_ratio=0.5,
+            specificity_score=0.5,
+            evidence_quality=0.5,
+            follows_template=True,
+            internal_consistency=0.5,
+        )
+        existing_consensus = ConsensusData(
+            agreed_findings=1,
+            unique_findings=0,
+            disputed_findings=0,
+            missed_findings=0,
+            agreement_score=1.0,
+            false_positive_count=0,
+        )
+
+        # No mock needed — should not call provider at all
+        result = extract_metrics_via_llm(
+            "Some output",
+            provider_name="claude",
+            model="haiku",
+            existing_quality=existing_quality,
+            existing_consensus=existing_consensus,
+        )
+
+        assert result is not None
+        assert result.quality is existing_quality
+        assert result.consensus is existing_consensus
+
+    def test_provider_failure_returns_none(self) -> None:
+        """Provider get failure returns None gracefully."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            side_effect=RuntimeError("No such provider"),
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="nonexistent",
+                model="haiku",
+            )
+
+        assert result is None
+
+
+class TestExtractSynthesisMetricsLlmFallback:
+    """Tests for LLM fallback integration in extract_synthesis_metrics."""
+
+    def _make_mock_provider(self, stdout: str, exit_code: int = 0):
+        """Create a mock provider that returns given stdout."""
+        from unittest.mock import MagicMock
+
+        provider = MagicMock()
+        result = MagicMock()
+        result.exit_code = exit_code
+        result.stdout = stdout
+        result.stderr = ""
+        provider.invoke.return_value = result
+        return provider
+
+    def test_llm_fallback_on_pydantic_failure(self) -> None:
+        """When markers have JSON with wrong field names, LLM fallback is called."""
+        from unittest.mock import patch
+
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
+        # Markers present but with wrong field names
+        output = """## Synthesis Summary
+
+5 issues verified, 2 false positives dismissed.
+
+<!-- METRICS_JSON_START -->
+{
+  "quality": {
+    "false_positive_rate": 0.846,
+    "findings_raised": 13
+  },
+  "consensus": {
+    "both_reviewers_agree": 3
+  }
+}
+<!-- METRICS_JSON_END -->
+
+## Issues Verified
+## Issues Dismissed
+## Changes Applied
+""" + ("x" * 100)
+
+        valid_llm_response = """{
+  "quality": {
+    "actionable_ratio": 0.6,
+    "specificity_score": 0.5,
+    "evidence_quality": 0.4,
+    "internal_consistency": 0.7
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 2,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.6,
+    "false_positive_count": 2
+  }
+}"""
+        mock_provider = self._make_mock_provider(valid_llm_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is False
+        assert result.quality.actionable_ratio == 0.6
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 3
+        mock_provider.invoke.assert_called_once()
+
+    def test_llm_fallback_on_no_json(self) -> None:
+        """When no markers and no JSON at all, LLM fallback is called."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = (
+            "## Synthesis Summary\n\n"
+            "The reviewers identified several issues.\n"
+            "3 issues verified, 1 false positive dismissed.\n\n"
+            "## Issues Verified\n\n"
+            "- Missing error handling\n\n"
+            "## Issues Dismissed\n\n"
+            "- Unnecessary refactoring\n\n"
+            "## Changes Applied\n\n"
+            "Updated acceptance criteria.\n"
+        ) + ("x" * 100)
+
+        valid_llm_response = """{
+  "quality": {
+    "actionable_ratio": 0.8,
+    "specificity_score": 0.7,
+    "evidence_quality": 0.6,
+    "internal_consistency": 0.9
+  },
+  "consensus": {
+    "agreed_findings": 3,
+    "unique_findings": 0,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 1.0,
+    "false_positive_count": 1
+  }
+}"""
+        mock_provider = self._make_mock_provider(valid_llm_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is False
+        mock_provider.invoke.assert_called_once()
+
+    def test_no_llm_when_strict_succeeds(self) -> None:
+        """When markers have valid JSON, LLM fallback is NOT called."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = f"""<!-- METRICS_JSON_START -->
+{_VALID_METRICS_JSON}
+<!-- METRICS_JSON_END -->
+"""
+        mock_provider = self._make_mock_provider("should not be called")
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.8
+        mock_provider.invoke.assert_not_called()
+
+    def test_llm_fallback_false_skips_llm(self) -> None:
+        """With llm_fallback=False, no LLM call even on failure."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """<!-- METRICS_JSON_START -->
+{
+  "quality": {"invented_field": 123},
+  "consensus": {"wrong_field": true}
+}
+<!-- METRICS_JSON_END -->
+"""
+        mock_provider = self._make_mock_provider("should not be called")
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ) as mock_get:
+            result = extract_synthesis_metrics(output, llm_fallback=False)
+
+        # Should not attempt LLM fallback
+        mock_get.assert_not_called()
+        assert result is None
+
+    def test_llm_fallback_missing_config_falls_through(
+        self, caplog: "LogCaptureFixture"
+    ) -> None:
+        """When provider_name/model is None, logs warning and falls through."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        # Must be >= 200 chars to trigger LLM fallback path
         output = (
             "<!-- METRICS_JSON_START -->\n"
-            "{ broken json }\n"
-            "<!-- METRICS_JSON_END -->\n\n"
-            f"```json\n{_VALID_METRICS_JSON}\n```\n"
-        )
-        result = extract_synthesis_metrics(output)
-        assert result is not None
-        assert result.quality is not None
+            '{\n  "quality": {"invented_field": 123},\n'
+            '  "consensus": {"wrong_field": true}\n}\n'
+            "<!-- METRICS_JSON_END -->\n"
+        ) + ("x" * 200)
 
-    def test_large_output_with_trailing_commentary(self) -> None:
-        """Metrics JSON followed by 50k+ of trailing text is still found."""
+        with caplog.at_level(logging.WARNING):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name=None,
+                model=None,
+            )
+
+        assert result is None
+        assert "not set" in caplog.text
+
+    def test_partial_quality_valid_uses_llm_for_consensus_only(self) -> None:
+        """When quality validates but consensus fails, LLM extracts only consensus."""
+        from unittest.mock import patch
+
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
-        trailing = "x" * 56000
-        output = (
-            "## Summary\n\n"
-            f"```json\n{_VALID_METRICS_JSON}\n```\n"
-            f"\n{trailing}\n"
-        )
-        result = extract_synthesis_metrics(output)
+        output = """<!-- METRICS_JSON_START -->
+{
+  "quality": {
+    "actionable_ratio": 0.8,
+    "specificity_score": 0.7,
+    "evidence_quality": 0.6,
+    "follows_template": true,
+    "internal_consistency": 0.9
+  },
+  "consensus": {
+    "wrong_field": "bad"
+  }
+}
+<!-- METRICS_JSON_END -->
+""" + ("x" * 100)
+
+        consensus_response = """{
+  "consensus": {
+    "agreed_findings": 5,
+    "unique_findings": 1,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.83,
+    "false_positive_count": 0
+  }
+}"""
+        mock_provider = self._make_mock_provider(consensus_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name="claude",
+                model="haiku",
+            )
+
         assert result is not None
+        # Quality from original JSON (but follows_template=False because haiku fired)
         assert result.quality is not None
-
-    def test_max_backward_candidates_limit(self) -> None:
-        """Only the last _MAX_BACKWARD_CANDIDATES bare JSON objects are tried."""
-        from bmad_assist.validation.synthesis_parser import (
-            _MAX_BACKWARD_CANDIDATES,
-            _try_json_backward_extraction,
-        )
-
-        # Place valid metrics at the start as a bare JSON object (no fences),
-        # then N+1 unrelated bare JSON objects after it.
-        # The backward scan should only check the last N bare candidates
-        # (and no fences exist), so the valid one at the start is never reached.
-        unrelated = '{"unrelated": true}'
-        parts = [_VALID_METRICS_JSON + "\n"]
-        for _ in range(_MAX_BACKWARD_CANDIDATES + 1):
-            parts.append(f"\n{unrelated}\n")
-        output = "".join(parts)
-
-        result = _try_json_backward_extraction(output)
-        # Should not find metrics (all scanned candidates are unrelated)
-        assert result is None
-
-    def test_unrelated_json_ignored(self) -> None:
-        """JSON without 'quality' or 'consensus' keys is skipped."""
-        from bmad_assist.validation.synthesis_parser import _try_json_backward_extraction
-
-        output = '{"name": "test", "value": 42}\n'
-        result = _try_json_backward_extraction(output)
-        assert result is None
+        assert result.quality.actionable_ratio == 0.8
+        assert result.quality.follows_template is False
+        # Consensus from LLM
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 5
 
 
 class TestMarkdownFallback:
     """Tests for heading-based markdown fallback."""
 
-    def test_markdown_fallback_recovers_follows_template(self) -> None:
+    def test_markdown_fallback_sets_follows_template_false(self) -> None:
+        """Markdown fallback is a non-strict path so follows_template must be False."""
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
         output = """## Synthesis Summary
@@ -762,7 +1195,7 @@ class TestMarkdownFallback:
 
         assert result is not None
         assert result.quality is not None
-        assert result.quality.follows_template is True
+        assert result.quality.follows_template is False
 
     def test_markdown_fallback_recovers_consensus_counts(self) -> None:
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
@@ -791,6 +1224,292 @@ class TestMarkdownFallback:
         output = "Plain prose with no headings, no JSON, and no recoverable structure."
         result = extract_synthesis_metrics(output)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Fallback semantics: follows_template, additive merging, success criteria
+# ---------------------------------------------------------------------------
+
+
+class TestFollowsTemplateSemanticsAndAdditiveLayer:
+    """Tests for follows_template invariant and additive fallback merging."""
+
+    def _make_mock_provider(self, stdout: str, exit_code: int = 0):
+        from unittest.mock import MagicMock
+
+        provider = MagicMock()
+        result = MagicMock()
+        result.exit_code = exit_code
+        result.stdout = stdout
+        result.stderr = ""
+        provider.invoke.return_value = result
+        return provider
+
+    def test_strict_only_preserves_follows_template_true(self) -> None:
+        """When both sections come from strict JSON, follows_template is preserved."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = f"""<!-- METRICS_JSON_START -->
+{_VALID_METRICS_JSON}
+<!-- METRICS_JSON_END -->
+"""
+        result = extract_synthesis_metrics(output)
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is True
+        assert result.consensus is not None
+
+    def test_strict_quality_llm_fails_partial_has_follows_template_false(self) -> None:
+        """Strict quality valid, consensus invalid, LLM fallback attempted and fails →
+        returned partial quality has follows_template=False."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """<!-- METRICS_JSON_START -->
+{
+  "quality": {
+    "actionable_ratio": 0.8,
+    "specificity_score": 0.7,
+    "evidence_quality": 0.6,
+    "follows_template": true,
+    "internal_consistency": 0.9
+  },
+  "consensus": {
+    "wrong_field": "bad"
+  }
+}
+<!-- METRICS_JSON_END -->
+""" + ("x" * 200)
+
+        # LLM returns garbage → fallback fails
+        mock_provider = self._make_mock_provider("{ invalid }")
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_synthesis_metrics(
+                output,
+                llm_fallback=True,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.8
+        # Must be False because LLM fallback was attempted
+        assert result.quality.follows_template is False
+        assert result.consensus is None
+
+    def test_llm_with_existing_quality_fails_when_consensus_not_recovered(
+        self, caplog: "LogCaptureFixture"
+    ) -> None:
+        """extract_metrics_via_llm with existing_quality but LLM response
+        missing consensus → returns None, does not log success."""
+        from unittest.mock import patch
+
+        from bmad_assist.benchmarking.schema import QualitySignals
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        existing_quality = QualitySignals(
+            actionable_ratio=0.9,
+            specificity_score=0.8,
+            evidence_quality=0.7,
+            follows_template=True,
+            internal_consistency=0.95,
+        )
+
+        # LLM returns valid JSON but no consensus section
+        response_without_consensus = '{"quality": {"actionable_ratio": 0.5, "specificity_score": 0.5, "evidence_quality": 0.5, "internal_consistency": 0.5}}'
+        mock_provider = self._make_mock_provider(response_without_consensus)
+
+        with (
+            patch(
+                "bmad_assist.providers.registry.get_provider",
+                return_value=mock_provider,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+                existing_quality=existing_quality,
+                max_retries=1,
+            )
+
+        assert result is None
+        assert "succeeded" not in caplog.text
+
+    def test_llm_with_existing_consensus_fails_when_quality_not_recovered(
+        self, caplog: "LogCaptureFixture"
+    ) -> None:
+        """extract_metrics_via_llm with existing_consensus but LLM response
+        missing quality → returns None, does not log success."""
+        from unittest.mock import patch
+
+        from bmad_assist.benchmarking.schema import ConsensusData
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        existing_consensus = ConsensusData(
+            agreed_findings=3,
+            unique_findings=1,
+            disputed_findings=0,
+            missed_findings=0,
+            agreement_score=0.75,
+            false_positive_count=1,
+        )
+
+        # LLM returns valid JSON but no quality section
+        response_without_quality = '{"consensus": {"agreed_findings": 5, "unique_findings": 0, "disputed_findings": 0, "missed_findings": 0, "agreement_score": 1.0, "false_positive_count": 0}}'
+        mock_provider = self._make_mock_provider(response_without_quality)
+
+        with (
+            patch(
+                "bmad_assist.providers.registry.get_provider",
+                return_value=mock_provider,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+                existing_consensus=existing_consensus,
+                max_retries=1,
+            )
+
+        assert result is None
+        assert "succeeded" not in caplog.text
+
+    def test_strict_quality_markdown_fills_consensus(self) -> None:
+        """Strict quality valid, no consensus in JSON, markdown infers consensus →
+        final result preserves strict quality values, fills consensus from markdown,
+        and quality.follows_template=False."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """## Synthesis Summary
+
+5 issues verified, 2 false positives dismissed, 3 changes applied.
+
+## Issues Verified
+
+### Critical
+- **Issue**: Missing idempotency guard
+
+## Issues Dismissed
+
+- **Claimed Issue**: Duplicate notification audit
+
+## Changes Applied
+
+**Location**: story.md - Acceptance Criteria
+
+<!-- METRICS_JSON_START -->
+{
+  "quality": {
+    "actionable_ratio": 0.85,
+    "specificity_score": 0.75,
+    "evidence_quality": 0.7,
+    "follows_template": true,
+    "internal_consistency": 0.9
+  }
+}
+<!-- METRICS_JSON_END -->
+"""
+        result = extract_synthesis_metrics(output)
+
+        assert result is not None
+        # Quality from strict JSON but follows_template forced False
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.85
+        assert result.quality.follows_template is False
+        # Consensus from markdown fallback
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 5
+        assert result.consensus.false_positive_count == 2
+
+    def test_strict_consensus_markdown_fills_quality(self) -> None:
+        """Strict consensus valid, no quality in JSON, markdown infers quality →
+        final result preserves strict consensus, fills quality from markdown,
+        and quality.follows_template=False."""
+        from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
+
+        output = """## Synthesis Summary
+
+5 issues verified, 2 false positives dismissed, 3 changes applied.
+
+## Issues Verified
+
+### Critical
+- **Issue**: Missing idempotency guard
+
+## Issues Dismissed
+
+- **Claimed Issue**: Duplicate notification audit
+
+## Changes Applied
+
+**Location**: story.md - Acceptance Criteria
+
+<!-- METRICS_JSON_START -->
+{
+  "consensus": {
+    "agreed_findings": 10,
+    "unique_findings": 2,
+    "disputed_findings": 1,
+    "missed_findings": 0,
+    "agreement_score": 0.77,
+    "false_positive_count": 3
+  }
+}
+<!-- METRICS_JSON_END -->
+"""
+        result = extract_synthesis_metrics(output)
+
+        assert result is not None
+        # Consensus from strict JSON (not overwritten by markdown)
+        assert result.consensus is not None
+        assert result.consensus.agreed_findings == 10
+        assert result.consensus.agreement_score == 0.77
+        # Quality from markdown fallback
+        assert result.quality is not None
+        assert result.quality.actionable_ratio == 0.0
+        assert result.quality.follows_template is False
+
+    def test_llm_neither_existing_partial_recovery_succeeds(self) -> None:
+        """extract_metrics_via_llm with no existing sections, LLM recovers only
+        quality → counts as success (partial result acceptable)."""
+        from unittest.mock import patch
+
+        from bmad_assist.validation.synthesis_parser import extract_metrics_via_llm
+
+        quality_only_response = """{
+  "quality": {
+    "actionable_ratio": 0.6,
+    "specificity_score": 0.5,
+    "evidence_quality": 0.4,
+    "internal_consistency": 0.7
+  }
+}"""
+        mock_provider = self._make_mock_provider(quality_only_response)
+
+        with patch(
+            "bmad_assist.providers.registry.get_provider",
+            return_value=mock_provider,
+        ):
+            result = extract_metrics_via_llm(
+                "Some synthesis output " * 20,
+                provider_name="claude",
+                model="haiku",
+            )
+
+        assert result is not None
+        assert result.quality is not None
+        assert result.quality.follows_template is False
+        assert result.consensus is None
 
 
 # ---------------------------------------------------------------------------
@@ -871,12 +1590,12 @@ class TestLayer15PostContractFencedJson:
         assert result is None  # Rejected by strict key check
 
     def test_fenced_json_too_far_from_contract_rejected(self) -> None:
-        """Fenced JSON more than 200 chars from contract end is not matched."""
+        """Fenced JSON more than 500 chars from contract end is not matched."""
         from bmad_assist.validation.synthesis_parser import (
             _try_post_contract_fenced_json,
         )
 
-        gap = "x" * 250
+        gap = "x" * 550
         output = (
             "<!-- VALIDATION_CONTRACT_END -->\n"
             f"{gap}\n"
@@ -907,10 +1626,10 @@ class TestLayer15PostContractFencedJson:
         )
         # The METRICS_JSON markers are present, so Layer 1.5 should NOT fire.
         # Layer 1 tries markers and gets bad JSON.
-        # Layer 2 (backward scan) picks up the fenced JSON.
+        # Without backward scan or LLM fallback, falls through to markdown fallback.
         result = extract_synthesis_metrics(output)
-        # Should still recover via backward scan, but Layer 1.5 was not the path
-        assert result is not None
+        # No backward scan anymore, and no markdown headings → None
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

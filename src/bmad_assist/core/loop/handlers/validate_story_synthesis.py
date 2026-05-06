@@ -982,7 +982,13 @@ class ValidateStorySynthesisHandler(BaseHandler):
 
                 # Extract synthesis resolution via layered strategy
                 res_parsed, res_quality = _extract_validation_resolution(extracted_synthesis)
-                metrics = extract_synthesis_metrics(result.stdout)
+                _fallback_provider, _fallback_model = self._resolve_metrics_fallback_config()
+                metrics = extract_synthesis_metrics(
+                    result.stdout,
+                    llm_fallback=True,
+                    provider_name=_fallback_provider,
+                    model=_fallback_model,
+                )
 
                 # Phase 1.5: Contract repair if main synthesis was substantial
                 # but contract/metrics extraction failed
@@ -1121,6 +1127,28 @@ class ValidateStorySynthesisHandler(BaseHandler):
         logger.warning("Story file not found for %r — skipping patch application", story_slug)
         return None
 
+    def _resolve_metrics_fallback_config(self) -> tuple[str | None, str | None]:
+        """Resolve provider name and model for LLM metrics extraction fallback.
+
+        Resolution order: extraction_provider > helper > master.
+        Returns (provider_name, model) tuple; either may be None if unconfigured.
+        """
+        synthesis_config = self.config.compiler.synthesis
+        if synthesis_config.extraction_provider:
+            provider_name = synthesis_config.extraction_provider
+            model = synthesis_config.extraction_model or (
+                self.config.providers.helper.model
+                if self.config.providers.helper
+                else self.config.providers.master.model
+            )
+        elif self.config.providers.helper:
+            provider_name = self.config.providers.helper.provider
+            model = synthesis_config.extraction_model or self.config.providers.helper.model
+        else:
+            provider_name = self.config.providers.master.provider
+            model = synthesis_config.extraction_model or self.config.providers.master.model
+        return provider_name, model
+
     def _extract_deterministic_metrics(
         self,
         anonymized_validations: list[Any],
@@ -1209,7 +1237,13 @@ class ValidateStorySynthesisHandler(BaseHandler):
         repair_parsed, repair_quality = _extract_validation_resolution(repair_stdout)
 
         # Extract metrics from repair output
-        repair_metrics = extract_synthesis_metrics(repair_stdout)
+        _fallback_provider, _fallback_model = self._resolve_metrics_fallback_config()
+        repair_metrics = extract_synthesis_metrics(
+            repair_stdout,
+            llm_fallback=True,
+            provider_name=_fallback_provider,
+            model=_fallback_model,
+        )
 
         logger.info(
             "Contract repair pass result: resolution=%s quality=%s metrics=%s",

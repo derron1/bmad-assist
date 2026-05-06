@@ -197,10 +197,27 @@ class TestComputeResolution:
         parsed = {"resolution": "resolved", "fixed_critical": 2, "fixed_high": 1}
         assert compute_resolution(parsed, "REJECT", evidence) == "resolved"
 
-    def test_parsed_resolved_zero_fixes_halts(self) -> None:
-        """LLM says resolved but reports 0 fixes while evidence shows issues → halt."""
+    def test_parsed_resolved_zero_fixes_inferred_dismissal(self) -> None:
+        """LLM says resolved, 0 fixes, no remaining → inferred dismissal → resolved.
+
+        With the accounting identity (dismissed = evidence - fixed - remaining),
+        missing remaining defaults to 0, so dismissed = evidence.  The findings
+        are inferred as dismissed (false positives).
+        """
         evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
         parsed = {"resolution": "resolved", "fixed_critical": 0, "fixed_high": 0}
+        assert compute_resolution(parsed, "REJECT", evidence) == "resolved"
+
+    def test_parsed_resolved_remaining_equals_evidence_halts(self) -> None:
+        """LLM says resolved, 0 fixes, remaining == evidence → nothing addressed → halt."""
+        evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 2,
+            "remaining_high": 1,
+        }
         assert compute_resolution(parsed, "REJECT", evidence) == "halt"
 
     def test_parsed_rework(self) -> None:
@@ -500,14 +517,34 @@ class TestSynthesisDecision:
         )
         assert decision.resolution == CanonicalResolution.HALT
 
-    def test_strict_resolved_zero_fixes_with_evidence_halts(self) -> None:
-        """STRICT resolved + 0 fixes + evidence shows pre-existing issues → HALT.
+    def test_strict_resolved_zero_fixes_inferred_dismissal(self) -> None:
+        """STRICT resolved + 0 fixes + no remaining → inferred dismissal → RESOLVED.
 
-        Cross-validation: LLM claims resolved but reports zero fixes while
-        evidence shows there were CRITICAL issues. This is contradictory.
+        With the accounting identity (dismissed = evidence - fixed - remaining),
+        zero fixes and zero remaining means the findings were dismissed as false
+        positives.  This is the core false-positive fix.
         """
         evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
         parsed = {"resolution": "resolved", "fixed_critical": 0, "fixed_high": 0}
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+        assert decision.failure_class is None
+
+    def test_strict_resolved_remaining_equals_evidence_halts(self) -> None:
+        """STRICT resolved + remaining == evidence → nothing addressed → HALT."""
+        evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 2,
+            "remaining_high": 1,
+        }
         decision = make_synthesis_decision(
             parsed=parsed,
             quality=ExtractionQuality.STRICT,
@@ -524,6 +561,193 @@ class TestSynthesisDecision:
         decision = make_synthesis_decision(
             parsed=parsed,
             quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+
+class TestFalsePositiveDismissal:
+    """Tests for false-positive dismissal accounting in cross-validation halt.
+
+    The halt guard uses the accounting identity:
+        dismissed = evidence - fixed - remaining   (inferred from existing fields)
+    so that a synthesis correctly dismissing a finding as a false positive
+    (fixed=0, remaining=0, evidence=1 → inferred dismissed=1) no longer halts.
+
+    Explicit dismissed_critical/dismissed_high fields are also supported when
+    present, taking precedence over inference.
+    """
+
+    # -- Inferred dismissal (no explicit dismissed_* fields) --
+
+    def test_inferred_dismissed_critical_avoids_halt(self) -> None:
+        """evidence=1, fixed=0, remaining=0 → inferred dismissed=1 → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 1, "IMPORTANT": 0}}
+        parsed = {
+            "resolution": "resolved",
+            "verified_critical": 0,
+            "verified_high": 0,
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+    def test_inferred_dismissed_high_avoids_halt(self) -> None:
+        """evidence IMPORTANT=2, fixed=0, remaining=0 → inferred dismissed=2 → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 0, "IMPORTANT": 2}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+    def test_inferred_mixed_fixed_and_dismissed(self) -> None:
+        """evidence=3, fixed=1, remaining=0 → inferred dismissed=2 → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 1,
+            "fixed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+    def test_remaining_equals_evidence_halts(self) -> None:
+        """evidence=2, fixed=0, remaining=2 → dismissed=0, nothing addressed → HALT.
+
+        Note: parse_resolution_block would already override 'resolved' to 'rework'
+        when remaining > 0, but this tests _decision_from_parsed directly with a
+        parsed dict that bypassed that override.
+        """
+        evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 0}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 2,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        # inferred dismissed = 2 - 0 - 2 = 0, fixed = 0, total_accounted = 0 → HALT
+        assert decision.resolution == CanonicalResolution.HALT
+
+    # -- Explicit dismissed fields (future prompt support) --
+
+    def test_explicit_dismissed_critical_avoids_halt(self) -> None:
+        """Explicit dismissed_critical=1 with evidence=1 → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 1, "IMPORTANT": 0}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "dismissed_critical": 1,
+            "dismissed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+    def test_explicit_zero_dismissed_zero_fixed_halts(self) -> None:
+        """Explicit dismissed=0, fixed=0 with evidence → HALT."""
+        evidence = {"findings_summary": {"CRITICAL": 2, "IMPORTANT": 1}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "dismissed_critical": 0,
+            "dismissed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        assert decision.resolution == CanonicalResolution.HALT
+        assert decision.failure_class == FailureClass.HALT
+
+    # -- Backward compat & wrapper --
+
+    def test_no_remaining_fields_infers_from_defaults(self) -> None:
+        """Missing remaining_* defaults to 0 → inferred dismissed = evidence → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 1, "IMPORTANT": 0}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.STRICT,
+            evidence_verdict="REJECT",
+            evidence_score_data=evidence,
+        )
+        # remaining defaults to 0, so inferred dismissed = 1 - 0 - 0 = 1
+        assert decision.resolution == CanonicalResolution.RESOLVED
+
+    def test_compute_resolution_inferred_dismissal(self) -> None:
+        """compute_resolution wrapper infers dismissal from existing fields."""
+        evidence = {"findings_summary": {"CRITICAL": 1, "IMPORTANT": 0}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        assert compute_resolution(parsed, "REJECT", evidence) == "resolved"
+
+    def test_degraded_quality_inferred_dismissal(self) -> None:
+        """DEGRADED extraction with inferred dismissal → RESOLVED."""
+        evidence = {"findings_summary": {"CRITICAL": 1, "IMPORTANT": 1}}
+        parsed = {
+            "resolution": "resolved",
+            "fixed_critical": 0,
+            "fixed_high": 0,
+            "remaining_critical": 0,
+            "remaining_high": 0,
+        }
+        decision = make_synthesis_decision(
+            parsed=parsed,
+            quality=ExtractionQuality.DEGRADED,
             evidence_verdict="REJECT",
             evidence_score_data=evidence,
         )

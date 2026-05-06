@@ -117,6 +117,8 @@ RESOLUTION_COUNT_FIELDS = (
     "verified_high",
     "fixed_critical",
     "fixed_high",
+    "dismissed_critical",
+    "dismissed_high",
     "remaining_critical",
     "remaining_high",
 )
@@ -295,8 +297,18 @@ def _decision_from_parsed(
         )
 
     # resolution_str == "resolved"
-    # Cross-validate: if evidence shows pre-synthesis issues existed but LLM claims
-    # zero fixes, that is suspicious → halt rather than silently accept.
+    # Cross-validate: if evidence shows pre-synthesis issues existed but the LLM
+    # cannot account for their disposition, that is suspicious.
+    #
+    # Disposition accounting uses fields the LLM already emits:
+    #   dismissed = evidence - fixed - remaining   (inferred)
+    #   evidence  = fixed + dismissed + remaining   (invariant)
+    #
+    # A synthesis that correctly identifies a CRITICAL as a false positive will
+    # report verified_critical=0, fixed_critical=0, remaining_critical=0.  The
+    # inferred dismissed count (evidence - 0 - 0 = evidence) covers the gap.
+    # Halt only when fixed + inferred_dismissed == 0, i.e. remaining == evidence
+    # (nothing was addressed at all).
     if evidence_score_data:
         findings = evidence_score_data.get("findings_summary", {})
         pre_critical = findings.get("CRITICAL", 0)
@@ -304,14 +316,34 @@ def _decision_from_parsed(
         if pre_critical > 0 or pre_important > 0:
             fixed_critical = parsed.get("fixed_critical", 0)
             fixed_high = parsed.get("fixed_high", 0)
-            if isinstance(fixed_critical, int) and isinstance(fixed_high, int):
-                if fixed_critical + fixed_high == 0:
+            # Use explicit dismissed fields if present, otherwise infer from
+            # the accounting identity: dismissed = evidence - fixed - remaining
+            remaining_critical = parsed.get("remaining_critical", 0)
+            remaining_high = parsed.get("remaining_high", 0)
+            counts_valid = all(
+                isinstance(v, int)
+                for v in (fixed_critical, fixed_high, remaining_critical, remaining_high)
+            )
+            if counts_valid:
+                dismissed_critical = parsed.get("dismissed_critical")
+                dismissed_high = parsed.get("dismissed_high")
+                if isinstance(dismissed_critical, int) and isinstance(dismissed_high, int):
+                    # Explicit dismissed fields present — use them directly
+                    inferred_dismissed = dismissed_critical + dismissed_high
+                else:
+                    # Infer from accounting identity
+                    inferred_dismissed = max(
+                        0,
+                        (pre_critical - fixed_critical - remaining_critical)
+                        + (pre_important - fixed_high - remaining_high),
+                    )
+                total_accounted = fixed_critical + fixed_high + inferred_dismissed
+                # Halt only when nothing accounts for the evidence
+                if total_accounted == 0:
                     logger.warning(
                         "Cross-validation halt: LLM claims resolved but "
-                        "fixed_critical=%d, fixed_high=%d while evidence shows "
+                        "fixed+dismissed=0 while evidence shows "
                         "CRITICAL=%d, IMPORTANT=%d (quality=%s)",
-                        fixed_critical,
-                        fixed_high,
                         pre_critical,
                         pre_important,
                         quality.value,
@@ -322,9 +354,20 @@ def _decision_from_parsed(
                         failure_class=FailureClass.HALT,
                         raw_parsed=parsed,
                         evidence_summary=(
-                            f"LLM claims resolved but reports 0 fixes despite "
-                            f"evidence showing CRITICAL={pre_critical}, IMPORTANT={pre_important}"
+                            f"LLM claims resolved but reports 0 fixes and 0 dismissals "
+                            f"despite evidence showing CRITICAL={pre_critical}, "
+                            f"IMPORTANT={pre_important}"
                         ),
+                    )
+                # Log when all findings were dismissed (none fixed) for audit
+                if fixed_critical + fixed_high == 0 and inferred_dismissed > 0:
+                    logger.info(
+                        "Cross-validation note: all findings inferred as dismissed "
+                        "(dismissed=%d, pre_critical=%d, pre_important=%d). "
+                        "Accepting resolution.",
+                        inferred_dismissed,
+                        pre_critical,
+                        pre_important,
                     )
 
     return SynthesisDecision(

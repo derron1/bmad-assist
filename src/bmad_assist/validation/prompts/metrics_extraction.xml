@@ -1,0 +1,66 @@
+<workflow>
+  <mission>Extract structured quality and consensus metrics from a synthesis report</mission>
+
+  <context>
+    <input name="synthesis_output">{synthesis_output}</input>
+    <input name="sections_needed">{sections_needed}</input>
+  </context>
+
+  <instructions>
+    <critical>Output ONLY valid JSON matching the schema below. No markdown, no explanation, no code blocks.</critical>
+    <critical>DO NOT modify field names. Use EXACTLY the keys shown in the schema.</critical>
+    <critical>When the synthesis text is ambiguous or you cannot determine a value,
+      prefer the least assumptive valid value: 0.0 for float scores, 0 for integer counts.</critical>
+
+    <step n="1" goal="Assess quality signals from the synthesis report">
+      <action>Calculate actionable_ratio (0.0-1.0):
+        What proportion of verified findings include clear action items, fixes, or next steps?</action>
+      <action>Calculate specificity_score (0.0-1.0):
+        How specific vs vague are the verified findings?
+        Consider file references, line numbers, exact requirements cited.</action>
+      <action>Calculate evidence_quality (0.0-1.0):
+        How well do findings cite sources (PRD, architecture docs, acceptance criteria, code)?</action>
+      <action>Calculate internal_consistency (0.0-1.0):
+        Are there contradictions or conflicting assessments in the synthesis?
+        1.0 = fully consistent, 0.0 = severely contradictory.</action>
+    </step>
+
+    <step n="2" goal="Extract consensus data from the synthesis report">
+      <action>Count agreed_findings: Number of findings verified/agreed upon by multiple validators.</action>
+      <action>Count unique_findings: Number of findings raised by only a single validator.</action>
+      <action>Count disputed_findings: Number of findings with conflicting assessments between validators.</action>
+      <action>Count missed_findings: Findings missed by all validators but identified in synthesis. Use 0 if not determinable.</action>
+      <action>Calculate agreement_score (0.0-1.0): Overall agreement ratio across validators.</action>
+      <action>Count false_positive_count: Number of findings dismissed as false positives.</action>
+    </step>
+  </instructions>
+
+  <output format="json">
+    <critical>Output ONLY the JSON object below with the exact field names shown.</critical>
+    <critical>All float scores must be between 0.0 and 1.0.</critical>
+    <critical>All integer counts must be non-negative.</critical>
+    <critical>The sections_needed input tells you which sections to include.
+      If "both", include both "quality" and "consensus".
+      If "quality", include only the "quality" section.
+      If "consensus", include only the "consensus" section.
+      Always wrap in a top-level object with the section name(s) as keys.</critical>
+    <schema>
+{{
+  "quality": {{
+    "actionable_ratio": 0.0,
+    "specificity_score": 0.0,
+    "evidence_quality": 0.0,
+    "internal_consistency": 0.0
+  }},
+  "consensus": {{
+    "agreed_findings": 0,
+    "unique_findings": 0,
+    "disputed_findings": 0,
+    "missed_findings": 0,
+    "agreement_score": 0.0,
+    "false_positive_count": 0
+  }}
+}}
+    </schema>
+  </output>
+</workflow>
