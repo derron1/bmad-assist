@@ -301,8 +301,24 @@ remaining_high: {N}
 
   <critical>When the verdict is REJECT, you MUST create Review Follow-ups tasks. The "Action Items Created" count MUST equal the number of unchecked `[ ] [Review][Patch]` and `[ ] [Review][Decision]` tasks emitted below. Do NOT skip this step. Do NOT claim all issues are fixed if you reported deferred items above.</critical>
   <action>Find the "## Tasks / Subtasks" section in the story file.</action>
-  <action>Append a `#### Review Follow-ups (AI)` subsection. Use BMAD's `[Review][...]` tag taxonomy (NOT a legacy `[AI-Review]` tag) and embed the synthesis severity inline so dev-story can prioritize. Map verified-but-unfixed issues to tags as follows, ordered Critical → Low:
-    - **CRITICAL / HIGH** verified-but-unfixed issues → `- [ ] [Review][Patch] {Title} [{file}:{line}] — {SEVERITY}: {one-line detail}`
+  <action>Append a `#### Review Follow-ups (AI)` subsection. Use BMAD's `[Review][...]` tag taxonomy (NOT a legacy `[AI-Review]` tag) and embed the synthesis severity inline so dev-story can prioritize.
+
+  Classify each verified-but-unfixed finding using **scope before severity** — scope/blocked status decides the marker; severity is only used inline for prioritization within a marker class.
+
+  **Marker selection rules — apply in order, first match wins:**
+
+  1. **`[Review][Defer]` — pre-existing / out-of-scope / not addressable in this story.** Use this when ANY of the following holds, regardless of severity:
+     - The fix requires a methodology change, research-authority decision, or work outside the current story's scope.
+     - The finding is pre-existing (predates this story's diff) and not introduced by the current changes.
+     - The body text or verification reasoning contains trigger phrases such as: "Deferred", "deferred to", "research authority", "research-blocked", "research-methodology defect", "methodology change", "out of scope", "out-of-scope", "escalated to", "requires architectural decision", "blocked on external", "cannot be fixed in this story".
+     - The reviewer's own resolution explanation says the issue should not be fixed here.
+  2. **`[Review][Decision]` — needs a human/research-authority call before any code change.** Use this when the finding is in scope for the current story but the choice between viable fixes is non-trivial and requires human judgment (typical for MEDIUM ambiguity).
+  3. **`[Review][Patch]` — actionable by `dev_story` in the current story.** Reserved for findings where a concrete code fix can be applied within this story's scope, AND none of the rule-1 triggers apply. Use this for CRITICAL / HIGH verified-but-unfixed issues that are in scope.
+
+  **Conservativity rule — when in doubt between Patch and Defer, prefer Defer.** A `[Review][Defer]` is recoverable (operator can re-promote later); a misclassified `[Review][Patch]` will burn rework cycles trying to fix something `dev_story` cannot resolve.
+
+  Map findings to bullets, ordered Critical → Low within each marker class:
+    - **CRITICAL / HIGH** verified-but-unfixed issues that pass rule 3 (in scope, no defer triggers) → `- [ ] [Review][Patch] {Title} [{file}:{line}] — {SEVERITY}: {one-line detail}`
     - **MEDIUM** issues that need a human call (rare in autonomous flow) → `- [ ] [Review][Decision] {Title} — {detail}`
     - **LOW / pre-existing / out-of-scope** items the synthesis chose not to fix → `- [x] [Review][Defer] {Title} [{file}:{line}] — deferred from AI review ({one-line reason})`
   </action>
