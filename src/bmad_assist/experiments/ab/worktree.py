@@ -26,9 +26,7 @@ class WorktreeInfo:
     variant_label: str
 
 
-def _run_git(
-    args: list[str], cwd: Path, *, check: bool = True
-) -> subprocess.CompletedProcess[str]:
+def _run_git(args: list[str], cwd: Path, *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a git command and return the result.
 
     Args:

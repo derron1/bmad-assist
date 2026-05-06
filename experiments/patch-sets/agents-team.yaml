@@ -1,0 +1,15 @@
+name: agents-team
+description: |
+  A/B variant patch-set: identical to baseline for every workflow EXCEPT
+  code-review, which is replaced with the v6.4-compatible "Agents Team"
+  framing patch. Used by experiments/ab-tests/agents-team-code-review-001.yaml
+  variant_b.
+
+patches:
+  create-story: ${project}/.bmad-assist/patches/create-story.patch.yaml
+  validate-story: ${project}/.bmad-assist/patches/validate-story.patch.yaml
+  dev-story: ${project}/.bmad-assist/patches/dev-story.patch.yaml
+  code-review: ../patches/code-review-agents-team.patch.yaml
+  retrospective: ${project}/.bmad-assist/patches/retrospective.patch.yaml
+  qa-plan-generate: ${project}/.bmad-assist/patches/qa-plan-generate.patch.yaml
+  qa-plan-execute: ${project}/.bmad-assist/patches/qa-plan-execute.patch.yaml

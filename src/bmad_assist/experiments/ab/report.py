@@ -52,14 +52,11 @@ def generate_ab_comparison(
     lines.append("## Results Summary")
     lines.append("")
     lines.append(
-        f"| Metric | Variant A ({variant_a.label}) "
-        f"| Variant B ({variant_b.label}) | Delta |"
+        f"| Metric | Variant A ({variant_a.label}) | Variant B ({variant_b.label}) | Delta |"
     )
     lines.append("|--------|:---:|:---:|:---:|")
 
-    lines.append(
-        f"| Status | {variant_a.status.value} | {variant_b.status.value} | - |"
-    )
+    lines.append(f"| Status | {variant_a.status.value} | {variant_b.status.value} | - |")
 
     delta_completed = variant_b.stories_completed - variant_a.stories_completed
     delta_str = f"+{delta_completed}" if delta_completed > 0 else str(delta_completed)
@@ -77,11 +74,7 @@ def generate_ab_comparison(
 
     # Duration
     delta_dur = variant_b.duration_seconds - variant_a.duration_seconds
-    pct = (
-        (delta_dur / variant_a.duration_seconds * 100)
-        if variant_a.duration_seconds > 0
-        else 0
-    )
+    pct = (delta_dur / variant_a.duration_seconds * 100) if variant_a.duration_seconds > 0 else 0
     lines.append(
         f"| Duration | {variant_a.duration_seconds:.1f}s "
         f"| {variant_b.duration_seconds:.1f}s "
@@ -99,9 +92,9 @@ def generate_ab_comparison(
     b_cfg = config.variant_b
     lines.append(f"| Config | {a_cfg.config} | {b_cfg.config} |")
     lines.append(f"| Patch-Set | {a_cfg.patch_set} | {b_cfg.patch_set} |")
-    if a_cfg.workflow_set or b_cfg.workflow_set:
+    if a_cfg.customize_set or b_cfg.customize_set:
         lines.append(
-            f"| Workflow-Set | {a_cfg.workflow_set or '-'} | {b_cfg.workflow_set or '-'} |"
+            f"| Customize-Set | {a_cfg.customize_set or '-'} | {b_cfg.customize_set or '-'} |"
         )
     if a_cfg.template_set or b_cfg.template_set:
         lines.append(

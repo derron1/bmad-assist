@@ -146,14 +146,8 @@ class TestCollectVariantArtifacts:
         variant_dir = tmp_path / "variant-a"
 
         stories = _collect_variant_artifacts(variant_dir)
-        synthesis_files = [
-            a for a in stories[0].artifacts
-            if a.path.name.startswith("synthesis")
-        ]
-        review_files = [
-            a for a in stories[0].artifacts
-            if a.path.name.startswith("code-review")
-        ]
+        synthesis_files = [a for a in stories[0].artifacts if a.path.name.startswith("synthesis")]
+        review_files = [a for a in stories[0].artifacts if a.path.name.startswith("code-review")]
         assert len(synthesis_files) > 0
         assert len(review_files) > 0
         # Synthesis priority (1) < review priority (2) → synthesis more important
@@ -168,20 +162,26 @@ class TestBuildVariantSection:
             story_id="3.1",
             mappings=[
                 _ArtifactFile(
-                    path=Path("m.json"), relative_name="m.json",
-                    content='{"mapping": {}}', priority=0,
+                    path=Path("m.json"),
+                    relative_name="m.json",
+                    content='{"mapping": {}}',
+                    priority=0,
                 )
             ],
             artifacts=[
                 _ArtifactFile(
-                    path=Path("r.md"), relative_name="code-reviews/r.md",
-                    content="# Review", priority=2,
+                    path=Path("r.md"),
+                    relative_name="code-reviews/r.md",
+                    content="# Review",
+                    priority=2,
                 )
             ],
             benchmarks=[
                 _ArtifactFile(
-                    path=Path("b.yaml"), relative_name="benchmarks/b.yaml",
-                    content="duration_ms: 123", priority=3,
+                    path=Path("b.yaml"),
+                    relative_name="benchmarks/b.yaml",
+                    content="duration_ms: 123",
+                    priority=3,
                 )
             ],
         )
@@ -202,8 +202,10 @@ class TestEstimateChars:
             story_id="3.1",
             mappings=[
                 _ArtifactFile(
-                    path=Path("m.json"), relative_name="m.json",
-                    content="x" * 100, priority=0,
+                    path=Path("m.json"),
+                    relative_name="m.json",
+                    content="x" * 100,
+                    priority=0,
                 )
             ],
         )

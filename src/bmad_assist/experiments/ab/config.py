@@ -25,7 +25,7 @@ class ABVariantConfig(BaseModel):
     label: str = Field(..., min_length=1)
     config: str = Field(..., min_length=1)
     patch_set: str = Field(..., min_length=1)
-    workflow_set: str | None = Field(default=None)
+    customize_set: str | None = Field(default=None)
     template_set: str | None = Field(default=None)
 
 
@@ -47,9 +47,7 @@ class StoryRef(BaseModel):
     def validate_story_id(cls, v: str) -> str:
         """Validate story ID has epic.story format."""
         if "." not in str(v):
-            raise ValueError(
-                f"Invalid story ID '{v}': must be 'epic.story' format (e.g., '3.1')"
-            )
+            raise ValueError(f"Invalid story ID '{v}': must be 'epic.story' format (e.g., '3.1')")
         return str(v)
 
 
@@ -99,9 +97,7 @@ class ABTestConfig(BaseModel):
     def validate_variant_labels_differ(self) -> ABTestConfig:
         """Ensure variant labels are distinct."""
         if self.variant_a.label == self.variant_b.label:
-            raise ValueError(
-                f"Variant labels must be distinct, both are '{self.variant_a.label}'"
-            )
+            raise ValueError(f"Variant labels must be distinct, both are '{self.variant_a.label}'")
         return self
 
     @property
@@ -148,9 +144,7 @@ def load_ab_test_config(path: Path) -> ABTestConfig:
         raise ConfigError(f"Invalid YAML in {path}: {e}") from e
 
     if not isinstance(data, dict):
-        raise ConfigError(
-            f"A/B test definition must be YAML mapping, got {type(data).__name__}"
-        )
+        raise ConfigError(f"A/B test definition must be YAML mapping, got {type(data).__name__}")
 
     try:
         return ABTestConfig.model_validate(data)

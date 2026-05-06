@@ -119,7 +119,7 @@ class SessionManager:
 
 | # | Criterion | Score | Notes |
 |---|-----------|-------|-------|
-| C1 | {CRITERION_LABELS['C1']} | {c1_pts}/5 | {c1_note} |
+| C1 | {CRITERION_LABELS["C1"]} | {c1_pts}/5 | {c1_note} |
 
 **Auto subtotal: {auto_total}/40**
 
@@ -131,24 +131,24 @@ class SessionManager:
 
 | # | Criterion | Score | Notes |
 |---|-----------|-------|-------|
-| Q2 | {CRITERION_LABELS['Q2']} | /5 | |
+| Q2 | {CRITERION_LABELS["Q2"]} | /5 | |
 
 ### USABILITY
 
 | # | Criterion | Score | Notes |
 |---|-----------|-------|-------|
-| U1 | {CRITERION_LABELS['U1']} | /5 | |
-| U2 | {CRITERION_LABELS['U2']} | /5 | |
-| U3 | {CRITERION_LABELS['U3']} | /5 | |
-| U4 | {CRITERION_LABELS['U4']} | /5 | |
+| U1 | {CRITERION_LABELS["U1"]} | /5 | |
+| U2 | {CRITERION_LABELS["U2"]} | /5 | |
+| U3 | {CRITERION_LABELS["U3"]} | /5 | |
+| U4 | {CRITERION_LABELS["U4"]} | /5 | |
 
 ### COMPLETENESS (manual)
 
 | # | Criterion | Score | Notes |
 |---|-----------|-------|-------|
-| C2 | {CRITERION_LABELS['C2']} | /5 | |
-| C3 | {CRITERION_LABELS['C3']} | /5 | |
-| C4 | {CRITERION_LABELS['C4']} | /5 | |
+| C2 | {CRITERION_LABELS["C2"]} | /5 | |
+| C3 | {CRITERION_LABELS["C3"]} | /5 | |
+| C4 | {CRITERION_LABELS["C4"]} | /5 | |
 
 **Manual subtotal: ___/40**
 

@@ -16,8 +16,7 @@ def assert_response_ok(response: httpx.Response, msg: str = "") -> None:
     """Assert response has 2xx status code."""
     prefix = f"{msg}: " if msg else ""
     assert 200 <= response.status_code < 300, (
-        f"{prefix}Expected 2xx status, got {response.status_code}. "
-        f"Body: {response.text[:200]}"
+        f"{prefix}Expected 2xx status, got {response.status_code}. Body: {response.text[:200]}"
     )
 
 

@@ -50,6 +50,7 @@ def detect_stack(fixture_path: Path) -> str:
     """Detect project stack from marker files. Returns stack name or 'unknown'."""
     _discover_stacks()
     import logging
+
     markers = []
     for name, handler_cls in _HANDLERS.items():
         handler = handler_cls()

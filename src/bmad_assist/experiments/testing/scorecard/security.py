@@ -92,9 +92,15 @@ def extract_npm_audit_issues(audit_json: dict[str, Any]) -> list[dict[str, Any]]
 def empty_security_result(tool_name: str, kloc: float, *, has_fp: bool = False) -> dict[str, Any]:
     """Return a clean 'no issues' security result."""
     result: dict[str, Any] = {
-        "max": 4, "score": 4, "tool": tool_name,
-        "high": 0, "medium": 0, "low": 0, "issues": [],
-        "kloc": round(kloc, 1), "weighted_per_kloc": 0.0,
+        "max": 4,
+        "score": 4,
+        "tool": tool_name,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "issues": [],
+        "kloc": round(kloc, 1),
+        "weighted_per_kloc": 0.0,
     }
     if has_fp:
         result["fp_downgraded"] = 0

@@ -109,6 +109,9 @@ class ManifestInput(BaseModel):
     fixture: str = Field(..., description="Fixture ID requested")
     config: str = Field(..., description="Config template name requested")
     patch_set: str = Field(..., description="Patch-set manifest name requested")
+    customize_set: str | None = Field(
+        default=None, description="Customize-set name requested (v6.4 customize.toml overlays)"
+    )
     loop: str = Field(..., description="Loop template name requested")
 
 
@@ -750,9 +753,7 @@ def build_resolved_config(
                 "provider": template.providers.master.provider,
                 "model": template.providers.master.model,
             },
-            "multi": [
-                {"provider": m.provider, "model": m.model} for m in template.providers.multi
-            ],
+            "multi": [{"provider": m.provider, "model": m.model} for m in template.providers.multi],
         }
     return ResolvedConfig(
         name=template.name,

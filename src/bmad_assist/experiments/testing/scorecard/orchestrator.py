@@ -26,12 +26,21 @@ def _score_functionality(fixture_path: Path, handler: Any) -> dict[str, Any]:
     results: dict[str, Any] = {
         "build": {"max": 10, "score": 0, "success": False, "command": "", "errors": []},
         "unit_tests": {
-            "max": 10, "score": 0, "metric": "0/0",
-            "passed": 0, "failed": 0, "skipped": 0, "errors": [],
+            "max": 10,
+            "score": 0,
+            "metric": "0/0",
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": [],
         },
         "behavior_tests": {
-            "max": 5, "score": 0, "metric": "0/0",
-            "passed": 0, "failed": 0, "notes": "",
+            "max": 5,
+            "score": 0,
+            "metric": "0/0",
+            "passed": 0,
+            "failed": 0,
+            "notes": "",
         },
     }
 
@@ -58,7 +67,9 @@ def _score_functionality(fixture_path: Path, handler: Any) -> dict[str, Any]:
     if fixture_tests_dir.exists():
         test_files = list(fixture_tests_dir.glob("test_*.py"))
         if test_files:
-            results["behavior_tests"]["notes"] = f"{len(test_files)} test files found in {fixture_tests_dir.name}/"
+            results["behavior_tests"]["notes"] = (
+                f"{len(test_files)} test files found in {fixture_tests_dir.name}/"
+            )
             results["behavior_tests"]["score"] = 2
 
     return {
@@ -68,14 +79,29 @@ def _score_functionality(fixture_path: Path, handler: Any) -> dict[str, Any]:
     }
 
 
-def _score_code_quality(fixture_path: Path, handler: Any, functionality_data: dict[str, Any] | None = None) -> dict[str, Any]:
+def _score_code_quality(
+    fixture_path: Path, handler: Any, functionality_data: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Score code quality (20 points) using the detected stack handler."""
     results: dict[str, Any] = {
         "linting": {"max": 6, "score": 0, "tool": "", "errors": 0, "warnings": 0, "top_issues": []},
         "complexity": {
-            "max": 4, "score": 0, "tool": "", "average": 0.0, "max_function": "", "max_value": 0,
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "average": 0.0,
+            "max_function": "",
+            "max_value": 0,
         },
-        "security": {"max": 4, "score": 0, "tool": "", "high": 0, "medium": 0, "low": 0, "issues": []},
+        "security": {
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "issues": [],
+        },
         "test_pass_rate": {"max": 3, "score": 0, "pass_rate": 0.0, "source": "functionality"},
         "code_maturity": {"max": 3, "score": 0, "todos": 0, "placeholders": 0},
     }
@@ -98,7 +124,9 @@ def _score_code_quality(fixture_path: Path, handler: Any, functionality_data: di
     placeholder_count, _ = count_placeholders(fixture_path, stack=stack, extra_src_dirs=extra)
     results["code_maturity"]["todos"] = todo_count
     results["code_maturity"]["placeholders"] = placeholder_count
-    results["code_maturity"]["score"] = round(max(0, 3 - (todo_count + placeholder_count) * 0.25), 1)
+    results["code_maturity"]["score"] = round(
+        max(0, 3 - (todo_count + placeholder_count) * 0.25), 1
+    )
 
     if handler is None:
         # Unknown project type
@@ -138,7 +166,9 @@ def _score_code_quality(fixture_path: Path, handler: Any, functionality_data: di
 
     return {
         "weight": 20,
-        "score": round(sum(r["score"] for r in results.values() if isinstance(r, dict) and "score" in r), 1),
+        "score": round(
+            sum(r["score"] for r in results.values() if isinstance(r, dict) and "score" in r), 1
+        ),
         "details": results,
     }
 
@@ -232,7 +262,9 @@ def main() -> None:
     parser.add_argument("fixture", help="Fixture name (e.g., webhook-relay-001)")
     parser.add_argument("--compare", help="Compare with another fixture")
     parser.add_argument("--output", "-o", help="Output file (default: scorecards/{fixture}.yaml)")
-    parser.add_argument("--fixture-path", help="Path to external fixture directory (overrides fixtures/ lookup)")
+    parser.add_argument(
+        "--fixture-path", help="Path to external fixture directory (overrides fixtures/ lookup)"
+    )
 
     args = parser.parse_args()
 
@@ -246,14 +278,26 @@ def main() -> None:
         baseline = generate_scorecard(args.compare)
         scorecard["comparison"]["baseline_fixture"] = args.compare
         scorecard["comparison"]["delta"] = {
-            "completeness": round(scorecard["scores"]["completeness"]["score"]
-            - baseline["scores"]["completeness"]["score"], 1),
-            "functionality": round(scorecard["scores"]["functionality"]["score"]
-            - baseline["scores"]["functionality"]["score"], 1),
-            "code_quality": round(scorecard["scores"]["code_quality"]["score"]
-            - baseline["scores"]["code_quality"]["score"], 1),
-            "documentation": round(scorecard["scores"]["documentation"]["score"]
-            - baseline["scores"]["documentation"]["score"], 1),
+            "completeness": round(
+                scorecard["scores"]["completeness"]["score"]
+                - baseline["scores"]["completeness"]["score"],
+                1,
+            ),
+            "functionality": round(
+                scorecard["scores"]["functionality"]["score"]
+                - baseline["scores"]["functionality"]["score"],
+                1,
+            ),
+            "code_quality": round(
+                scorecard["scores"]["code_quality"]["score"]
+                - baseline["scores"]["code_quality"]["score"],
+                1,
+            ),
+            "documentation": round(
+                scorecard["scores"]["documentation"]["score"]
+                - baseline["scores"]["documentation"]["score"],
+                1,
+            ),
             "total": round(scorecard["totals"]["raw_score"] - baseline["totals"]["raw_score"], 1),
         }
 
@@ -271,5 +315,5 @@ def main() -> None:
     print(f"  Functionality: {scorecard['scores']['functionality']['score']}/25")
     print(f"  Code Quality:  {scorecard['scores']['code_quality']['score']}/20")
     print(f"  Documentation: {scorecard['scores']['documentation']['score']}/15")
-    ui_score = scorecard['scores']['ui_ux']['score']
+    ui_score = scorecard["scores"]["ui_ux"]["score"]
     print(f"  UI/UX:         {ui_score if ui_score is not None else 'N/A'}/15")

@@ -33,10 +33,8 @@ variant_a:
   label: baseline
   config: opus-haiku-gemini-glm
   patch_set: baseline
-  workflow_set: baseline
 variant_b:
   label: agents-team
   config: opus-haiku-gemini-glm
-  patch_set: baseline
-  workflow_set: code-review-test-001
+  patch_set: agents-team
 scorecard: false

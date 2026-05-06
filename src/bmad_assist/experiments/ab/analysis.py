@@ -265,12 +265,8 @@ def _build_prompt(
         parts.append("</comparison-summary>")
 
     # Variant artifacts
-    parts.append(
-        _build_variant_section(config.variant_a.label, variant_a_stories)
-    )
-    parts.append(
-        _build_variant_section(config.variant_b.label, variant_b_stories)
-    )
+    parts.append(_build_variant_section(config.variant_a.label, variant_a_stories))
+    parts.append(_build_variant_section(config.variant_b.label, variant_b_stories))
 
     # Analysis template
     parts.append("<analysis-template>")
@@ -365,9 +361,7 @@ def generate_ab_analysis(
         return None
 
     # Check token budget
-    total_chars = (
-        _estimate_chars(variant_a_stories) + _estimate_chars(variant_b_stories)
-    )
+    total_chars = _estimate_chars(variant_a_stories) + _estimate_chars(variant_b_stories)
     if total_chars > MAX_TOTAL_CHARS:
         logger.warning(
             "Artifact total (%d chars) exceeds budget (%d), some files may be truncated",

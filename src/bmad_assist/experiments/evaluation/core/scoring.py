@@ -19,7 +19,7 @@ GRADE_THRESHOLDS = {
     "B": 64,  # 80%+ - Minor fixes
     "C": 56,  # 70%+ - Rework needed
     "D": 48,  # 60%+ - Major issues
-    "F": 0,   # <60% - Not usable
+    "F": 0,  # <60% - Not usable
 }
 
 
@@ -82,8 +82,9 @@ def ratio_score(passed: int, total: int) -> tuple[int, str]:
     return pts, f"{passed}/{total}"
 
 
-def count_score(count: int, thresholds: Sequence[tuple[int, int]],
-                lower_is_better: bool = False) -> tuple[int, str]:
+def count_score(
+    count: int, thresholds: Sequence[tuple[int, int]], lower_is_better: bool = False
+) -> tuple[int, str]:
     """Score based on a count value.
 
     Args:
@@ -103,8 +104,9 @@ def count_score(count: int, thresholds: Sequence[tuple[int, int]],
     return pts, f"{count}"
 
 
-def time_score(elapsed_seconds: float,
-               thresholds: Sequence[tuple[float, int]] | None = None) -> tuple[int, str]:
+def time_score(
+    elapsed_seconds: float, thresholds: Sequence[tuple[float, int]] | None = None
+) -> tuple[int, str]:
     """Score based on execution time (lower is better).
 
     Default thresholds: <0.5s=5, <1s=4, <2s=3, <5s=2, <10s=1
@@ -122,6 +124,6 @@ def time_score(elapsed_seconds: float,
 
     # Convert to "speed" (1/time) for scoring
     speed = 1 / elapsed_seconds if elapsed_seconds > 0 else 999
-    speed_thresholds = [(1/t, s) for t, s in thresholds]
+    speed_thresholds = [(1 / t, s) for t, s in thresholds]
     pts = score(speed, speed_thresholds)
     return pts, f"{elapsed_seconds:.2f}s"

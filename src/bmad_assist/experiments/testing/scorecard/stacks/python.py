@@ -96,7 +96,13 @@ class PythonStackHandler(BaseStackHandler):
 
     def score_build(self, fixture_path: Path) -> dict[str, Any]:
         """Score Python build success."""
-        result_dict: dict[str, Any] = {"max": 10, "score": 0, "success": False, "command": "pip install . (temp venv)", "errors": []}
+        result_dict: dict[str, Any] = {
+            "max": 10,
+            "score": 0,
+            "success": False,
+            "command": "pip install . (temp venv)",
+            "errors": [],
+        }
         build_success = False
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -104,13 +110,17 @@ class PythonStackHandler(BaseStackHandler):
                 python_bin = sys.executable or "python"
                 venv_result = subprocess.run(
                     [python_bin, "-m", "venv", str(venv_dir)],
-                    capture_output=True, text=True, timeout=60,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if venv_result.returncode == 0:
                     pip_bin = venv_dir / "bin" / "pip"
                     install_result = subprocess.run(
                         [str(pip_bin), "install", str(fixture_path)],
-                        capture_output=True, text=True, timeout=300,
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
                     )
                     if install_result.returncode == 0:
                         build_success = True
@@ -130,6 +140,7 @@ class PythonStackHandler(BaseStackHandler):
         if not build_success:
             try:
                 import tomllib
+
                 toml_content = (fixture_path / "pyproject.toml").read_bytes()
                 toml_data = tomllib.loads(toml_content.decode())
                 pkg_name = toml_data.get("project", {}).get("name")
@@ -137,7 +148,9 @@ class PythonStackHandler(BaseStackHandler):
                     normalized = pkg_name.replace("-", "_")
                     dry_result = subprocess.run(
                         ["python", "-c", f"import {normalized}"],
-                        capture_output=True, text=True, timeout=30,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
                     )
                     if dry_result.returncode == 0:
                         build_success = True
@@ -159,17 +172,26 @@ class PythonStackHandler(BaseStackHandler):
     def score_unit_tests(self, fixture_path: Path) -> dict[str, Any]:
         """Score Python unit test results."""
         result_dict: dict[str, Any] = {
-            "max": 10, "score": 0, "metric": "0/0",
-            "passed": 0, "failed": 0, "skipped": 0, "errors": [],
+            "max": 10,
+            "score": 0,
+            "metric": "0/0",
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": [],
         }
         if shutil.which("pytest"):
             try:
                 result = subprocess.run(
                     ["pytest", "--tb=short", "-q", str(fixture_path)],
-                    capture_output=True, text=True, timeout=300,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
                 )
                 stdout = result.stdout
-                match = re.search(r"(\d+) passed(?:,\s*(\d+) failed)?(?:,\s*(\d+) skipped)?", stdout)
+                match = re.search(
+                    r"(\d+) passed(?:,\s*(\d+) failed)?(?:,\s*(\d+) skipped)?", stdout
+                )
                 if match:
                     passed = int(match.group(1))
                     failed = int(match.group(2)) if match.group(2) else 0
@@ -189,7 +211,14 @@ class PythonStackHandler(BaseStackHandler):
 
     def score_linting(self, fixture_path: Path) -> dict[str, Any]:
         """Score Python linting results via ruff and mypy."""
-        result_dict: dict[str, Any] = {"max": 6, "score": 0, "tool": "ruff+mypy", "errors": 0, "warnings": 0, "top_issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 6,
+            "score": 0,
+            "tool": "ruff+mypy",
+            "errors": 0,
+            "warnings": 0,
+            "top_issues": [],
+        }
         ruff_score = 0.0
         mypy_score = 0.0
         ruff_errors = 0
@@ -199,7 +228,10 @@ class PythonStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     ["ruff", "check", "--output-format=json", "."],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=60,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if result.returncode < 0:
                     ruff_score = 1.6
@@ -224,7 +256,9 @@ class PythonStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     ["mypy", str(fixture_path), "--no-error-summary", "--ignore-missing-imports"],
-                    capture_output=True, text=True, timeout=60,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if result.returncode < 0:
                     mypy_score = 0.8
@@ -248,21 +282,32 @@ class PythonStackHandler(BaseStackHandler):
     def score_complexity(self, fixture_path: Path) -> dict[str, Any]:
         """Score Python cyclomatic complexity via radon."""
         result_dict: dict[str, Any] = {
-            "max": 4, "score": 0, "tool": "", "average": 0.0, "max_function": "", "max_value": 0,
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "average": 0.0,
+            "max_function": "",
+            "max_value": 0,
         }
         if shutil.which("radon"):
             result_dict["tool"] = "radon"
             try:
                 result = subprocess.run(
                     ["radon", "cc", str(fixture_path), "-a", "-j"],
-                    capture_output=True, text=True, timeout=60,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if result.returncode < 0:
                     result_dict = soft_skip(4, "radon", "radon killed by signal")
                 else:
-                    avg_match = re.search(r"Average complexity:\s*[\w\s]*\(([\d.]+)\)", result.stderr)
+                    avg_match = re.search(
+                        r"Average complexity:\s*[\w\s]*\(([\d.]+)\)", result.stderr
+                    )
                     if not avg_match:
-                        avg_match = re.search(r"Average complexity:\s*[\w\s]*([\d.]+)", result.stderr)
+                        avg_match = re.search(
+                            r"Average complexity:\s*[\w\s]*([\d.]+)", result.stderr
+                        )
                     if avg_match:
                         avg = float(avg_match.group(1))
                         result_dict["average"] = avg
@@ -284,12 +329,22 @@ class PythonStackHandler(BaseStackHandler):
 
     def score_security(self, fixture_path: Path, kloc: float) -> dict[str, Any]:
         """Score Python security analysis via bandit."""
-        result_dict: dict[str, Any] = {"max": 4, "score": 0, "tool": "", "high": 0, "medium": 0, "low": 0, "issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "issues": [],
+        }
         if shutil.which("bandit"):
             try:
                 result = subprocess.run(
                     ["bandit", "-r", str(fixture_path), "-f", "json"],
-                    capture_output=True, text=True, timeout=300,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
                 )
                 if result.returncode < 0:
                     result_dict = soft_skip(4, "bandit", "bandit killed by signal")
@@ -297,7 +352,9 @@ class PythonStackHandler(BaseStackHandler):
                     stdout = result.stdout.strip()
                     if not stdout or stdout == "{}":
                         if result.returncode != 0:
-                            result_dict["errors"] = [f"bandit exited {result.returncode} with empty output"]
+                            result_dict["errors"] = [
+                                f"bandit exited {result.returncode} with empty output"
+                            ]
                         else:
                             result_dict = empty_security_result("bandit", kloc, has_fp=True)
                     else:
@@ -305,8 +362,11 @@ class PythonStackHandler(BaseStackHandler):
                             data = json.loads(stdout)
                             issues = data.get("results", [])
                             result_dict = score_security_gradient(
-                                issues, kloc, tool_name="bandit",
-                                severity_field="issue_severity", rule_id_field="test_id",
+                                issues,
+                                kloc,
+                                tool_name="bandit",
+                                severity_field="issue_severity",
+                                rule_id_field="test_id",
                                 fp_rules=_BANDIT_FP_RULES,
                             )
                         except json.JSONDecodeError:

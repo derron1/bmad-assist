@@ -12,12 +12,12 @@ TODO_PATTERN = re.compile(r"\b(TODO|FIXME|XXX|HACK)\b", re.IGNORECASE)
 
 # Placeholder code patterns (regex, display name)
 PLACEHOLDER_PATTERNS = [
-    (r'\bpass\s*$', 'pass'),
-    (r'raise NotImplementedError', 'NotImplementedError'),
-    (r'panic\("not implemented"\)', 'panic'),
-    (r'unimplemented!\(\)', 'unimplemented!'),
-    (r'// TODO:', 'TODO comment'),
-    (r'^\s*\.\.\.\s*$', 'Ellipsis'),
+    (r"\bpass\s*$", "pass"),
+    (r"raise NotImplementedError", "NotImplementedError"),
+    (r'panic\("not implemented"\)', "panic"),
+    (r"unimplemented!\(\)", "unimplemented!"),
+    (r"// TODO:", "TODO comment"),
+    (r"^\s*\.\.\.\s*$", "Ellipsis"),
 ]
 
 # Test file naming conventions per extension

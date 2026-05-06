@@ -271,12 +271,8 @@ class ABTestRunner:
             scorecard_a = None
             scorecard_b = None
             if config.scorecard and worktree_a is not None and worktree_b is not None:
-                scorecard_a = self._run_scorecard(
-                    worktree_a.path, result_dir / "scorecard-a.yaml"
-                )
-                scorecard_b = self._run_scorecard(
-                    worktree_b.path, result_dir / "scorecard-b.yaml"
-                )
+                scorecard_a = self._run_scorecard(worktree_a.path, result_dir / "scorecard-a.yaml")
+                scorecard_b = self._run_scorecard(worktree_b.path, result_dir / "scorecard-b.yaml")
 
             self._write_ab_manifest(config, variant_a_result, variant_b_result, result_dir)
 
@@ -326,18 +322,14 @@ class ABTestRunner:
                 self._patchset_registry.get(variant.patch_set)
             except ConfigError as e:
                 errors.append(f"Variant {label}: {e}")
-            if variant.workflow_set:
-                ws_dir = self._experiments_dir / "workflows" / variant.workflow_set
-                if not ws_dir.is_dir():
-                    errors.append(
-                        f"Variant {label}: Workflow set directory not found: {ws_dir}"
-                    )
+            if variant.customize_set:
+                cs_dir = self._experiments_dir / "customize-sets" / variant.customize_set
+                if not cs_dir.is_dir():
+                    errors.append(f"Variant {label}: Customize set directory not found: {cs_dir}")
             if variant.template_set:
                 ts_dir = self._experiments_dir / "templates" / variant.template_set
                 if not ts_dir.is_dir():
-                    errors.append(
-                        f"Variant {label}: Template set directory not found: {ts_dir}"
-                    )
+                    errors.append(f"Variant {label}: Template set directory not found: {ts_dir}")
 
         if errors:
             raise ConfigError("A/B test validation failed:\n  " + "\n  ".join(errors))
@@ -410,8 +402,8 @@ class ABTestRunner:
                     for cache_file in source_cache.glob("*.tpl.xml*"):
                         shutil.copy2(cache_file, dest_cache / cache_file.name)
 
-            # Copy workflow set to worktree for compiler discovery
-            self._apply_workflow_set(variant_config, worktree_path)
+            # Copy customize set to worktree for v6.4 customization resolver
+            self._apply_customize_set(variant_config, worktree_path)
 
             # Copy template set to worktree cache (overwrites project cache)
             self._apply_template_set(variant_config, worktree_path)
@@ -456,9 +448,7 @@ class ABTestRunner:
 
                     variant_loop = LoopModel.model_validate(loop_data)
                     allowed = set(
-                        variant_loop.epic_setup
-                        + variant_loop.story
-                        + variant_loop.epic_teardown
+                        variant_loop.epic_setup + variant_loop.story + variant_loop.epic_teardown
                     )
                     filtered = [p for p in config.phases if p in allowed]
                     if len(filtered) < len(config.phases):
@@ -550,9 +540,7 @@ class ABTestRunner:
 
                     # Per-story snapshot: only files produced during this story
                     story_result_dir = result_dir / f"story-{story_ref.id}"
-                    self._snapshot_story_artifacts(
-                        worktree_path, story_result_dir, pre_files
-                    )
+                    self._snapshot_story_artifacts(worktree_path, story_result_dir, pre_files)
 
                     save_state(state, result_dir / "state.yaml")
 
@@ -603,44 +591,39 @@ class ABTestRunner:
             ).model_dump()
         return {}
 
-    def _apply_workflow_set(
+    def _apply_customize_set(
         self,
         variant_config: ABVariantConfig,
         worktree_path: Path,
     ) -> None:
-        """Copy workflow set directories to worktree for compiler discovery.
+        """Copy v6.4 customize.toml files to worktree's `_bmad/custom/` directory.
 
-        Copies each workflow subdirectory from the experiment workflow set
-        into the worktree's `.bmad-assist/workflows/` where the compiler
-        naturally discovers them.
+        Each ``*.toml`` (and ``*.user.toml``) file in the customize-set source
+        directory is copied through unchanged into ``{worktree}/_bmad/custom/``.
+        File names are preserved — e.g. ``bmad-code-review.toml`` lands at
+        ``_bmad/custom/bmad-code-review.toml``, where the v6.4 customization
+        resolver discovers it automatically (no compiler changes needed).
 
         """
-        if not variant_config.workflow_set:
+        if not variant_config.customize_set:
             return
 
-        source_dir = self._experiments_dir / "workflows" / variant_config.workflow_set
+        source_dir = self._experiments_dir / "customize-sets" / variant_config.customize_set
         if not source_dir.is_dir():
-            logger.warning("Workflow set directory not found: %s", source_dir)
+            logger.warning("Customize set directory not found: %s", source_dir)
             return
 
-        for workflow_dir in source_dir.iterdir():
-            if not workflow_dir.is_dir():
-                continue
-            # Only copy valid workflow directories (must have workflow.yaml or workflow.md)
-            if not (workflow_dir / "workflow.yaml").exists() and not (
-                workflow_dir / "workflow.md"
-            ).exists():
-                logger.debug(
-                    "Skipping non-workflow directory: %s", workflow_dir.name
-                )
-                continue
+        dest_dir = worktree_path / "_bmad" / "custom"
+        dest_dir.mkdir(parents=True, exist_ok=True)
 
-            dest = worktree_path / ".bmad-assist" / "workflows" / workflow_dir.name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(workflow_dir, dest, dirs_exist_ok=True)
+        for toml_file in source_dir.glob("*.toml"):
+            if not toml_file.is_file():
+                continue
+            dest = dest_dir / toml_file.name
+            shutil.copy2(toml_file, dest)
             logger.info(
-                "Copied workflow set '%s' → %s",
-                workflow_dir.name,
+                "Copied customize file '%s' → %s",
+                toml_file.name,
                 dest,
             )
 
@@ -785,11 +768,11 @@ class ABTestRunner:
         copied = 0
         for rel_path in sorted(new_files):
             if rel_path.startswith("_bmad-output/implementation-artifacts/"):
-                dest_rel = "artifacts/" + rel_path[len("_bmad-output/implementation-artifacts/"):]
+                dest_rel = "artifacts/" + rel_path[len("_bmad-output/implementation-artifacts/") :]
             elif rel_path.startswith("_bmad-output/qa-artifacts/"):
-                dest_rel = "qa-artifacts/" + rel_path[len("_bmad-output/qa-artifacts/"):]
+                dest_rel = "qa-artifacts/" + rel_path[len("_bmad-output/qa-artifacts/") :]
             elif rel_path.startswith(".bmad-assist/"):
-                suffix = rel_path[len(".bmad-assist/"):]
+                suffix = rel_path[len(".bmad-assist/") :]
                 if suffix.endswith(".tpl.xml") or suffix.endswith(".tpl.xml.meta.yaml"):
                     continue
                 dest_rel = "bmad-assist/" + suffix
@@ -805,9 +788,7 @@ class ABTestRunner:
             copied += 1
 
         if copied:
-            logger.info(
-                "Snapshotted %d files for story to %s", copied, story_result_dir
-            )
+            logger.info("Snapshotted %d files for story to %s", copied, story_result_dir)
 
     def _write_ab_manifest(
         self,

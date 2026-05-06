@@ -121,6 +121,7 @@ def cmd_run(project_name: str) -> None:
     except Exception as e:
         print(f"\nEvaluation failed: {e}")
         import traceback
+
         traceback.print_exc()
         return
 
@@ -176,7 +177,9 @@ def cmd_calc(project_name: str, session_name: str | None = None) -> None:
 
     if not session_path or not session_path.exists():
         print("No session file found.")
-        print(f"Run evaluation first: python -m bmad_assist.experiments.evaluation run {project_name}")
+        print(
+            f"Run evaluation first: python -m bmad_assist.experiments.evaluation run {project_name}"
+        )
         sys.exit(1)
 
     # Calculate and display
@@ -237,7 +240,9 @@ def main() -> None:
         cmd_run(args[1])
     elif command in ("calc", "calculate"):
         if len(args) < 2:
-            print("Usage: python -m bmad_assist.experiments.evaluation calc <project> [session-file]")
+            print(
+                "Usage: python -m bmad_assist.experiments.evaluation calc <project> [session-file]"
+            )
             sys.exit(1)
         session_name = args[2] if len(args) > 2 else None
         cmd_calc(args[1], session_name)

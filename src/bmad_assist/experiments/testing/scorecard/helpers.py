@@ -58,7 +58,9 @@ def score_test_results(
     }
 
 
-def get_src_dirs(fixture_path: Path, stack: str | None = None, extra_src_dirs: list[str] | None = None) -> list[Path]:
+def get_src_dirs(
+    fixture_path: Path, stack: str | None = None, extra_src_dirs: list[str] | None = None
+) -> list[Path]:
     """Return list of standard source directories that exist."""
     candidates = [
         fixture_path / "src",
@@ -82,7 +84,9 @@ def get_src_dirs(fixture_path: Path, stack: str | None = None, extra_src_dirs: l
     return dirs
 
 
-def iter_source_files(fixture_path: Path, stack: str | None = None, extra_src_dirs: list[str] | None = None) -> list[Path]:
+def iter_source_files(
+    fixture_path: Path, stack: str | None = None, extra_src_dirs: list[str] | None = None
+) -> list[Path]:
     """Iterate over all source files in standard directories, excluding vendor dirs."""
     seen: set[Path] = set()
     files = []

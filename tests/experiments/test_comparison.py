@@ -539,6 +539,7 @@ class TestComparisonDiff:
             fixture=ConfigDiff(axis="fixture", values={}, is_same=True),
             config=ConfigDiff(axis="config", values={}, is_same=True),
             patch_set=ConfigDiff(axis="patch_set", values={}, is_same=True),
+            customize_set=ConfigDiff(axis="customize_set", values={}, is_same=True),
             loop=ConfigDiff(axis="loop", values={}, is_same=True),
         )
         assert diff.varying_axes == []
@@ -549,6 +550,7 @@ class TestComparisonDiff:
             fixture=ConfigDiff(axis="fixture", values={}, is_same=True),
             config=ConfigDiff(axis="config", values={}, is_same=True),
             patch_set=ConfigDiff(axis="patch_set", values={}, is_same=False),
+            customize_set=ConfigDiff(axis="customize_set", values={}, is_same=True),
             loop=ConfigDiff(axis="loop", values={}, is_same=True),
         )
         assert diff.varying_axes == ["patch_set"]
@@ -559,9 +561,21 @@ class TestComparisonDiff:
             fixture=ConfigDiff(axis="fixture", values={}, is_same=False),
             config=ConfigDiff(axis="config", values={}, is_same=True),
             patch_set=ConfigDiff(axis="patch_set", values={}, is_same=False),
+            customize_set=ConfigDiff(axis="customize_set", values={}, is_same=True),
             loop=ConfigDiff(axis="loop", values={}, is_same=False),
         )
         assert diff.varying_axes == ["fixture", "patch_set", "loop"]
+
+    def test_varying_axes_includes_customize_set(self) -> None:
+        """varying_axes detects customize_set when only it differs."""
+        diff = ComparisonDiff(
+            fixture=ConfigDiff(axis="fixture", values={}, is_same=True),
+            config=ConfigDiff(axis="config", values={}, is_same=True),
+            patch_set=ConfigDiff(axis="patch_set", values={}, is_same=True),
+            customize_set=ConfigDiff(axis="customize_set", values={}, is_same=False),
+            loop=ConfigDiff(axis="loop", values={}, is_same=True),
+        )
+        assert diff.varying_axes == ["customize_set"]
 
 
 class TestMetricComparison:
@@ -613,6 +627,7 @@ class TestComparisonReport:
             fixture=ConfigDiff(axis="fixture", values={"run-001": "minimal"}, is_same=True),
             config=ConfigDiff(axis="config", values={"run-001": "opus"}, is_same=True),
             patch_set=ConfigDiff(axis="patch_set", values={"run-001": "base"}, is_same=True),
+            customize_set=ConfigDiff(axis="customize_set", values={"run-001": "-"}, is_same=True),
             loop=ConfigDiff(axis="loop", values={"run-001": "standard"}, is_same=True),
         )
         report = ComparisonReport(
@@ -633,6 +648,7 @@ class TestComparisonReport:
             fixture=ConfigDiff(axis="fixture", values={}, is_same=True),
             config=ConfigDiff(axis="config", values={}, is_same=True),
             patch_set=ConfigDiff(axis="patch_set", values={}, is_same=True),
+            customize_set=ConfigDiff(axis="customize_set", values={}, is_same=True),
             loop=ConfigDiff(axis="loop", values={}, is_same=True),
         )
         report = ComparisonReport(
@@ -919,7 +935,7 @@ class TestMarkdownGeneration:
         markdown = generator.generate_markdown(report)
 
         assert "## Runs Compared" in markdown
-        assert "| Run ID | Fixture | Config | Patch-Set | Loop |" in markdown
+        assert "| Run ID | Fixture | Config | Patch-Set | Customize-Set | Loop |" in markdown
         assert "run-001" in markdown
         assert "run-002" in markdown
 

@@ -1,0 +1,12 @@
+# A/B example customize_set: agents-team-frame.
+#
+# Drops a top-of-prompt framing fact into bmad-code-review's persistent_facts.
+# Compare against the patch_set "agents-team" intervention, which injects the
+# same framing per-substep — this customize_set is the BMAD-native top-of-prompt
+# alternative, useful for AB-comparing the two intervention styles.
+
+[workflow]
+
+persistent_facts = [
+  "Conduct this review as a coordinated Agents Team — every check is a team finding, not an individual reviewer's opinion.",
+]

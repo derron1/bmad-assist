@@ -90,7 +90,13 @@ class NodeStackHandler(BaseStackHandler):
 
     def score_build(self, fixture_path: Path) -> dict[str, Any]:
         """Score Node/TS build success."""
-        result_dict: dict[str, Any] = {"max": 10, "score": 0, "success": False, "command": "", "errors": []}
+        result_dict: dict[str, Any] = {
+            "max": 10,
+            "score": 0,
+            "success": False,
+            "command": "",
+            "errors": [],
+        }
         try:
             pkg_json = json.loads((fixture_path / "package.json").read_text(encoding="utf-8"))
         except Exception:
@@ -102,7 +108,10 @@ class NodeStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     ["npm", "run", "build"],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=120,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
                 )
                 result_dict["success"] = result.returncode == 0
                 result_dict["score"] = 10 if result.returncode == 0 else 0
@@ -119,7 +128,10 @@ class NodeStackHandler(BaseStackHandler):
                 try:
                     result = subprocess.run(
                         [str(tsc_bin), "--noEmit"],
-                        cwd=fixture_path, capture_output=True, text=True, timeout=120,
+                        cwd=fixture_path,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
                     )
                     result_dict["success"] = result.returncode == 0
                     result_dict["score"] = 10 if result.returncode == 0 else 0
@@ -139,8 +151,13 @@ class NodeStackHandler(BaseStackHandler):
     def score_unit_tests(self, fixture_path: Path) -> dict[str, Any]:
         """Score Node/TS unit test results."""
         result_dict: dict[str, Any] = {
-            "max": 10, "score": 0, "metric": "0/0",
-            "passed": 0, "failed": 0, "skipped": 0, "errors": [],
+            "max": 10,
+            "score": 0,
+            "metric": "0/0",
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": [],
         }
         try:
             pkg_json = json.loads((fixture_path / "package.json").read_text(encoding="utf-8"))
@@ -158,7 +175,10 @@ class NodeStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     [str(vitest_bin), "run", "--reporter=json"],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=300,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
                 )
                 json_text = result.stdout or result.stderr
                 try:
@@ -184,7 +204,10 @@ class NodeStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     [str(jest_bin), "--json"],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=300,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
                 )
                 try:
                     test_data = json.loads(result.stdout)
@@ -201,13 +224,22 @@ class NodeStackHandler(BaseStackHandler):
             except Exception as e:
                 result_dict["errors"] = [str(e)]
         else:
-            result_dict = soft_skip(10, "vitest/jest", "no test framework detected or not installed in node_modules")
+            result_dict = soft_skip(
+                10, "vitest/jest", "no test framework detected or not installed in node_modules"
+            )
 
         return result_dict
 
     def score_linting(self, fixture_path: Path) -> dict[str, Any]:
         """Score ESLint linting results."""
-        result_dict: dict[str, Any] = {"max": 6, "score": 0, "tool": "", "errors": 0, "warnings": 0, "top_issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 6,
+            "score": 0,
+            "tool": "",
+            "errors": 0,
+            "warnings": 0,
+            "top_issues": [],
+        }
         eslint_bin = fixture_path / "node_modules" / ".bin" / "eslint"
         if eslint_bin.exists() or shutil.which("eslint"):
             result_dict["tool"] = "eslint"
@@ -215,22 +247,36 @@ class NodeStackHandler(BaseStackHandler):
             try:
                 result = subprocess.run(
                     eslint_cmd + [".", "--format", "json", "--no-error-on-unmatched-pattern"],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=60,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if result.returncode < 0:
                     result_dict = soft_skip(6, "eslint", "eslint killed by signal")
                 else:
                     stderr_lower = (result.stderr or "").lower()
-                    if any(msg in stderr_lower for msg in (
-                        "couldn't find", "no eslint configuration", "eslintrc",
-                        "config file", "plugin", "failed to load",
-                    )) and not result.stdout.strip():
+                    if (
+                        any(
+                            msg in stderr_lower
+                            for msg in (
+                                "couldn't find",
+                                "no eslint configuration",
+                                "eslintrc",
+                                "config file",
+                                "plugin",
+                                "failed to load",
+                            )
+                        )
+                        and not result.stdout.strip()
+                    ):
                         result_dict = soft_skip(6, "eslint", "ESLint configuration error")
                     else:
                         try:
                             eslint_data = json.loads(result.stdout) if result.stdout.strip() else []
                             error_count = sum(
-                                1 for entry in eslint_data
+                                1
+                                for entry in eslint_data
                                 for msg in entry.get("messages", [])
                                 if msg.get("severity") == 2
                             )
@@ -251,27 +297,44 @@ class NodeStackHandler(BaseStackHandler):
     def score_complexity(self, fixture_path: Path) -> dict[str, Any]:
         """Score TypeScript complexity (not measured)."""
         return {
-            "max": 4, "score": 0, "tool": "none",
+            "max": 4,
+            "score": 0,
+            "tool": "none",
             "not_measured": True,
             "reason": "no reliable TypeScript complexity tool available",
         }
 
     def score_security(self, fixture_path: Path, kloc: float) -> dict[str, Any]:
         """Score npm audit security results."""
-        result_dict: dict[str, Any] = {"max": 4, "score": 0, "tool": "", "high": 0, "medium": 0, "low": 0, "issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "issues": [],
+        }
         if shutil.which("npm"):
             try:
                 result = subprocess.run(
                     ["npm", "audit", "--json"],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=120,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
                 )
                 if result.returncode < 0:
-                    result_dict = soft_skip(4, "npm_audit", f"npm audit killed by signal {result.returncode}")
+                    result_dict = soft_skip(
+                        4, "npm_audit", f"npm audit killed by signal {result.returncode}"
+                    )
                 else:
                     stdout = result.stdout.strip()
                     if not stdout:
                         if result.returncode != 0:
-                            result_dict["errors"] = [f"npm audit exited {result.returncode} with empty output"]
+                            result_dict["errors"] = [
+                                f"npm audit exited {result.returncode} with empty output"
+                            ]
                         else:
                             result_dict = empty_security_result("npm_audit", kloc)
                     else:
@@ -279,14 +342,18 @@ class NodeStackHandler(BaseStackHandler):
                             audit_data = json.loads(stdout)
                             if "error" in audit_data:
                                 result_dict = empty_security_result("npm_audit", kloc)
-                                result_dict["warning"] = "npm audit returned error (misconfigured project?)"
+                                result_dict["warning"] = (
+                                    "npm audit returned error (misconfigured project?)"
+                                )
                             else:
                                 npm_issues = extract_npm_audit_issues(audit_data)
                                 if npm_issues is None:
                                     result_dict = empty_security_result("npm_audit", kloc)
                                 else:
                                     result_dict = score_security_gradient(
-                                        npm_issues, kloc, tool_name="npm_audit",
+                                        npm_issues,
+                                        kloc,
+                                        tool_name="npm_audit",
                                     )
                         except json.JSONDecodeError:
                             result_dict["errors"] = ["failed to parse npm audit output"]

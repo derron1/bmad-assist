@@ -1046,16 +1046,16 @@ def experiment_ab(
         f"  Variant A: {config.variant_a.label} "
         f"(config={config.variant_a.config}, patch={config.variant_a.patch_set})"
     )
-    if config.variant_a.workflow_set:
-        console.print(f"    workflow_set={config.variant_a.workflow_set}")
+    if config.variant_a.customize_set:
+        console.print(f"    customize_set={config.variant_a.customize_set}")
     if config.variant_a.template_set:
         console.print(f"    template_set={config.variant_a.template_set}")
     console.print(
         f"  Variant B: {config.variant_b.label} "
         f"(config={config.variant_b.config}, patch={config.variant_b.patch_set})"
     )
-    if config.variant_b.workflow_set:
-        console.print(f"    workflow_set={config.variant_b.workflow_set}")
+    if config.variant_b.customize_set:
+        console.print(f"    customize_set={config.variant_b.customize_set}")
     if config.variant_b.template_set:
         console.print(f"    template_set={config.variant_b.template_set}")
     console.print(f"  Scorecard: {'yes' if config.scorecard else 'no'}")
@@ -1071,8 +1071,7 @@ def experiment_ab(
             raise typer.Exit(code=EXIT_CONFIG_ERROR) from None
 
         console.print(
-            "[yellow][Dry run][/yellow] Configuration valid. "
-            "Run without --dry-run to execute."
+            "[yellow][Dry run][/yellow] Configuration valid. Run without --dry-run to execute."
         )
         raise typer.Exit(code=EXIT_SUCCESS)
 

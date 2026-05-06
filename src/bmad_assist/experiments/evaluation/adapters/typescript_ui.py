@@ -329,6 +329,7 @@ class TypeScriptUiAdapter(BaseEvaluator):
         if self.e2e_framework == "playwright":
             try:
                 from bmad_assist.utils.playwright_check import check_playwright
+
                 status = check_playwright()
                 if not status.ready:
                     return 0, 0, f"playwright not ready: {status.error or 'run check-playwright'}"
@@ -440,13 +441,16 @@ class TypeScriptUiAdapter(BaseEvaluator):
         if not success:
             return 0, f"build failed: {output[:100]}"
 
-        return time_score(elapsed, [
-            (5, 5),   # < 5s
-            (15, 4),  # < 15s
-            (30, 3),  # < 30s
-            (60, 2),  # < 1 min
-            (120, 1), # < 2 min
-        ])
+        return time_score(
+            elapsed,
+            [
+                (5, 5),  # < 5s
+                (15, 4),  # < 15s
+                (30, 3),  # < 30s
+                (60, 2),  # < 1 min
+                (120, 1),  # < 2 min
+            ],
+        )
 
     def test_q4_consistency(self) -> tuple[int, str]:
         """Q4: TypeScript type checking passes."""
@@ -460,6 +464,7 @@ class TypeScriptUiAdapter(BaseEvaluator):
 
         # Count errors
         import re
+
         errors = len(re.findall(r"error TS\d+", output))
         if errors == 0:
             errors = output.count("error")

@@ -58,7 +58,9 @@ def score_completeness(fixture_path: Path, handler: Any = None) -> dict[str, Any
         results["no_todos"]["notes"] = "; ".join(todo_files[:5])
 
     # Placeholder patterns
-    placeholder_count, found_patterns = count_placeholders(fixture_path, stack=stack, extra_src_dirs=extra)
+    placeholder_count, found_patterns = count_placeholders(
+        fixture_path, stack=stack, extra_src_dirs=extra
+    )
     results["no_placeholders"]["metric"] = placeholder_count
     results["no_placeholders"]["score"] = round(max(0, 5 - placeholder_count), 1)
     results["no_placeholders"]["patterns_found"] = found_patterns
@@ -79,7 +81,9 @@ def score_completeness(fixture_path: Path, handler: Any = None) -> dict[str, Any
     }
 
 
-def score_documentation(fixture_path: Path, handler: Any = None, stack: str | None = None) -> dict[str, Any]:
+def score_documentation(
+    fixture_path: Path, handler: Any = None, stack: str | None = None
+) -> dict[str, Any]:
     """Score documentation quality (15 points).
 
     - readme_exists (4 pts): README exists and has content
@@ -89,7 +93,13 @@ def score_documentation(fixture_path: Path, handler: Any = None, stack: str | No
     """
     results: dict[str, dict[str, Any]] = {
         "readme_exists": {"max": 4, "score": 0, "exists": False, "length": 0},
-        "readme_sections": {"max": 3, "score": 0, "has_install": False, "has_usage": False, "has_config": False},
+        "readme_sections": {
+            "max": 3,
+            "score": 0,
+            "has_install": False,
+            "has_usage": False,
+            "has_config": False,
+        },
         "api_docs": {"max": 4, "score": 0, "exists": False, "format": "", "location": ""},
         "inline_comments": {"max": 4, "score": 0, "ratio": 0.0, "sampled_files": []},
     }
@@ -161,7 +171,11 @@ def score_documentation(fixture_path: Path, handler: Any = None, stack: str | No
                         total_lines += len(lines)
                         for line in lines:
                             stripped = line.strip()
-                            if stripped.startswith(comment_prefix) or stack == "python" and ('"""' in stripped or "'''" in stripped):
+                            if (
+                                stripped.startswith(comment_prefix)
+                                or stack == "python"
+                                and ('"""' in stripped or "'''" in stripped)
+                            ):
                                 comment_lines += 1
                         sampled_files.append(str(file.relative_to(fixture_path)))
                     except Exception:

@@ -76,20 +76,25 @@ class TestABVariantConfig:
         with pytest.raises(ValidationError):
             ABVariantConfig(label="x", config="c", patch_set="")
 
-    def test_workflow_set_defaults_none(self) -> None:
-        """workflow_set defaults to None when omitted."""
+    def test_customize_set_defaults_none(self) -> None:
+        """customize_set defaults to None when omitted."""
         v = ABVariantConfig(label="x", config="c", patch_set="p")
-        assert v.workflow_set is None
+        assert v.customize_set is None
 
     def test_template_set_defaults_none(self) -> None:
         """template_set defaults to None when omitted."""
         v = ABVariantConfig(label="x", config="c", patch_set="p")
         assert v.template_set is None
 
-    def test_workflow_set_explicit(self) -> None:
-        """workflow_set can be set explicitly."""
-        v = ABVariantConfig(label="x", config="c", patch_set="p", workflow_set="custom-v2")
-        assert v.workflow_set == "custom-v2"
+    def test_customize_set_explicit(self) -> None:
+        """customize_set can be set explicitly."""
+        v = ABVariantConfig(label="x", config="c", patch_set="p", customize_set="agents-team-frame")
+        assert v.customize_set == "agents-team-frame"
+
+    def test_customize_set_accepts_none(self) -> None:
+        """customize_set accepts explicit None."""
+        v = ABVariantConfig(label="x", config="c", patch_set="p", customize_set=None)
+        assert v.customize_set is None
 
     def test_template_set_explicit(self) -> None:
         """template_set can be set explicitly."""
@@ -97,19 +102,22 @@ class TestABVariantConfig:
         assert v.template_set == "optimized-v1"
 
     def test_both_sets_explicit(self) -> None:
-        """Both workflow_set and template_set can be set together."""
+        """Both customize_set and template_set can be set together."""
         v = ABVariantConfig(
-            label="x", config="c", patch_set="p",
-            workflow_set="wf", template_set="tpl",
+            label="x",
+            config="c",
+            patch_set="p",
+            customize_set="cs",
+            template_set="tpl",
         )
-        assert v.workflow_set == "wf"
+        assert v.customize_set == "cs"
         assert v.template_set == "tpl"
 
-    def test_frozen_rejects_workflow_set_mutation(self) -> None:
-        """Frozen model rejects workflow_set mutation."""
-        v = ABVariantConfig(label="x", config="c", patch_set="p", workflow_set="wf")
+    def test_frozen_rejects_customize_set_mutation(self) -> None:
+        """Frozen model rejects customize_set mutation."""
+        v = ABVariantConfig(label="x", config="c", patch_set="p", customize_set="cs")
         with pytest.raises(ValidationError):
-            v.workflow_set = "other"  # type: ignore[misc]
+            v.customize_set = "other"  # type: ignore[misc]
 
     def test_frozen_rejects_template_set_mutation(self) -> None:
         """Frozen model rejects template_set mutation."""
@@ -182,7 +190,11 @@ class TestStoryValidation:
         ABTestConfig(
             name="t",
             fixture="f",
-            stories=[StoryRef(id="3.1", ref="a"), StoryRef(id="3.2", ref="b"), StoryRef(id="10.5", ref="c")],
+            stories=[
+                StoryRef(id="3.1", ref="a"),
+                StoryRef(id="3.2", ref="b"),
+                StoryRef(id="10.5", ref="c"),
+            ],
             phases=["create-story"],
             variant_a=ABVariantConfig(label="a", config="c", patch_set="p"),
             variant_b=ABVariantConfig(label="b", config="c", patch_set="p"),

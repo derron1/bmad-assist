@@ -223,6 +223,7 @@ class BaseEvaluator(ABC):
 
             # Parse pytest-style output
             import re
+
             passed = 0
             failed = 0
 

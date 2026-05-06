@@ -90,7 +90,9 @@ class BaseStackHandler(ABC):
             return []
 
         flags: list[dict[str, Any]] = []
-        for file in iter_source_files(fixture_path, stack=self.name, extra_src_dirs=self.extra_src_dirs):
+        for file in iter_source_files(
+            fixture_path, stack=self.name, extra_src_dirs=self.extra_src_dirs
+        ):
             if file.suffix not in extensions:
                 continue
             try:
@@ -105,10 +107,12 @@ class BaseStackHandler(ABC):
                         guard = proxy.get("guard")
                         if guard is not None and re.search(guard, line):
                             continue
-                        flags.append({
-                            "id": proxy["id"],
-                            "file": str(file.relative_to(fixture_path)),
-                            "description": proxy["description"],
-                        })
+                        flags.append(
+                            {
+                                "id": proxy["id"],
+                                "file": str(file.relative_to(fixture_path)),
+                                "description": proxy["description"],
+                            }
+                        )
 
         return flags

@@ -208,6 +208,7 @@ class PythonLibraryAdapter(BaseEvaluator):
         """C1: Run project's pytest suite."""
         # Set PYTHONPATH for subprocess
         import os
+
         env = os.environ.copy()
         src_path = str(self.project_root / "src")
         env["PYTHONPATH"] = f"{src_path}:{env.get('PYTHONPATH', '')}"
@@ -218,6 +219,7 @@ class PythonLibraryAdapter(BaseEvaluator):
 
         try:
             import subprocess
+
             result = subprocess.run(
                 self.test_command,
                 capture_output=True,
@@ -230,6 +232,7 @@ class PythonLibraryAdapter(BaseEvaluator):
 
             # Parse pytest output
             import re
+
             passed = 0
             failed = 0
 

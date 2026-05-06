@@ -258,9 +258,7 @@ def load_config_template(
 
     if "${project}" in content:
         if project_root is None:
-            raise ConfigError(
-                "project_root parameter required for ${project} variable resolution"
-            )
+            raise ConfigError("project_root parameter required for ${project} variable resolution")
         var_context["project"] = str(project_root)
 
     # Quick-detect format before full variable resolution:
@@ -339,9 +337,7 @@ def load_config_template(
                 raw_config=data,
             )
         except ValidationError as e:
-            raise ConfigError(
-                f"Config template validation failed for {path}: {e}"
-            ) from e
+            raise ConfigError(f"Config template validation failed for {path}: {e}") from e
 
         # Validate providers if extracted
         if template.providers is not None:
@@ -353,9 +349,7 @@ def load_config_template(
 
     # Legacy template mode: strict validation
     if not name:
-        raise ConfigError(
-            f"Config must have 'name' or 'config_name' field: {path}"
-        )
+        raise ConfigError(f"Config must have 'name' or 'config_name' field: {path}")
 
     # Legacy templates require providers section
     if "providers" not in data or data["providers"] is None:

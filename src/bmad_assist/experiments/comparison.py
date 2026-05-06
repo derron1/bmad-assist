@@ -124,7 +124,7 @@ class ConfigDiff(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    axis: Literal["fixture", "config", "patch_set", "loop"] = Field(
+    axis: Literal["fixture", "config", "patch_set", "customize_set", "loop"] = Field(
         ..., description="Which axis this diff represents"
     )
     values: dict[str, str] = Field(..., description="run_id → value mapping for this axis")
@@ -138,6 +138,7 @@ class ComparisonDiff(BaseModel):
         fixture: Fixture axis diff.
         config: Config axis diff.
         patch_set: Patch-set axis diff.
+        customize_set: Customize-set axis diff.
         loop: Loop axis diff.
 
     """
@@ -147,6 +148,7 @@ class ComparisonDiff(BaseModel):
     fixture: ConfigDiff
     config: ConfigDiff
     patch_set: ConfigDiff
+    customize_set: ConfigDiff
     loop: ConfigDiff
 
     @computed_field  # type: ignore[prop-decorator]
@@ -160,6 +162,8 @@ class ComparisonDiff(BaseModel):
             varying.append("config")
         if not self.patch_set.is_same:
             varying.append("patch_set")
+        if not self.customize_set.is_same:
+            varying.append("customize_set")
         if not self.loop.is_same:
             varying.append("loop")
         return varying
@@ -483,9 +487,9 @@ class ComparisonGenerator:
         """
 
         def make_axis_diff(
-            axis: Literal["fixture", "config", "patch_set", "loop"],
+            axis: Literal["fixture", "config", "patch_set", "customize_set", "loop"],
         ) -> ConfigDiff:
-            values = {run.run_id: getattr(run.input, axis) for run in runs}
+            values = {run.run_id: (getattr(run.input, axis, None) or "-") for run in runs}
             unique_values = set(values.values())
             return ConfigDiff(
                 axis=axis,
@@ -497,6 +501,7 @@ class ComparisonGenerator:
             fixture=make_axis_diff("fixture"),
             config=make_axis_diff("config"),
             patch_set=make_axis_diff("patch_set"),
+            customize_set=make_axis_diff("customize_set"),
             loop=make_axis_diff("loop"),
         )
 
@@ -689,12 +694,13 @@ class ComparisonGenerator:
         # Runs Compared table
         lines.append("## Runs Compared")
         lines.append("")
-        lines.append("| Run ID | Fixture | Config | Patch-Set | Loop |")
-        lines.append("|--------|---------|--------|-----------|------|")
+        lines.append("| Run ID | Fixture | Config | Patch-Set | Customize-Set | Loop |")
+        lines.append("|--------|---------|--------|-----------|---------------|------|")
         for run in report.runs:
             lines.append(
                 f"| {run.run_id} | {run.input.fixture} | {run.input.config} | "
-                f"{run.input.patch_set} | {run.input.loop} |"
+                f"{run.input.patch_set} | {run.input.customize_set or '-'} | "
+                f"{run.input.loop} |"
             )
         lines.append("")
 
@@ -711,11 +717,13 @@ class ComparisonGenerator:
         lines.append(header)
         lines.append(separator)
 
-        for axis_name in ["fixture", "config", "patch_set", "loop"]:
+        for axis_name in ["fixture", "config", "patch_set", "customize_set", "loop"]:
             axis_diff = getattr(report.config_diff, axis_name)
             display_name = axis_name.replace("_", "-").title()
             if axis_name == "patch_set":
                 display_name = "Patch-Set"
+            elif axis_name == "customize_set":
+                display_name = "Customize-Set"
             row = f"| {display_name} |"
             for run_id in report.run_ids:
                 row += f" {axis_diff.values[run_id]} |"

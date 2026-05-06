@@ -45,8 +45,7 @@ class TestNormalizePhaseToWorkflow:
     def test_multiple_underscores(self) -> None:
         """Multiple underscores all converted."""
         assert (
-            _normalize_phase_to_workflow("validate_story_synthesis")
-            == "validate-story-synthesis"
+            _normalize_phase_to_workflow("validate_story_synthesis") == "validate-story-synthesis"
         )
 
 
@@ -208,11 +207,11 @@ class TestABTestRunnerValidateInputs:
             runner._validate_inputs(config)
 
 
-class TestABTestRunnerValidateWorkflowSet:
-    """Tests for workflow_set and template_set validation in _validate_inputs."""
+class TestABTestRunnerValidateCustomizeSet:
+    """Tests for customize_set and template_set validation in _validate_inputs."""
 
-    def test_missing_workflow_set_raises(self, tmp_path: Path) -> None:
-        """Raise ConfigError if workflow_set directory doesn't exist."""
+    def test_missing_customize_set_raises(self, tmp_path: Path) -> None:
+        """Raise ConfigError if customize_set directory doesn't exist."""
         exp_dir = _setup_experiment_dir(tmp_path)
 
         runner = ABTestRunner(exp_dir)
@@ -220,12 +219,14 @@ class TestABTestRunnerValidateWorkflowSet:
 
         config = _make_ab_config(
             variant_a=ABVariantConfig(
-                label="baseline", config="opus-solo", patch_set="baseline",
-                workflow_set="nonexistent",
+                label="baseline",
+                config="opus-solo",
+                patch_set="baseline",
+                customize_set="nonexistent",
             ),
         )
 
-        with pytest.raises(ConfigError, match="Workflow set directory not found"):
+        with pytest.raises(ConfigError, match="Customize set directory not found"):
             runner._validate_inputs(config)
 
     def test_missing_template_set_raises(self, tmp_path: Path) -> None:
@@ -237,7 +238,9 @@ class TestABTestRunnerValidateWorkflowSet:
 
         config = _make_ab_config(
             variant_b=ABVariantConfig(
-                label="experimental", config="haiku-solo", patch_set="exp",
+                label="experimental",
+                config="haiku-solo",
+                patch_set="exp",
                 template_set="nonexistent",
             ),
         )
@@ -246,7 +249,7 @@ class TestABTestRunnerValidateWorkflowSet:
             runner._validate_inputs(config)
 
     def test_none_sets_pass_validation(self, tmp_path: Path) -> None:
-        """None workflow_set and template_set pass validation (optional)."""
+        """None customize_set and template_set pass validation (optional)."""
         exp_dir = _setup_experiment_dir(tmp_path)
 
         runner = ABTestRunner(exp_dir)
@@ -256,18 +259,20 @@ class TestABTestRunnerValidateWorkflowSet:
         # Should not raise — both sets are None by default
         runner._validate_inputs(config)
 
-    def test_existing_workflow_set_passes(self, tmp_path: Path) -> None:
-        """Valid workflow_set directory passes validation."""
+    def test_existing_customize_set_passes(self, tmp_path: Path) -> None:
+        """Valid customize_set directory passes validation."""
         exp_dir = _setup_experiment_dir(tmp_path)
-        (exp_dir / "workflows" / "custom-v2").mkdir(parents=True)
+        (exp_dir / "customize-sets" / "agents-team-frame").mkdir(parents=True)
 
         runner = ABTestRunner(exp_dir)
         runner._ensure_registries()
 
         config = _make_ab_config(
             variant_a=ABVariantConfig(
-                label="baseline", config="opus-solo", patch_set="baseline",
-                workflow_set="custom-v2",
+                label="baseline",
+                config="opus-solo",
+                patch_set="baseline",
+                customize_set="agents-team-frame",
             ),
         )
         # Should not raise
@@ -283,7 +288,9 @@ class TestABTestRunnerValidateWorkflowSet:
 
         config = _make_ab_config(
             variant_b=ABVariantConfig(
-                label="experimental", config="haiku-solo", patch_set="exp",
+                label="experimental",
+                config="haiku-solo",
+                patch_set="exp",
                 template_set="optimized-v1",
             ),
         )
@@ -291,75 +298,85 @@ class TestABTestRunnerValidateWorkflowSet:
         runner._validate_inputs(config)
 
 
-class TestApplyWorkflowSet:
-    """Tests for ABTestRunner._apply_workflow_set."""
+class TestApplyCustomizeSet:
+    """Tests for ABTestRunner._apply_customize_set."""
 
-    def test_copies_workflow_dirs(self, tmp_path: Path) -> None:
-        """Workflow directories with workflow.yaml are copied to worktree."""
+    def test_copies_toml_files(self, tmp_path: Path) -> None:
+        """TOML files are copied passthrough into worktree's _bmad/custom/."""
         exp_dir = tmp_path / "experiments"
-        ws_dir = exp_dir / "workflows" / "custom-v2" / "create-story"
-        ws_dir.mkdir(parents=True)
-        (ws_dir / "workflow.yaml").write_text("name: create-story\n")
-        (ws_dir / "instructions.xml").write_text("<instructions/>")
+        cs_dir = exp_dir / "customize-sets" / "agents-team-frame"
+        cs_dir.mkdir(parents=True)
+        (cs_dir / "bmad-code-review.toml").write_text(
+            '[workflow]\npersistent_facts = ["team finding"]\n'
+        )
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
 
         runner = ABTestRunner(exp_dir)
         variant = ABVariantConfig(
-            label="x", config="c", patch_set="p", workflow_set="custom-v2",
+            label="x",
+            config="c",
+            patch_set="p",
+            customize_set="agents-team-frame",
         )
-        runner._apply_workflow_set(variant, worktree)
+        runner._apply_customize_set(variant, worktree)
 
-        dest = worktree / ".bmad-assist" / "workflows" / "create-story"
-        assert dest.is_dir()
-        assert (dest / "workflow.yaml").exists()
-        assert (dest / "instructions.xml").exists()
+        dest = worktree / "_bmad" / "custom" / "bmad-code-review.toml"
+        assert dest.is_file()
+        assert "team finding" in dest.read_text()
 
-    def test_skips_non_workflow_dirs(self, tmp_path: Path) -> None:
-        """Directories without workflow.yaml or workflow.md are skipped."""
+    def test_copies_user_toml_files(self, tmp_path: Path) -> None:
+        """``*.user.toml`` files are also copied passthrough."""
         exp_dir = tmp_path / "experiments"
-        ws_dir = exp_dir / "workflows" / "custom-v2" / "not-a-workflow"
-        ws_dir.mkdir(parents=True)
-        (ws_dir / "random.txt").write_text("hello")
+        cs_dir = exp_dir / "customize-sets" / "personal"
+        cs_dir.mkdir(parents=True)
+        (cs_dir / "bmad-dev-story.toml").write_text("[workflow]\n")
+        (cs_dir / "bmad-dev-story.user.toml").write_text("[workflow]\n# user override\n")
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
 
         runner = ABTestRunner(exp_dir)
         variant = ABVariantConfig(
-            label="x", config="c", patch_set="p", workflow_set="custom-v2",
+            label="x",
+            config="c",
+            patch_set="p",
+            customize_set="personal",
         )
-        runner._apply_workflow_set(variant, worktree)
+        runner._apply_customize_set(variant, worktree)
 
-        assert not (worktree / ".bmad-assist" / "workflows" / "not-a-workflow").exists()
+        custom_dir = worktree / "_bmad" / "custom"
+        assert (custom_dir / "bmad-dev-story.toml").is_file()
+        assert (custom_dir / "bmad-dev-story.user.toml").is_file()
+        assert "user override" in (custom_dir / "bmad-dev-story.user.toml").read_text()
 
-    def test_accepts_workflow_md(self, tmp_path: Path) -> None:
-        """Directories with workflow.md are also valid."""
+    def test_missing_source_dir_warns_and_skips(self, tmp_path: Path) -> None:
+        """Missing source directory logs a warning and is a no-op."""
         exp_dir = tmp_path / "experiments"
-        ws_dir = exp_dir / "workflows" / "alt" / "dev-story"
-        ws_dir.mkdir(parents=True)
-        (ws_dir / "workflow.md").write_text("# Dev Story\n")
-
+        exp_dir.mkdir()
         worktree = tmp_path / "worktree"
         worktree.mkdir()
 
         runner = ABTestRunner(exp_dir)
         variant = ABVariantConfig(
-            label="x", config="c", patch_set="p", workflow_set="alt",
+            label="x",
+            config="c",
+            patch_set="p",
+            customize_set="missing",
         )
-        runner._apply_workflow_set(variant, worktree)
-
-        assert (worktree / ".bmad-assist" / "workflows" / "dev-story" / "workflow.md").exists()
+        # Must not raise
+        runner._apply_customize_set(variant, worktree)
+        assert not (worktree / "_bmad").exists()
 
     def test_noop_when_none(self, tmp_path: Path) -> None:
-        """No-op when workflow_set is None."""
+        """No-op when customize_set is None."""
         runner = ABTestRunner(tmp_path)
         variant = ABVariantConfig(label="x", config="c", patch_set="p")
         worktree = tmp_path / "worktree"
         worktree.mkdir()
-        runner._apply_workflow_set(variant, worktree)
-        assert not (worktree / ".bmad-assist").exists()
+        runner._apply_customize_set(variant, worktree)
+        assert not (worktree / "_bmad").exists()
 
 
 class TestApplyTemplateSet:
@@ -378,7 +395,10 @@ class TestApplyTemplateSet:
 
         runner = ABTestRunner(exp_dir)
         variant = ABVariantConfig(
-            label="x", config="c", patch_set="p", template_set="optimized-v1",
+            label="x",
+            config="c",
+            patch_set="p",
+            template_set="optimized-v1",
         )
         runner._apply_template_set(variant, worktree)
 
@@ -409,7 +429,10 @@ class TestApplyTemplateSet:
 
         runner = ABTestRunner(exp_dir)
         variant = ABVariantConfig(
-            label="x", config="c", patch_set="p", template_set="opt",
+            label="x",
+            config="c",
+            patch_set="p",
+            template_set="opt",
         )
         runner._apply_template_set(variant, worktree)
 
@@ -569,7 +592,13 @@ def _init_fixture_git(fixture_path: Path) -> None:
         "PATH": os.environ.get("PATH", ""),
     }
     subprocess.run(["git", "init"], cwd=fixture_path, capture_output=True, check=True, env=env)
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=fixture_path, capture_output=True, check=True, env=env)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=fixture_path,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
 
 
 def _setup_experiment_dir(tmp_path: Path) -> Path:

@@ -842,8 +842,6 @@ class TestDefaultTemplates:
         names = registry.list()
 
         # Dynamically derive expected from actual YAML files on disk
-        yaml_files = sorted(
-            p.stem for p in default_configs_dir.glob("*.yaml")
-        )
+        yaml_files = sorted(p.stem for p in default_configs_dir.glob("*.yaml"))
         assert sorted(names) == yaml_files
         assert len(names) >= 1, "Should discover at least one config template"

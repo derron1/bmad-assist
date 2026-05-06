@@ -36,10 +36,8 @@ variant_a:
   label: baseline
   config: opus-haiku-gemini-glm
   patch_set: baseline
-  workflow_set: baseline
 variant_b:
   label: qa-2.0
   config: opus-haiku-gemini-glm-dv-sec-qa
   patch_set: baseline
-  workflow_set: baseline
 scorecard: true

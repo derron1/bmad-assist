@@ -19,6 +19,7 @@ from .base import BaseEvaluator
 # Try to import httpx, fall back to urllib if not available
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
@@ -79,8 +80,10 @@ class PythonApiAdapter(BaseEvaluator):
         cmd = self.server_command or [
             "uvicorn",
             self.server_module,
-            "--host", self.server_host,
-            "--port", str(self.server_port),
+            "--host",
+            self.server_host,
+            "--port",
+            str(self.server_port),
         ]
 
         # Add PYTHONPATH to include src/
@@ -281,11 +284,15 @@ class PythonApiAdapter(BaseEvaluator):
         """GET request."""
         return self._request("GET", path, **kwargs)
 
-    def post(self, path: str, json: dict[str, Any] | None = None, **kwargs: Any) -> tuple[int, dict[str, Any] | str | None]:
+    def post(
+        self, path: str, json: dict[str, Any] | None = None, **kwargs: Any
+    ) -> tuple[int, dict[str, Any] | str | None]:
         """POST request."""
         return self._request("POST", path, json=json, **kwargs)
 
-    def put(self, path: str, json: dict[str, Any] | None = None, **kwargs: Any) -> tuple[int, dict[str, Any] | str | None]:
+    def put(
+        self, path: str, json: dict[str, Any] | None = None, **kwargs: Any
+    ) -> tuple[int, dict[str, Any] | str | None]:
         """PUT request."""
         return self._request("PUT", path, json=json, **kwargs)
 

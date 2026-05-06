@@ -70,17 +70,15 @@ class PythonCliAdapter(BaseEvaluator):
 
         # Check if we can import the package
         if self.package_name:
-            code, _, _ = self._run_python(
-                "-c", f"import {self.package_name}"
-            )
+            code, _, _ = self._run_python("-c", f"import {self.package_name}")
             self._import_works = code == 0
 
         # Check if CLI module can be invoked
         if self.cli_module:
-            code, stdout, stderr = self._run_python(
-                "-m", self.cli_module, "--help"
+            code, stdout, stderr = self._run_python("-m", self.cli_module, "--help")
+            self._cli_available = code == 0 and (
+                "usage" in stdout.lower() or "usage" in stderr.lower() or len(stdout) > 10
             )
-            self._cli_available = code == 0 and ("usage" in stdout.lower() or "usage" in stderr.lower() or len(stdout) > 10)
 
         self._setup_success = self._import_works or self._cli_available
 
@@ -138,7 +136,9 @@ class PythonCliAdapter(BaseEvaluator):
             return -1, "", "no cli_module configured"
 
         return self._run_python(
-            "-m", self.cli_module, *args,
+            "-m",
+            self.cli_module,
+            *args,
             timeout=timeout,
             input_text=input_text,
         )
@@ -272,10 +272,7 @@ class PythonCliAdapter(BaseEvaluator):
 
     def _test_invalid_args(self) -> tuple[bool, str]:
         """Test that CLI handles invalid arguments gracefully."""
-        code, stdout, stderr = self._run_cli(
-            "--nonexistent-flag-xyz",
-            timeout=10
-        )
+        code, stdout, stderr = self._run_cli("--nonexistent-flag-xyz", timeout=10)
 
         # Should exit non-zero for invalid args
         if code != 0:
@@ -384,13 +381,16 @@ class PythonCliAdapter(BaseEvaluator):
         if code != 0:
             return 0, "CLI failed"
 
-        return time_score(elapsed, [
-            (0.5, 5),   # < 0.5s
-            (1.0, 4),   # < 1s
-            (2.0, 3),   # < 2s
-            (5.0, 2),   # < 5s
-            (10.0, 1),  # < 10s
-        ])
+        return time_score(
+            elapsed,
+            [
+                (0.5, 5),  # < 0.5s
+                (1.0, 4),  # < 1s
+                (2.0, 3),  # < 2s
+                (5.0, 2),  # < 5s
+                (10.0, 1),  # < 10s
+            ],
+        )
 
     def test_q4_consistency(self) -> tuple[int, str]:
         """Q4: Linting and type checking."""

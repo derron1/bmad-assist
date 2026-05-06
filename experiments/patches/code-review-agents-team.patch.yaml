@@ -1,0 +1,94 @@
+patch:
+  name: "code-review-agents-team"
+  version: "1.0.0"
+  author: "bmad-assist experiments"
+  description: |
+    Injects "as an Agents Team" framing into the v6.4 bmad-code-review SKILL.md
+    so that the role identity, goal statement, and parallel-layer mentions all
+    name the team-of-agents framing the experiment is testing.
+
+    Port of legacy experiments/workflows/code-review-test-001/code-review/instructions.xml,
+    which injected "as an Agents Team" into 9 substeps (4a-4i: SOLID, hidden bugs,
+    abstraction, lying tests, performance, tech debt, PEP 8, type safety, security)
+    of the legacy instructions.xml format.
+
+    STRUCTURAL NOTE: In v6.4 the 9 legacy substeps no longer exist in any file
+    the patch can reach. The semantic check categories now live in two places:
+      1. checklist.md  (a static reference list, not loaded into the prompt body)
+      2. steps/step-02-review.md  (loaded JIT at runtime, not part of compiled prompt)
+    Patches operate only on the SKILL.md body (see compiler/skills/_base.py
+    _apply_patch_post_process — body == resolved SKILL.md text). The check
+    categories are also delegated to three subagent skills (Blind Hunter,
+    Edge Case Hunter, Acceptance Auditor) that the SKILL.md body names but
+    does not describe in detail.
+
+    Adaptation: We inject the "Agents Team" framing into every place in
+    SKILL.md where the reviewer's identity / goal / parallel-layer mention
+    appears, so the framing persists through the entire workflow run
+    (description, role, goal, frontmatter description, both var and frontmatter
+    copies, and the parallel-layers naming on the description line).
+
+compatibility:
+  bmad_version: "6.0.0-alpha.22"
+  workflow: "code-review"
+
+# transforms is required to be non-empty by the WorkflowPatch schema.
+# We use a no-op natural-language instruction; all real work is done in
+# post_process below (deterministic regex). This mirrors the experiments
+# pattern of preferring deterministic regex over LLM-mediated transforms.
+transforms:
+  - "No LLM transforms required - all changes are deterministic regex post-processing rules below."
+
+# Deterministic regex injections. All target text taken verbatim from
+# src/bmad_assist/skills/bmad-code-review/SKILL.md. Each pattern is
+# anchored on substrings unique enough that there is no risk of
+# matching unintended content elsewhere in the compiled prompt.
+post_process:
+  # 1. Role declaration (SKILL.md line 10) — the headline identity statement.
+  #    Verbatim target:
+  #      "**Your Role:** You are an elite code reviewer."
+  - pattern: '\*\*Your Role:\*\* You are an elite code reviewer\.'
+    replacement: '**Your Role:** You are an elite code reviewer operating as an Agents Team.'
+    flags: ""
+
+  # 2. Goal sentence (SKILL.md line 8) — the workflow's overarching mission.
+  #    Verbatim target:
+  #      "**Goal:** Review code changes adversarially using parallel review layers and structured triage."
+  - pattern: '\*\*Goal:\*\* Review code changes adversarially using parallel review layers and structured triage\.'
+    replacement: '**Goal:** Review code changes adversarially as an Agents Team using parallel review layers and structured triage.'
+    flags: ""
+
+  # 3. Frontmatter description (SKILL.md line 3 - YAML form, also appears at
+  #    line 70 of compiled body).
+  #    Verbatim target prefix:
+  #      "Review code changes adversarially using parallel review layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor)"
+  #    replace_all-equivalent via global flag — this string appears 3x in the
+  #    compiled body (frontmatter description on the duplicated SKILL block,
+  #    <var name="description">, and the mission CDATA).
+  - pattern: 'Review code changes adversarially using parallel review layers \(Blind Hunter, Edge Case Hunter, Acceptance Auditor\)'
+    replacement: 'Review code changes adversarially as an Agents Team using parallel review layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor)'
+    flags: ""
+
+  # 4. The "Read fully and follow: ./steps/step-01-gather-context.md" line
+  #    is the handoff into step files. Inject a one-line reminder before it
+  #    so the framing carries into the JIT-loaded step files.
+  #    Verbatim target:
+  #      "## FIRST STEP\n\nRead fully and follow: `./steps/step-01-gather-context.md`"
+  - pattern: '## FIRST STEP\s*\n\s*\nRead fully and follow: `\./steps/step-01-gather-context\.md`'
+    replacement: |-
+      ## FIRST STEP
+
+      Throughout every step that follows (gather-context, review, triage, present), operate as an Agents Team — surface SOLID violations, hidden bugs, abstraction smells, lying tests, performance footguns, tech-debt bombs, language compliance gaps, type-safety gaps, and security vulnerabilities collectively, with the breadth a coordinated team would bring.
+
+      Read fully and follow: `./steps/step-01-gather-context.md`
+    flags: ""
+
+validation:
+  must_contain:
+    - "as an Agents Team"
+    - "elite code reviewer operating as an Agents Team"
+    - "adversarially as an Agents Team using parallel review layers"
+  must_not_contain:
+    # If pattern 1 fired correctly, the bare "elite code reviewer." (with
+    # period directly after) should no longer appear.
+    - "elite code reviewer."

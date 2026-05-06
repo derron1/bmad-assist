@@ -82,11 +82,20 @@ class GoStackHandler(BaseStackHandler):
 
     def score_build(self, fixture_path: Path) -> dict[str, Any]:
         """Score Go build success."""
-        result_dict: dict[str, Any] = {"max": 10, "score": 0, "success": False, "command": "go build ./...", "errors": []}
+        result_dict: dict[str, Any] = {
+            "max": 10,
+            "score": 0,
+            "success": False,
+            "command": "go build ./...",
+            "errors": [],
+        }
         try:
             result = subprocess.run(
                 ["go", "build", "./..."],
-                cwd=fixture_path, capture_output=True, text=True, timeout=120,
+                cwd=fixture_path,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             result_dict["success"] = result.returncode == 0
             result_dict["score"] = 10 if result.returncode == 0 else 0
@@ -99,14 +108,23 @@ class GoStackHandler(BaseStackHandler):
     def score_unit_tests(self, fixture_path: Path) -> dict[str, Any]:
         """Score Go unit test results."""
         from ..helpers import score_test_results
+
         result_dict: dict[str, Any] = {
-            "max": 10, "score": 0, "metric": "0/0",
-            "passed": 0, "failed": 0, "skipped": 0, "errors": [],
+            "max": 10,
+            "score": 0,
+            "metric": "0/0",
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": [],
         }
         try:
             result = subprocess.run(
                 ["go", "test", "-json", "./..."],
-                cwd=fixture_path, capture_output=True, text=True, timeout=300,
+                cwd=fixture_path,
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
             passed = failed = skipped = 0
             for line in result.stdout.split("\n"):
@@ -123,16 +141,34 @@ class GoStackHandler(BaseStackHandler):
 
     def score_linting(self, fixture_path: Path) -> dict[str, Any]:
         """Score Go linting results."""
-        result_dict: dict[str, Any] = {"max": 6, "score": 0, "tool": "go vet", "errors": 0, "warnings": 0, "top_issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 6,
+            "score": 0,
+            "tool": "go vet",
+            "errors": 0,
+            "warnings": 0,
+            "top_issues": [],
+        }
 
         if shutil.which("golangci-lint"):
             result_dict["tool"] = "golangci-lint"
             try:
                 result = subprocess.run(
-                    ["golangci-lint", "run", "--no-config", "--disable-all",
-                     "--enable", "govet,errcheck,staticcheck,unused",
-                     "--out-format", "json", "./..."],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=120,
+                    [
+                        "golangci-lint",
+                        "run",
+                        "--no-config",
+                        "--disable-all",
+                        "--enable",
+                        "govet,errcheck,staticcheck,unused",
+                        "--out-format",
+                        "json",
+                        "./...",
+                    ],
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
                 )
                 if result.returncode < 0 or result.returncode >= 2:
                     raise RuntimeError(f"golangci-lint exit code {result.returncode}")
@@ -157,14 +193,22 @@ class GoStackHandler(BaseStackHandler):
     def score_complexity(self, fixture_path: Path) -> dict[str, Any]:
         """Score Go cyclomatic complexity."""
         result_dict: dict[str, Any] = {
-            "max": 4, "score": 0, "tool": "", "average": 0.0, "max_function": "", "max_value": 0,
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "average": 0.0,
+            "max_function": "",
+            "max_value": 0,
         }
         if shutil.which("gocyclo"):
             result_dict["tool"] = "gocyclo"
             try:
                 result = subprocess.run(
                     ["gocyclo", "-avg", "."],
-                    cwd=fixture_path, capture_output=True, text=True, timeout=60,
+                    cwd=fixture_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 found_avg = False
                 for line in result.stdout.split("\n"):
@@ -192,17 +236,29 @@ class GoStackHandler(BaseStackHandler):
 
     def score_security(self, fixture_path: Path, kloc: float) -> dict[str, Any]:
         """Score Go security analysis."""
-        result_dict: dict[str, Any] = {"max": 4, "score": 0, "tool": "", "high": 0, "medium": 0, "low": 0, "issues": []}
+        result_dict: dict[str, Any] = {
+            "max": 4,
+            "score": 0,
+            "tool": "",
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "issues": [],
+        }
         if shutil.which("gosec"):
             try:
                 result = subprocess.run(
                     ["gosec", "-fmt", "json", f"{fixture_path}/..."],
-                    capture_output=True, text=True, timeout=300,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
                 )
                 stdout = result.stdout.strip()
                 if not stdout:
                     if result.returncode != 0:
-                        result_dict["errors"] = [f"gosec exited {result.returncode} with empty output"]
+                        result_dict["errors"] = [
+                            f"gosec exited {result.returncode} with empty output"
+                        ]
                     else:
                         result_dict = empty_security_result("gosec", kloc, has_fp=True)
                 else:
@@ -210,7 +266,10 @@ class GoStackHandler(BaseStackHandler):
                         data = json.loads(stdout)
                         issues = data.get("Issues", [])
                         result_dict = score_security_gradient(
-                            issues, kloc, tool_name="gosec", fp_rules=_GOSEC_FP_RULES,
+                            issues,
+                            kloc,
+                            tool_name="gosec",
+                            fp_rules=_GOSEC_FP_RULES,
                         )
                     except json.JSONDecodeError:
                         result_dict["errors"] = ["failed to parse gosec output"]
@@ -235,12 +294,26 @@ class GoStackHandler(BaseStackHandler):
         try:
             result = subprocess.run(
                 ["go", "vet", "./..."],
-                cwd=fixture_path, capture_output=True, text=True, timeout=60,
+                cwd=fixture_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             errors = len([line for line in result.stderr.split("\n") if line.strip()])
             return {
-                "max": 6, "score": round(max(0, 6 - errors), 1),
-                "tool": "go vet", "errors": errors, "warnings": 0, "top_issues": [],
+                "max": 6,
+                "score": round(max(0, 6 - errors), 1),
+                "tool": "go vet",
+                "errors": errors,
+                "warnings": 0,
+                "top_issues": [],
             }
         except Exception:
-            return {"max": 6, "score": 0, "tool": "go vet", "errors": 0, "warnings": 0, "top_issues": []}
+            return {
+                "max": 6,
+                "score": 0,
+                "tool": "go vet",
+                "errors": 0,
+                "warnings": 0,
+                "top_issues": [],
+            }

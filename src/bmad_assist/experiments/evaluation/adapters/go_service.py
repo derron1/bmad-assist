@@ -359,7 +359,9 @@ class GoServiceAdapter(BaseEvaluator):
         """GET request."""
         return self._request("GET", path, **kwargs)
 
-    def post(self, path: str, json: dict[str, Any] | None = None, **kwargs: Any) -> tuple[int, dict[str, Any] | str | None]:
+    def post(
+        self, path: str, json: dict[str, Any] | None = None, **kwargs: Any
+    ) -> tuple[int, dict[str, Any] | str | None]:
         """POST request."""
         return self._request("POST", path, json_body=json, **kwargs)
 
@@ -400,13 +402,16 @@ class GoServiceAdapter(BaseEvaluator):
         if not success:
             return 0, f"build failed: {err[:100]}"
 
-        return time_score(elapsed, [
-            (2, 5),   # < 2s
-            (5, 4),   # < 5s
-            (10, 3),  # < 10s
-            (30, 2),  # < 30s
-            (60, 1),  # < 1 min
-        ])
+        return time_score(
+            elapsed,
+            [
+                (2, 5),  # < 2s
+                (5, 4),  # < 5s
+                (10, 3),  # < 10s
+                (30, 2),  # < 30s
+                (60, 1),  # < 1 min
+            ],
+        )
 
     def test_q4_consistency(self) -> tuple[int, str]:
         """Q4: go vet and staticcheck pass."""
@@ -432,7 +437,9 @@ class GoServiceAdapter(BaseEvaluator):
                     timeout=60,
                 )
                 if result.returncode != 0:
-                    sc_issues = len(result.stdout.strip().split("\n")) if result.stdout.strip() else 1
+                    sc_issues = (
+                        len(result.stdout.strip().split("\n")) if result.stdout.strip() else 1
+                    )
                     issues += sc_issues
             except Exception:
                 pass

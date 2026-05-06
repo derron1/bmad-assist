@@ -184,14 +184,19 @@ class TestGenerateABComparison:
         assert "p1" in content  # variant_a patch_set
         assert "p2" in content  # variant_b patch_set
 
-    def test_workflow_set_in_config_table(self, tmp_path: Path) -> None:
-        """Workflow-Set row appears when either variant has workflow_set."""
+    def test_customize_set_in_config_table(self, tmp_path: Path) -> None:
+        """Customize-Set row appears when either variant has customize_set."""
         cfg = _make_config(
             variant_a=ABVariantConfig(
-                label="baseline", config="c1", patch_set="p1", workflow_set="custom-v2",
+                label="baseline",
+                config="c1",
+                patch_set="p1",
+                customize_set="agents-team-frame",
             ),
             variant_b=ABVariantConfig(
-                label="experiment", config="c2", patch_set="p2",
+                label="experiment",
+                config="c2",
+                patch_set="p2",
             ),
         )
         va = _make_result(label="baseline")
@@ -199,16 +204,21 @@ class TestGenerateABComparison:
         out = tmp_path / "report.md"
         generate_ab_comparison(cfg, va, vb, out)
         content = out.read_text()
-        assert "| Workflow-Set | custom-v2 | - |" in content
+        assert "| Customize-Set | agents-team-frame | - |" in content
 
     def test_template_set_in_config_table(self, tmp_path: Path) -> None:
         """Template-Set row appears when either variant has template_set."""
         cfg = _make_config(
             variant_a=ABVariantConfig(
-                label="baseline", config="c1", patch_set="p1",
+                label="baseline",
+                config="c1",
+                patch_set="p1",
             ),
             variant_b=ABVariantConfig(
-                label="experiment", config="c2", patch_set="p2", template_set="opt-v1",
+                label="experiment",
+                config="c2",
+                patch_set="p2",
+                template_set="opt-v1",
             ),
         )
         va = _make_result(label="baseline")
@@ -219,26 +229,32 @@ class TestGenerateABComparison:
         assert "| Template-Set | - | opt-v1 |" in content
 
     def test_no_set_rows_when_both_none(self, tmp_path: Path) -> None:
-        """Workflow-Set and Template-Set rows omitted when both are None."""
+        """Customize-Set and Template-Set rows omitted when both are None."""
         cfg = _make_config()
         va = _make_result(label="a")
         vb = _make_result(label="b")
         out = tmp_path / "report.md"
         generate_ab_comparison(cfg, va, vb, out)
         content = out.read_text()
-        assert "Workflow-Set" not in content
+        assert "Customize-Set" not in content
         assert "Template-Set" not in content
 
     def test_both_sets_in_config_table(self, tmp_path: Path) -> None:
-        """Both Workflow-Set and Template-Set rows when both variants have them."""
+        """Both Customize-Set and Template-Set rows when both variants have them."""
         cfg = _make_config(
             variant_a=ABVariantConfig(
-                label="baseline", config="c1", patch_set="p1",
-                workflow_set="wf-a", template_set="tpl-a",
+                label="baseline",
+                config="c1",
+                patch_set="p1",
+                customize_set="cs-a",
+                template_set="tpl-a",
             ),
             variant_b=ABVariantConfig(
-                label="experiment", config="c2", patch_set="p2",
-                workflow_set="wf-b", template_set="tpl-b",
+                label="experiment",
+                config="c2",
+                patch_set="p2",
+                customize_set="cs-b",
+                template_set="tpl-b",
             ),
         )
         va = _make_result(label="baseline")
@@ -246,7 +262,7 @@ class TestGenerateABComparison:
         out = tmp_path / "report.md"
         generate_ab_comparison(cfg, va, vb, out)
         content = out.read_text()
-        assert "| Workflow-Set | wf-a | wf-b |" in content
+        assert "| Customize-Set | cs-a | cs-b |" in content
         assert "| Template-Set | tpl-a | tpl-b |" in content
 
     def test_creates_parent_directories(self, tmp_path: Path) -> None:
