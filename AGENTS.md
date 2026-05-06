@@ -1,4 +1,4 @@
-# CLAUDE.md — Working notes for bmad-assist
+# AGENTS.md — Working notes for bmad-assist
 
 ## What this project is
 
@@ -46,7 +46,7 @@ Patches and customize.toml are not alternatives. The experiment harness exposes 
   1. [skill_layout/variable_resolver.py](src/bmad_assist/skill_layout/variable_resolver.py) — path aliases + customization tokens
   2. [compiler/variable_utils.py](src/bmad_assist/compiler/variable_utils.py) `substitute_variables` — `{var}` and `{{var}}` from the resolved_variables dict
   Unknown tokens are left intact for downstream — by design.
-- **Providers**: `claude-subprocess` (Anthropic CLI), `codex` (OpenAI), `gemini`, `opencode`/`opencode-sdk`, `amp`, `cursor-agent`, `copilot`. Per-phase routing via `phase_models:` in `{project}/bmad-assist.yaml`. Fallback chains supported per-provider.
+- **Providers**: `Codex-subprocess` (Anthropic CLI), `codex` (OpenAI), `gemini`, `opencode`/`opencode-sdk`, `amp`, `cursor-agent`, `copilot`. Per-phase routing via `phase_models:` in `{project}/bmad-assist.yaml`. Fallback chains supported per-provider.
 - **Deep Verify**: parallel critical-path validation alongside main validators; verdict aggregation in [core/loop/handlers/validate_story.py](src/bmad_assist/core/loop/handlers/validate_story.py).
 - **A/B harness**: `experiments/` consumed by `bmad-assist experiment ab <manifest.yaml>`. Runs variants over fixtures with git-worktree isolation; scoring via `experiments/evaluation/` adapters.
 - **Bootstrap**: every run version-stamps installed skills and auto-refreshes on mismatch ("updated legacy → 0.6.0" log line).
@@ -76,7 +76,7 @@ Patches and customize.toml are not alternatives. The experiment harness exposes 
 
 - Phase 7.2 skill-layout migration: COMPLETE. All bundled skills run through `SkillLayoutCompilerBase`. Legacy `workflow.yaml` pipeline deleted.
 - Recent perf: pre-flight slug consistency for create_story; pre-trim validator reports before synthesis cache; skip ESLint/typecheck pre-commit on docs-only diffs.
-- Recent fix: provider error termination is now structured. claude-subprocess surfaces CLI errors as `PhaseResult.fail` with reason.
+- Recent fix: provider error termination is now structured. Codex-subprocess surfaces CLI errors as `PhaseResult.fail` with reason.
 - Recent fix: create_story requires fresh story-file mtime to count as success (catches silent-no-write failures).
 - Recent fix: validation strips activation preamble, fails on empty validator output.
 - Bootstrap version-stamps installed skills + auto-refreshes on mismatch.
