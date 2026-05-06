@@ -22,7 +22,6 @@ Target: Story 10.1
 
 Minimal context.
 
-
 ]]></file>
 <file id="0fa5c5b3" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
 
@@ -44,13 +43,16 @@ ready-for-dev
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
 <var name="epic_num">10</var>
 <var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
-<var name="step_01_preflight_and_context_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/{skill-root}/steps-c/step-02-generation-mode.md</var>
+<var name="step_01_preflight_and_context_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/step-02-generation-mode.md</var>
+<var name="step_02_generation_mode_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/step-03-test-strategy.md</var>
+<var name="step_03_test_strategy_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/step-04-generate-tests.md</var>
+<var name="step_04_generate_tests_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/step-04c-aggregate.md</var>
+<var name="step_04c_aggregate_nextStepFile">.claude/skills/bmad-testarch-atdd/steps-c/step-05-validate-and-complete.md</var>
 <var name="story_file" file_id="0fa5c5b3">embedded in prompt, file id: 0fa5c5b3</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
@@ -249,9 +251,9 @@ Use `/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/kn
 
 ---
 
-## 6. Confirm Inputs
+## 6. Confirm Inputs (headless mode — no confirmation needed)
 
-Summarize loaded inputs and confirm with the user. Then proceed.
+Inputs are loaded; proceed to the next section without asking for user confirmation.
 
 ---
 
@@ -286,7 +288,7 @@ Summarize loaded inputs and confirm with the user. Then proceed.
 - Initialize `generatedTestFiles` to `[]`
 - Set `inputDocuments` to the list of artifact paths loaded in this step (e.g., knowledge fragments, test design documents, configuration files)
 
-Load next step: `{nextStepFile}`
+Load next step: ``
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
@@ -299,6 +301,1069 @@ Load next step: `{nextStepFile}`
 - Skipped sequence steps or missing outputs
   **Master Rule:** Skipping steps is FORBIDDEN.
 
+<!-- STEP: step-02-generation-mode -->
+# Step 2: Generation Mode Selection
+
+## STEP GOAL
+
+Choose the appropriate generation mode for ATDD tests.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Default Mode: AI Generation
+
+Use AI generation when:
+
+- Acceptance criteria are clear
+- Scenarios are standard (CRUD, auth, API, navigation)
+- **If {detected_stack} is `backend`:** Always use AI generation (no browser recording needed)
+
+Proceed directly to test strategy if this applies.
+
+---
+
+## 2. Optional Mode: Recording (Complex UI)
+
+**Skip this section entirely if {detected_stack} is `backend`.** For backend projects, use AI generation from API documentation, OpenAPI/Swagger specs, or source code analysis instead.
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+Use recording when UI interactions need live browser verification.
+
+**Tool selection based on `config.tea_browser_automation`:**
+
+If `auto`:
+
+> **Note:** `${timestamp}` is a placeholder the agent should replace with a unique value (e.g., epoch seconds) for session isolation.
+
+- **Simple recording** (snapshot selectors, capture structure): Use CLI
+  - `playwright-cli -s=tea-atdd-${timestamp} open <url>` → `playwright-cli -s=tea-atdd-${timestamp} snapshot` → extract refs
+- **Complex recording** (drag/drop, wizards, multi-step state): Use MCP
+  - Full browser automation with rich tool semantics
+- **Fallback:** If preferred tool unavailable, use the other; if neither, skip recording
+
+If `cli`:
+
+- Use Playwright CLI for all recording
+- `playwright-cli -s=tea-atdd-${timestamp} open <url>`, `snapshot`, `screenshot`, `click <ref>`, etc.
+
+If `mcp`:
+
+- Use Playwright MCP tools for all recording (current behavior)
+- Confirm MCP availability, record selectors and interactions
+
+If `none`:
+
+- Skip recording mode entirely, use AI generation from documentation
+
+---
+
+## 3. Confirm Mode
+
+State the chosen mode and why. Then proceed.
+
+---
+
+## 4. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-02-generation-mode']
+  lastStep: 'step-02-generation-mode'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-02-generation-mode'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-02-generation-mode'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-03-test-strategy -->
+# Step 3: Test Strategy
+
+## STEP GOAL
+
+Translate acceptance criteria into a prioritized, level-appropriate test plan.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Avoid duplicate coverage across levels
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Map Acceptance Criteria
+
+- Convert each acceptance criterion into test scenarios
+- Include negative and edge cases where risk is high
+
+---
+
+## 2. Select Test Levels
+
+Choose the best level per scenario based on `{detected_stack}`:
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+- **E2E** for critical user journeys
+- **API** for business logic and service contracts
+- **Component** for UI behavior
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+- **Unit** for pure functions, business logic, and edge cases
+- **Integration** for service interactions, database queries, and middleware
+- **API/Contract** for endpoint validation, request/response schemas, and Pact contracts
+- **No E2E** for pure backend projects (no browser-based testing needed)
+
+---
+
+## 3. Prioritize Tests
+
+Assign P0–P3 priorities using risk and business impact.
+
+---
+
+## 4. Confirm Red Phase Requirements
+
+Ensure all tests are designed to **fail before implementation** (TDD red phase).
+
+---
+
+## 5. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-03-test-strategy']
+  lastStep: 'step-03-test-strategy'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-03-test-strategy'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-03-test-strategy'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-04-generate-tests -->
+# Step 4: Orchestrate Adaptive Red-Phase Test Scaffold Generation
+
+## STEP GOAL
+
+Select execution mode deterministically, then generate red-phase API and E2E test scaffolds (TDD RED PHASE) with consistent output contracts across agent-team, subagent, or sequential execution.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Resolve execution mode from config (`tea_execution_mode`, `tea_capability_probe`)
+- ✅ Apply fallback rules deterministically when requested mode is unsupported
+- ✅ Generate red-phase test scaffolds only (TDD red phase)
+- ✅ Wait for required worker steps to complete
+- ❌ Do NOT skip capability checks when probing is enabled
+- ❌ Do NOT generate active passing tests (this is red phase)
+- ❌ Do NOT proceed until required worker steps finish
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Wait for subagent outputs
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, acceptance criteria from Step 1, test strategy from Step 3
+- Focus: orchestration only (mode selection + worker dispatch)
+- Limits: do not generate tests directly (delegate to worker steps)
+- Dependencies: Steps 1-3 outputs
+
+---
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+### 1. Prepare Execution Context
+
+**Generate unique timestamp** for temp file naming:
+
+```javascript
+const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+```
+
+**Prepare input context for both subagents:**
+
+```javascript
+const parseBooleanFlag = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const subagentContext = {
+  story_acceptance_criteria: /* from Step 1 */,
+  test_strategy: /* from Step 3 */,
+  knowledge_fragments_loaded: /* list of fragments */,
+  config: {
+    test_framework: config.test_framework,
+    use_playwright_utils: config.tea_use_playwright_utils,
+    use_pactjs_utils: config.tea_use_pactjs_utils,
+    pact_mcp: config.tea_pact_mcp,  // "mcp" | "none"
+    browser_automation: config.tea_browser_automation,
+    execution_mode: config.tea_execution_mode || 'auto',  // "auto" | "subagent" | "agent-team" | "sequential"
+    capability_probe: parseBooleanFlag(config.tea_capability_probe, true),  // supports booleans and "false"/"true" strings
+    provider_endpoint_map: /* from Step 1/3 context, if use_pactjs_utils enabled */,
+  },
+  timestamp: timestamp
+};
+```
+
+---
+
+### 2. Resolve Execution Mode with Capability Probe
+
+```javascript
+const normalizeUserExecutionMode = (mode) => {
+  if (typeof mode !== 'string') return null;
+  const normalized = mode.trim().toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
+
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'sequential') return 'sequential';
+  if (normalized === 'subagent' || normalized === 'sub agent' || normalized === 'subagents' || normalized === 'sub agents') {
+    return 'subagent';
+  }
+  if (normalized === 'agent team' || normalized === 'agent teams' || normalized === 'agentteam') {
+    return 'agent-team';
+  }
+
+  return null;
+};
+
+const normalizeConfigExecutionMode = (mode) => {
+  if (mode === 'subagent') return 'subagent';
+  if (mode === 'auto' || mode === 'sequential' || mode === 'subagent' || mode === 'agent-team') {
+    return mode;
+  }
+  return null;
+};
+
+// Explicit user instruction in the active run takes priority over config.
+const explicitModeFromUser = normalizeUserExecutionMode(runtime.getExplicitExecutionModeHint?.() || null);
+
+const requestedMode = explicitModeFromUser || normalizeConfigExecutionMode(subagentContext.config.execution_mode) || 'auto';
+const probeEnabled = subagentContext.config.capability_probe;
+
+const supports = {
+  subagent: runtime.canLaunchSubagents?.() === true,
+  agentTeam: runtime.canLaunchAgentTeams?.() === true,
+};
+
+let resolvedMode = requestedMode;
+
+if (requestedMode === 'auto') {
+  if (supports.agentTeam) resolvedMode = 'agent-team';
+  else if (supports.subagent) resolvedMode = 'subagent';
+  else resolvedMode = 'sequential';
+} else if (probeEnabled && requestedMode === 'agent-team' && !supports.agentTeam) {
+  resolvedMode = supports.subagent ? 'subagent' : 'sequential';
+} else if (probeEnabled && requestedMode === 'subagent' && !supports.subagent) {
+  resolvedMode = 'sequential';
+}
+
+subagentContext.execution = {
+  requestedMode,
+  resolvedMode,
+  probeEnabled,
+  supports,
+};
+
+if (!probeEnabled && (requestedMode === 'agent-team' || requestedMode === 'subagent')) {
+  const unsupportedRequestedMode =
+    (requestedMode === 'agent-team' && !supports.agentTeam) || (requestedMode === 'subagent' && !supports.subagent);
+
+  if (unsupportedRequestedMode) {
+    subagentContext.execution.error = `Requested execution mode "${requestedMode}" is unavailable because capability probing is disabled.`;
+    throw new Error(subagentContext.execution.error);
+  }
+}
+```
+
+Resolution precedence:
+
+1. Explicit user request in this run (`agent team` => `agent-team`; `subagent` => `subagent`; `sequential`; `auto`)
+2. `tea_execution_mode` from config
+3. Runtime capability fallback (when probing enabled)
+
+If probing is disabled, honor the requested mode strictly. If that mode cannot be executed at runtime, fail with explicit error instead of silent fallback.
+
+---
+
+### 3. Dispatch Worker A: Red-Phase API Test Generation
+
+**Dispatch worker:**
+
+- **Subagent File:** `./step-04a-subagent-api-failing.md`
+- **Output File:** `/tmp/tea-atdd-api-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
+- **TDD Phase:** RED (scaffold tests with `test.skip()`)
+
+**System Action:**
+
+```
+🚀 Launching Subagent A: RED-PHASE API Test Generation
+📝 Output: /tmp/tea-atdd-api-tests-${timestamp}.json
+⚙️ Mode: ${resolvedMode}
+🔴 TDD Phase: RED (tests emitted as `test.skip()` scaffolds)
+⏳ Status: Running...
+```
+
+---
+
+### 4. Dispatch Worker B: Red-Phase E2E Test Generation
+
+**Dispatch worker:**
+
+- **Subagent File:** `./step-04b-subagent-e2e-failing.md`
+- **Output File:** `/tmp/tea-atdd-e2e-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
+- **TDD Phase:** RED (scaffold tests with `test.skip()`)
+
+**System Action:**
+
+```
+🚀 Launching Subagent B: RED-PHASE E2E Test Generation
+📝 Output: /tmp/tea-atdd-e2e-tests-${timestamp}.json
+⚙️ Mode: ${resolvedMode}
+🔴 TDD Phase: RED (tests emitted as `test.skip()` scaffolds)
+⏳ Status: Running...
+```
+
+---
+
+### 5. Wait for Required Worker Completion
+
+**If `resolvedMode` is `agent-team` or `subagent`:**
+
+```
+⏳ Waiting for subagents to complete...
+  ├── Subagent A (API RED): Running... ⟳
+  └── Subagent B (E2E RED): Running... ⟳
+
+[... time passes ...]
+
+  ├── Subagent A (API RED): Complete ✅
+  └── Subagent B (E2E RED): Complete ✅
+
+✅ All subagents completed successfully!
+```
+
+**If `resolvedMode` is `sequential`:**
+
+```
+✅ Sequential mode: each worker already completed during dispatch.
+```
+
+**Verify both outputs exist:**
+
+```javascript
+const apiOutputExists = fs.existsSync(`/tmp/tea-atdd-api-tests-${timestamp}.json`);
+const e2eOutputExists = fs.existsSync(`/tmp/tea-atdd-e2e-tests-${timestamp}.json`);
+
+if (!apiOutputExists || !e2eOutputExists) {
+  throw new Error('One or both subagent outputs missing!');
+}
+```
+
+---
+
+### 6. TDD Red Phase Report
+
+**Display TDD status:**
+
+```
+🔴 TDD RED PHASE: Test Scaffolds Generated
+
+✅ Both subagents completed:
+- API Tests: Generated with test.skip()
+- E2E Tests: Generated with test.skip()
+
+📋 All tests assert EXPECTED behavior
+📋 Activated tests will FAIL until feature is implemented
+📋 Scaffolds stay skipped until a developer activates the current task
+📋 This is INTENTIONAL (TDD red phase)
+
+Next: Aggregation will verify TDD compliance
+```
+
+---
+
+### 7. Execution Report
+
+**Display performance metrics:**
+
+```
+🚀 Performance Report:
+- Execution Mode: {resolvedMode}
+- API Test Generation: ~X minutes
+- E2E Test Generation: ~Y minutes
+- Total Elapsed: ~mode-dependent
+- Parallel Gain: ~50% faster when mode is subagent/agent-team
+```
+
+---
+
+### 8. Proceed to Aggregation
+
+**Load aggregation step:**
+Load next step: ``
+
+The aggregation step (4C) will:
+
+- Read both subagent outputs
+- Verify TDD red phase compliance (all tests have test.skip())
+- Write all test files to disk
+- Generate ATDD checklist
+- Calculate summary statistics
+
+---
+
+## EXIT CONDITION
+
+Proceed to Step 4C (Aggregation) when:
+
+- ✅ Subagent A (API red-phase tests) completed successfully
+- ✅ Subagent B (E2E red-phase tests) completed successfully
+- ✅ Both output files exist and are valid JSON
+- ✅ TDD red phase status reported
+
+**Do NOT proceed if:**
+
+- ❌ One or both subagents failed
+- ❌ Output files missing or corrupted
+- ❌ Subagent generated active passing tests (wrong - must be red-phase scaffolds)
+
+---
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Both subagents launched successfully
+- Both worker steps completed without errors
+- Output files generated and valid
+- Tests generated with test.skip() (TDD red phase)
+- Fallback behavior respected configuration and capability probe rules
+
+### ❌ SYSTEM FAILURE:
+
+- Failed to launch subagents
+- One or both subagents failed
+- Output files missing or invalid
+- Tests generated without test.skip() (wrong phase)
+- Unsupported requested mode with probing disabled
+
+**Master Rule:** TDD RED PHASE requires acceptance test scaffolds marked with `test.skip()`. Mode selection changes orchestration, never red-phase requirements.
+
+<!-- STEP: step-04c-aggregate -->
+# Step 4C: Aggregate ATDD Test Generation Results
+
+## STEP GOAL
+
+Read outputs from parallel subagents (API + E2E red-phase test generation), aggregate results, verify TDD red phase compliance, and create supporting infrastructure.
+
+---
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Read subagent outputs from temp files
+- ✅ Verify all tests are marked with test.skip() (TDD red phase)
+- ✅ Generate shared fixtures based on fixture needs
+- ✅ Write all generated test files to disk
+- ❌ Do NOT remove test.skip() (that's done after feature implementation)
+- ❌ Do NOT run tests yet (that's step 5 - verify scaffolds and optional RED activation)
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, subagent outputs from temp files
+- Focus: aggregation and TDD validation
+- Limits: do not execute future steps
+- Dependencies: Step 4A and 4B subagent outputs
+
+---
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+### 1. Read Subagent Outputs
+
+**Read API test subagent output:**
+
+```javascript
+const apiTestsPath = '/tmp/tea-atdd-api-tests-{{timestamp}}.json';
+const apiTestsOutput = JSON.parse(fs.readFileSync(apiTestsPath, 'utf8'));
+```
+
+**Read E2E test subagent output:**
+
+```javascript
+const e2eTestsPath = '/tmp/tea-atdd-e2e-tests-{{timestamp}}.json';
+const e2eTestsOutput = JSON.parse(fs.readFileSync(e2eTestsPath, 'utf8'));
+```
+
+**Verify both subagents succeeded:**
+
+- Check `apiTestsOutput.success === true`
+- Check `e2eTestsOutput.success === true`
+- If either failed, report error and stop (don't proceed)
+
+---
+
+### 2. Verify TDD Red Phase Compliance
+
+**CRITICAL TDD Validation:**
+
+**Check API tests:**
+
+```javascript
+apiTestsOutput.tests.forEach((test) => {
+  // Verify test.skip() is present
+  if (!test.content.includes('test.skip(')) {
+    throw new Error(`ATDD ERROR: ${test.file} missing test.skip() - tests MUST be skipped in red phase!`);
+  }
+
+  // Verify not placeholder assertions
+  if (test.content.includes('expect(true).toBe(true)')) {
+    throw new Error(`ATDD ERROR: ${test.file} has placeholder assertions - must assert EXPECTED behavior!`);
+  }
+
+  // Verify expected_to_fail flag
+  if (!test.expected_to_fail) {
+    throw new Error(`ATDD ERROR: ${test.file} not marked as expected_to_fail!`);
+  }
+});
+```
+
+**Check E2E tests:**
+
+```javascript
+e2eTestsOutput.tests.forEach((test) => {
+  // Same validation as API tests
+  if (!test.content.includes('test.skip(')) {
+    throw new Error(`ATDD ERROR: ${test.file} missing test.skip() - tests MUST be skipped in red phase!`);
+  }
+
+  if (test.content.includes('expect(true).toBe(true)')) {
+    throw new Error(`ATDD ERROR: ${test.file} has placeholder assertions!`);
+  }
+
+  if (!test.expected_to_fail) {
+    throw new Error(`ATDD ERROR: ${test.file} not marked as expected_to_fail!`);
+  }
+});
+```
+
+**If validation passes:**
+
+```
+✅ TDD Red Phase Validation: PASS
+- All tests use test.skip()
+- All tests assert expected behavior (not placeholders)
+- All tests marked as expected_to_fail
+```
+
+---
+
+### 3. Write All Test Files to Disk
+
+**Write API test files:**
+
+```javascript
+apiTestsOutput.tests.forEach((test) => {
+  fs.writeFileSync(test.file, test.content, 'utf8');
+  console.log(`✅ Created (RED): ${test.file}`);
+});
+```
+
+**Write E2E test files:**
+
+```javascript
+e2eTestsOutput.tests.forEach((test) => {
+  fs.writeFileSync(test.file, test.content, 'utf8');
+  console.log(`✅ Created (RED): ${test.file}`);
+});
+```
+
+---
+
+### 4. Aggregate Fixture Needs
+
+**Collect all fixture needs from both subagents:**
+
+```javascript
+const allFixtureNeeds = [...apiTestsOutput.fixture_needs, ...e2eTestsOutput.fixture_needs];
+
+// Remove duplicates
+const uniqueFixtures = [...new Set(allFixtureNeeds)];
+```
+
+---
+
+### 5. Generate Fixture Infrastructure
+
+**Create fixtures needed by ATDD tests:**
+(Similar to automate workflow, but may be simpler for ATDD since feature not implemented)
+
+**Minimal fixtures for TDD red phase:**
+
+```typescript
+// tests/fixtures/test-data.ts
+export const testUserData = {
+  email: 'test@example.com',
+  password: 'SecurePass123!',
+};
+```
+
+Note: More complete fixtures will be needed when moving to green phase.
+
+---
+
+### 6. Generate ATDD Checklist
+
+**Create ATDD checklist document:**
+
+```markdown
+# ATDD Checklist: [Story Name]
+
+## TDD Red Phase (Current)
+
+✅ Red-phase test scaffolds generated
+
+- API Tests: {api_test_count} tests (all skipped)
+- E2E Tests: {e2e_test_count} tests (all skipped)
+
+## Acceptance Criteria Coverage
+
+{list all acceptance criteria with test coverage}
+
+## Next Steps (Task-by-Task Activation)
+
+During implementation of each task:
+
+1. Remove `test.skip()` from the current test file or scenario
+2. Run tests: `npm test`
+3. Verify the activated test fails first, then passes after implementation (green phase)
+4. If any activated tests still fail unexpectedly:
+   - Either fix implementation (feature bug)
+   - Or fix test (test bug)
+5. Commit passing tests
+
+## Implementation Guidance
+
+Feature endpoints to implement:
+{list endpoints from API tests}
+
+UI components to implement:
+{list UI flows from E2E tests}
+```
+
+**Save checklist:**
+
+```javascript
+fs.writeFileSync(`{test_artifacts}/atdd-checklist-{story_key}.md`, checklistContent, 'utf8');
+```
+
+**If `/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/docs/sprint-artifacts/10-1-initial-setup.md` exists and is writable, attempt to link artifacts back into the story:**
+
+- Add or update a `### ATDD Artifacts` subsection under `## Dev Notes`
+- Record:
+  - `Checklist: {test_artifacts}/atdd-checklist-{story_key}.md`
+  - `API tests: {api_test_file_path}` when present
+  - `E2E tests: {e2e_test_file_path}` when present
+  - `Component tests: {component_test_file_path}` when present
+- Preserve all other story content verbatim
+- The checklist template already contains the manual handoff instructions if story linking is not possible
+- If the story file cannot be updated safely, continue without failing the workflow and keep the checklist's manual handoff instructions intact
+
+---
+
+### 7. Calculate Summary Statistics
+
+**Aggregate test counts:**
+
+```javascript
+const resolvedMode = subagentContext?.execution?.resolvedMode; // Provided by Step 4's orchestration context
+const subagentExecutionLabel =
+  resolvedMode === 'sequential'
+    ? 'SEQUENTIAL (API → E2E)'
+    : resolvedMode === 'agent-team'
+      ? 'AGENT-TEAM (API + E2E)'
+      : resolvedMode === 'subagent'
+        ? 'SUBAGENT (API + E2E)'
+        : 'PARALLEL (API + E2E)';
+const performanceGainLabel =
+  resolvedMode === 'sequential'
+    ? 'baseline (no parallel speedup)'
+    : resolvedMode === 'agent-team' || resolvedMode === 'subagent'
+      ? '~50% faster than sequential'
+      : 'mode-dependent';
+
+const summary = {
+  tdd_phase: 'RED',
+  total_tests: apiTestsOutput.test_count + e2eTestsOutput.test_count,
+  api_tests: apiTestsOutput.test_count,
+  e2e_tests: e2eTestsOutput.test_count,
+  all_tests_skipped: true,
+  expected_to_fail: true,
+  fixtures_created: uniqueFixtures.length,
+  acceptance_criteria_covered: [
+    ...apiTestsOutput.tests.flatMap((t) => t.acceptance_criteria_covered),
+    ...e2eTestsOutput.tests.flatMap((t) => t.acceptance_criteria_covered),
+  ],
+  knowledge_fragments_used: [...apiTestsOutput.knowledge_fragments_used, ...e2eTestsOutput.knowledge_fragments_used],
+  subagent_execution: subagentExecutionLabel,
+  performance_gain: performanceGainLabel,
+};
+```
+
+**Store summary for Step 5:**
+
+```javascript
+fs.writeFileSync('/tmp/tea-atdd-summary-{{timestamp}}.json', JSON.stringify(summary, null, 2), 'utf8');
+```
+
+---
+
+## OUTPUT SUMMARY
+
+Display to user:
+
+```
+✅ ATDD Test Generation Complete (TDD RED PHASE)
+
+🔴 TDD Red Phase: Test Scaffolds Generated
+
+📊 Summary:
+- Total Tests: {total_tests} (all with test.skip())
+  - API Tests: {api_tests} (RED)
+  - E2E Tests: {e2e_tests} (RED)
+- Fixtures Created: {fixtures_created}
+- Activated tests will FAIL until feature is implemented
+
+✅ Acceptance Criteria Coverage:
+{list all covered criteria}
+
+🚀 Performance: {performance_gain}
+
+📂 Generated Files:
+- tests/api/[feature].spec.ts (with test.skip())
+- tests/e2e/[feature].spec.ts (with test.skip())
+- tests/fixtures/test-data.ts
+- {test_artifacts}/atdd-checklist-{story_key}.md
+
+📝 Next Steps:
+1. Link ATDD artifacts into the story file if available
+2. Implement the feature
+3. Remove test.skip() from the tests for the current task
+4. Run activated tests → verify they FAIL before implementation, then PASS after implementation
+5. Commit passing tests
+
+✅ Ready for validation (Step 5 - verify red-phase scaffolds and handoff metadata)
+```
+
+---
+
+## EXIT CONDITION
+
+Proceed to Step 5 when:
+
+- ✅ All test files written to disk (API + E2E)
+- ✅ All tests verified to have test.skip()
+- ✅ All fixtures created
+- ✅ ATDD checklist generated
+- ✅ Summary statistics calculated and saved
+- ✅ Output displayed to user
+
+---
+
+### 8. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-04c-aggregate']
+  lastStep: 'step-04c-aggregate'
+  lastSaved: '{date}'
+  storyId: '10.1'
+  storyKey: '{story_key}'
+  storyFile: '/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/docs/sprint-artifacts/10-1-initial-setup.md'
+  atddChecklistPath: '{outputFile}'
+  generatedTestFiles: []
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-04c-aggregate'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-04c-aggregate'`
+  - Set `lastSaved: '{date}'`
+  - Set `storyId` to `10.1`
+  - Set `storyKey` to `{story_key}`
+  - Set `storyFile` to `/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/docs/sprint-artifacts/10-1-initial-setup.md`
+  - Set `atddChecklistPath` to `{outputFile}`
+  - Set `generatedTestFiles` deterministically to the list of present test paths in this order: API, E2E, Component (omit blanks / N/A values)
+  - Append this step's output to the appropriate section.
+
+Load next step: ``
+
+---
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Both subagents succeeded
+- All tests have test.skip() (TDD red phase compliant)
+- All tests assert expected behavior (not placeholders)
+- All test files written to disk
+- ATDD checklist generated
+- Story metadata and handoff paths captured in checklist frontmatter
+
+### ❌ SYSTEM FAILURE:
+
+- One or both subagents failed
+- Tests missing test.skip() (would break CI)
+- Tests have placeholder assertions
+- Test files not written to disk
+- ATDD checklist missing
+
+**Master Rule:** TDD RED PHASE requires ALL tests to use test.skip() and assert expected behavior.
+
+<!-- STEP: step-05-validate-and-complete -->
+# Step 5: Validate & Complete
+
+## STEP GOAL
+
+Validate ATDD outputs and provide a completion summary.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Validate against the checklist
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Validation
+
+Use `checklist.md` to validate:
+
+- Prerequisites satisfied
+- Test files created correctly
+- Checklist matches acceptance criteria
+- Tests are generated as red-phase scaffolds and marked with `test.skip()`
+- Story metadata and handoff paths are captured for downstream workflows
+- [ ] CLI sessions cleaned up (no orphaned browsers)
+- [ ] Temp artifacts stored in `{test_artifacts}/` not random locations
+
+Fix any gaps before completion.
+
+---
+
+## 2. Polish Output
+
+Before finalizing, review the complete output document for quality:
+
+1. **Remove duplication**: Progressive-append workflow may have created repeated sections — consolidate
+2. **Verify consistency**: Ensure terminology, risk scores, and references are consistent throughout
+3. **Check completeness**: All template sections should be populated or explicitly marked N/A
+4. **Format cleanup**: Ensure markdown formatting is clean (tables aligned, headers consistent, no orphaned references)
+
+---
+
+## 3. Completion Summary
+
+Report:
+
+- Test files created
+- Checklist output path
+- Story key / story file handoff path
+- Key risks or assumptions
+- Next recommended workflow (usually `dev-story`; `automate` comes after implementation)
+
+---
+
+## 4. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-05-validate-and-complete']
+  lastStep: 'step-05-validate-and-complete'
+  lastSaved: '{date}'
+  storyId: '10.1'
+  storyKey: '{story_key}'
+  storyFile: '/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-atdd/proj/docs/sprint-artifacts/10-1-initial-setup.md'
+  atddChecklistPath: '{outputFile}'
+  generatedTestFiles: []
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-05-validate-and-complete'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-05-validate-and-complete'`
+  - Set `lastSaved: '{date}'`
+  - Ensure `storyId`, `storyKey`, `storyFile`, and `atddChecklistPath` are present and populated
+  - Ensure `generatedTestFiles` remains populated with the deterministic list of present generated test paths
+  - Append this step's output to the appropriate section.
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+## On Complete
+
+Run: `python3 _bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow.on_complete`
+
+If the resolver succeeds and returns a non-empty `workflow.on_complete`, execute that value as the final terminal instruction before exiting.
+
+If the resolver fails, returns no output, or resolves an empty value, skip the hook and exit normally.
 
 ]]></instructions>
 <output-template></output-template>

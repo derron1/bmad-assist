@@ -15,7 +15,6 @@ Generate retrospective report with extraction markers.
 
 Minimal context.
 
-
 ]]></file>
 <file id="5e091a72" path="docs/prd.md" label="PRD"><![CDATA[
 
@@ -23,14 +22,12 @@ Minimal context.
 
 Project requirements.
 
-
 ]]></file>
 <file id="aab30cfd" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="1c880d0b" path="docs/epics/epic-10.md" label="EPIC"><![CDATA[
@@ -41,15 +38,13 @@ Layered.
 
 Content.
 
-
 ]]></file>
-<file id="b01f1921" path="docs/sprint-artifacts/sprint-status.yaml" label="SPRINT STATUS"><![CDATA[
+<file id="b01f1921" path="docs/sprint-artifacts/" label="SPRINT STATUS"><![CDATA[
 
 development_status:
   10-1-initial-setup: done
   epic-10: complete
   epic-10-retrospective: pending
-
 
 ]]></file>
 <file id="c8888405" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -72,7 +67,6 @@ done
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
@@ -84,10 +78,9 @@ Minimal notes.
 <var name="next_epic_num">11</var>
 <var name="prev_epic_num">9</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-<var name="sprint_status" file_id="b01f1921">embedded in prompt, file id: b01f1921</var>
-<var name="template">.claude/skills/bmad-retrospective/template.md</var>
+
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-retrospective/checklist.md</var>
+
 </variables>
 <instructions><![CDATA[
 
@@ -170,7 +163,7 @@ Activation is complete. Begin the workflow below.
 
 ## Paths
 
-- `sprint_status_file` = `{implementation_artifacts}/sprint-status.yaml`
+- `sprint_status_file` = `{implementation_artifacts}/`
 
 ## Input Files
 
@@ -198,9 +191,9 @@ Activation is complete. Begin the workflow below.
 Amelia (Developer): "Welcome to the retrospective, {user_name}. Let me help you identify which epic we just completed. I'll check sprint-status first, but you're the ultimate authority on what we're reviewing today."
 </output>
 
-<action>PRIORITY 1: Check {sprint_status_file} first</action>
+<!-- managed programmatically by bmad-assist -->
 
-<action>Load the FULL file: {sprint_status_file}</action>
+<!-- managed programmatically by bmad-assist -->
 <action>Read ALL development_status entries</action>
 <action>Find the highest epic number with at least one story marked "done"</action>
 <action>Extract epic number from keys like "epic-X-retrospective" or story keys like "X-Y-story-name"</action>
@@ -226,18 +219,6 @@ Amelia (Developer): "Got it, we're reviewing Epic {{epic_number}}. Let me gather
     </output>
   </check>
 </check>
-
-<check if="{{detected_epic}} NOT found in sprint-status">
-  <action>PRIORITY 2: Ask user directly</action>
-
-  <output>
-Amelia (Developer): "I'm having trouble detecting the completed epic from {sprint_status_file}. {user_name}, which epic number did you just complete?"
-  </output>
-
-<action>WAIT for {user_name} to provide epic number</action>
-<action>Set {{epic_number}} = user-provided number</action>
-</check>
-
 <check if="{{epic_number}} still not determined">
   <action>PRIORITY 3: Fallback to stories folder</action>
 
@@ -255,12 +236,7 @@ Amelia (Developer): "I found stories for Epic {{detected_epic}} in the stories f
 
 <action>Once {{epic_number}} is determined, verify epic completion status</action>
 
-<action>Find all stories for epic {{epic_number}} in {sprint_status_file}:
-
-- Look for keys starting with "{{epic_number}}-" (e.g., "1-1-", "1-2-", etc.)
-- Exclude epic key itself ("epic-{{epic_number}}")
-- Exclude retrospective key ("epic-{{epic_number}}-retrospective")
-  </action>
+<!-- managed programmatically by bmad-assist -->
 
 <action>Count total stories found for this epic</action>
 <action>Count stories with status = "done"</action>
@@ -1490,9 +1466,9 @@ Amelia (Developer): "See you all when prep work is done. Meeting adjourned!"
 ✅ Retrospective document saved: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md
 </output>
 
-<action>Update {sprint_status_file} to mark retrospective as completed</action>
+<!-- managed programmatically by bmad-assist -->
 
-<action>Load the FULL file: {sprint_status_file}</action>
+<!-- managed programmatically by bmad-assist -->
 <action>Find development_status key "epic-{{epic_number}}-retrospective"</action>
 <action>Verify current status (typically "optional" or "pending")</action>
 <action>Update development_status["epic-{{epic_number}}-retrospective"] = "done"</action>
@@ -1603,7 +1579,6 @@ Charlie (Senior Dev): "Time to knock out that prep work."
 <guideline>Document everything - retrospective insights are valuable for future reference</guideline>
 <guideline>Two-part structure ensures both reflection AND preparation</guideline>
 </facilitation-guidelines>
-
 
 ]]></instructions>
 <output-template></output-template>

@@ -15,7 +15,6 @@ Create comprehensive developer context and implementation-ready story.
 
 Minimal context.
 
-
 ]]></file>
 <file id="e91e941e" path="docs/prd.md" label="PRD"><![CDATA[
 
@@ -23,14 +22,12 @@ Minimal context.
 
 Project requirements.
 
-
 ]]></file>
 <file id="d2b9b87e" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="53346938" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
@@ -40,7 +37,6 @@ Layered.
 ## Story 10.1: Initial Setup
 
 Content.
-
 
 ]]></file>
 </context>
@@ -52,15 +48,15 @@ Content.
 <var name="epic_num">10</var>
 <var name="name">bmad-create-story</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-<var name="sprint_status">docs/sprint-artifacts/sprint-status.yaml</var>
+
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-<var name="template">.claude/skills/bmad-create-story/template.md</var>
+
 <var name="timestamp">20260115_1200</var>
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-create-story/checklist.md</var>
+
 </variables>
 <instructions><![CDATA[
 
@@ -133,7 +129,7 @@ Activation is complete. Begin the workflow below.
 
 ## Paths
 
-- `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
+- `sprint_status` = `{implementation_artifacts}/`
 - `epics_file` = `{planning_artifacts}/epics.md`
 - `prd_file` = `{planning_artifacts}/prd.md`
 - `architecture_file` = `{planning_artifacts}/architecture.md`
@@ -161,23 +157,9 @@ Activation is complete. Begin the workflow below.
     <action>GOTO step 2a</action>
   </check>
 
-  <action>Check if /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml file exists for auto discover</action>
-  <check if="sprint status file does NOT exist">
-    <output>🚫 No sprint status file found and no story specified</output>
-    <output>
-      **Required Options:**
-      1. Run `sprint-planning` to initialize sprint tracking (recommended)
-      2. Provide specific epic-story number to create (e.g., "1-2-user-auth")
-      3. Provide path to story documents if sprint status doesn't exist yet
-    </output>
-    <ask>Choose option [1], provide epic-story number, path to story docs, or [q] to quit:</ask>
-
-    <check if="user chooses 'q'">
-      <action>HALT - No work needed</action>
-    </check>
-
-    <check if="user chooses '1'">
-      <output>Run sprint-planning workflow first to create sprint-status.yaml</output>
+  <!-- managed programmatically by bmad-assist -->
+<check if="user chooses '1'">
+      <output>Run sprint-planning workflow first to create </output>
       <action>HALT - User needs to run sprint-planning</action>
     </check>
 
@@ -195,8 +177,8 @@ Activation is complete. Begin the workflow below.
 
   <!-- Auto-discover from sprint status only if no user input -->
   <check if="no user input provided">
-    <critical>MUST read COMPLETE /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml file from start to end to preserve order</critical>
-    <action>Load the FULL file: /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
+    <critical>MUST read COMPLETE  file from start to end to preserve order</critical>
+    <!-- managed programmatically by bmad-assist -->
     <action>Read ALL lines from beginning to end - do not skip any content</action>
     <action>Parse the development_status section completely</action>
 
@@ -207,7 +189,7 @@ Activation is complete. Begin the workflow below.
     </action>
 
     <check if="no backlog story found">
-      <output>📋 No backlog stories found in sprint-status.yaml
+      <output>📋 No backlog stories found in 
 
         All stories are either already created, in progress, or done.
 
@@ -230,7 +212,7 @@ Activation is complete. Begin the workflow below.
     <!-- Mark epic as in-progress if this is first story -->
     <action>Check if this is the first story in epic 10 by looking for 10-1-* pattern</action>
     <check if="this is first story in epic 10">
-      <action>Load /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml and check epic-10 status</action>
+      <!-- managed programmatically by bmad-assist -->
       <action>If epic status is "backlog" → update to "in-progress"</action>
       <action>If epic status is "contexted" (legacy status) → update to "in-progress" (backward compatibility)</action>
       <action>If epic status is "in-progress" → no change needed</action>
@@ -238,14 +220,14 @@ Activation is complete. Begin the workflow below.
         <output>🚫 ERROR: Cannot create story in completed epic</output>
         <output>Epic 10 is marked as 'done'. All stories are complete.</output>
         <output>If you need to add more work, either:</output>
-        <output>1. Manually change epic status back to 'in-progress' in sprint-status.yaml</output>
+        <output>1. Manually change epic status back to 'in-progress' in </output>
         <output>2. Create a new epic for additional work</output>
         <action>HALT - Cannot proceed</action>
       </check>
       <check if="epic status is not one of: backlog, contexted, in-progress, done">
         <output>🚫 ERROR: Invalid epic status '{{epic_status}}'</output>
         <output>Epic 10 has invalid status. Expected: backlog, in-progress, or done</output>
-        <output>Please fix sprint-status.yaml manually or run sprint-planning to regenerate</output>
+        <output>Please fix  manually or run sprint-planning to regenerate</output>
         <action>HALT - Cannot proceed</action>
       </check>
       <output>📊 Epic 10 status updated to in-progress</output>
@@ -253,7 +235,7 @@ Activation is complete. Begin the workflow below.
 
     <action>GOTO step 2a</action>
   </check>
-  <action>Load the FULL file: /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
+  <!-- managed programmatically by bmad-assist -->
   <action>Read ALL lines from beginning to end - do not skip any content</action>
   <action>Parse the development_status section completely</action>
 
@@ -264,7 +246,7 @@ Activation is complete. Begin the workflow below.
   </action>
 
   <check if="no backlog story found">
-    <output>No backlog stories found in sprint-status.yaml
+    <output>No backlog stories found in 
 
       All stories are either already created, in progress, or done.
 
@@ -287,7 +269,7 @@ Activation is complete. Begin the workflow below.
   <!-- Mark epic as in-progress if this is first story -->
   <action>Check if this is the first story in epic 10 by looking for 10-1-* pattern</action>
   <check if="this is first story in epic 10">
-    <action>Load /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml and check epic-10 status</action>
+    <!-- managed programmatically by bmad-assist -->
     <action>If epic status is "backlog" → update to "in-progress"</action>
     <action>If epic status is "contexted" (legacy status) → update to "in-progress" (backward compatibility)</action>
     <action>If epic status is "in-progress" → no change needed</action>
@@ -295,14 +277,14 @@ Activation is complete. Begin the workflow below.
       <output>ERROR: Cannot create story in completed epic</output>
       <output>Epic 10 is marked as 'done'. All stories are complete.</output>
       <output>If you need to add more work, either:</output>
-      <output>1. Manually change epic status back to 'in-progress' in sprint-status.yaml</output>
+      <output>1. Manually change epic status back to 'in-progress' in </output>
       <output>2. Create a new epic for additional work</output>
       <action>HALT - Cannot proceed</action>
     </check>
     <check if="epic status is not one of: backlog, contexted, in-progress, done">
       <output>ERROR: Invalid epic status '{{epic_status}}'</output>
       <output>Epic 10 has invalid status. Expected: backlog, in-progress, or done</output>
-      <output>Please fix sprint-status.yaml manually or run sprint-planning to regenerate</output>
+      <output>Please fix  manually or run sprint-planning to regenerate</output>
       <action>HALT - Cannot proceed</action>
     </check>
     <output>Epic 10 status updated to in-progress</output>
@@ -407,8 +389,7 @@ Activation is complete. Begin the workflow below.
 <step n="5" goal="Create comprehensive story file">
   <critical>📝 CREATE ULTIMATE STORY FILE - The developer's master implementation guide!</critical>
 
-  <action>Initialize from template.md:
-  {default_output_file}</action>
+  <action>Create file using the output-template format at: {default_output_file}</action>
   <template-output file="{default_output_file}">story_header</template-output>
 
   <!-- Story foundation from epics analysis -->
@@ -462,17 +443,7 @@ Activation is complete. Begin the workflow below.
   <action>Save story document unconditionally</action>
 
   <!-- Update sprint status -->
-  <check if="sprint status file exists">
-    <action>Update /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-create-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
-    <action>Load the FULL file and read all development_status entries</action>
-    <action>Find development_status key matching 10-1-initial-setup</action>
-    <action>Verify current status is "backlog" (expected previous state)</action>
-    <action>Update development_status[10-1-initial-setup] = "ready-for-dev"</action>
-    <action>Update last_updated field to current date</action>
-    <action>Save file, preserving ALL comments and structure including STATUS DEFINITIONS</action>
-  </check>
-
-  <action>Report completion</action>
+<action>Report completion</action>
   <output>**🎯 ULTIMATE BMad Method STORY CONTEXT CREATED, {user_name}!**
 
     **Story Details:**
@@ -493,7 +464,6 @@ Activation is complete. Begin the workflow below.
 </step>
 
 </workflow>
-
 
 ]]></instructions>
 <output-template><![CDATA[
@@ -547,7 +517,6 @@ so that {{benefit}}.
 ### Completion Notes List
 
 ### File List
-
 
 ]]></output-template>
 </compiled-workflow>

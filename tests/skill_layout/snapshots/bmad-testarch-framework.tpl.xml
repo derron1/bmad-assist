@@ -22,14 +22,12 @@ Target: Story 10.1
 
 Minimal context.
 
-
 ]]></file>
 <file id="2971f9e6" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="a968a91e" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -52,13 +50,15 @@ ready-for-dev
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
 <var name="epic_num">10</var>
 <var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
-<var name="step_01_preflight_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/{skill-root}/steps-c/step-02-select-framework.md</var>
+<var name="step_01_preflight_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/step-02-select-framework.md</var>
+<var name="step_02_select_framework_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/step-03-scaffold-framework.md</var>
+<var name="step_03_scaffold_framework_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/step-04-docs-and-scripts.md</var>
+<var name="step_04_docs_and_scripts_nextStepFile">.claude/skills/bmad-testarch-framework/steps-c/step-05-validate-and-summary.md</var>
 <var name="story_file" file_id="a968a91e">embedded in prompt, file id: a968a91e</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
@@ -182,7 +182,7 @@ Summarize:
   - Set `lastSaved: '{date}'`
   - Append this step's output to the appropriate section of the document.
 
-Load next step: `{nextStepFile}`
+Load next step: ``
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
@@ -195,6 +195,635 @@ Load next step: `{nextStepFile}`
 - Skipped sequence steps or missing outputs
   **Master Rule:** Skipping steps is FORBIDDEN.
 
+<!-- STEP: step-02-select-framework -->
+# Step 2: Framework Selection
+
+## STEP GOAL
+
+Choose the most appropriate framework and document the rationale.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Selection Logic
+
+Use `{detected_stack}` from Step 1 to guide framework selection.
+
+**If {detected_stack} is `frontend` or `fullstack` (browser-based testing):**
+
+Default to **Playwright** unless strong reasons suggest Cypress.
+
+**Playwright recommended when:**
+
+- Large or complex repo
+- Multi-browser support needed
+- Heavy API + UI integration
+- CI speed/parallelism is important
+
+**Cypress recommended when:**
+
+- Small team prioritizes DX
+- Component testing focus
+- Simpler setup needed
+
+**If {detected_stack} is `backend` (no browser-based testing):**
+
+Select the framework matching the project language:
+
+- **Python**: pytest (default), unittest
+- **Java/Kotlin**: JUnit 5 (default), TestNG
+- **Go**: Go test (built-in)
+- **C#/.NET**: xUnit (default), NUnit, MSTest
+- **Ruby**: RSpec (default), Minitest
+- **Rust**: cargo test (built-in)
+
+**If {detected_stack} is `fullstack`:**
+
+Select both a browser-based framework (Playwright/Cypress) AND the appropriate backend framework for the detected language.
+
+Respect `config.test_framework` if explicitly set (not `"auto"`).
+
+---
+
+## 2. Announce Decision
+
+State the selected framework and reasoning.
+
+---
+
+### 3. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-02-select-framework']
+  lastStep: 'step-02-select-framework'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-02-select-framework'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-02-select-framework'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-03-scaffold-framework -->
+# Step 3: Scaffold Framework
+
+## STEP GOAL
+
+Generate the test directory structure, configuration files, fixtures, factories, helpers, and sample tests using deterministic mode selection with runtime fallback.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Apply knowledge base patterns where required
+- ✅ Resolve execution mode from explicit user request first, then config
+- ✅ Apply fallback rules deterministically when requested mode is unsupported
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 0. Resolve Execution Mode (User Override First)
+
+```javascript
+const parseBooleanFlag = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const orchestrationContext = {
+  config: {
+    execution_mode: config.tea_execution_mode || 'auto', // "auto" | "subagent" | "agent-team" | "sequential"
+    capability_probe: parseBooleanFlag(config.tea_capability_probe, true), // supports booleans and "false"/"true" strings
+  },
+  timestamp: new Date().toISOString().replace(/[:.]/g, '-'),
+};
+
+const normalizeUserExecutionMode = (mode) => {
+  if (typeof mode !== 'string') return null;
+  const normalized = mode.trim().toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
+
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'sequential') return 'sequential';
+  if (normalized === 'subagent' || normalized === 'sub agent' || normalized === 'subagents' || normalized === 'sub agents') {
+    return 'subagent';
+  }
+  if (normalized === 'agent team' || normalized === 'agent teams' || normalized === 'agentteam') {
+    return 'agent-team';
+  }
+
+  return null;
+};
+
+const normalizeConfigExecutionMode = (mode) => {
+  if (mode === 'subagent') return 'subagent';
+  if (mode === 'auto' || mode === 'sequential' || mode === 'subagent' || mode === 'agent-team') {
+    return mode;
+  }
+  return null;
+};
+
+// Explicit user instruction in the active run takes priority over config.
+const explicitModeFromUser = normalizeUserExecutionMode(runtime.getExplicitExecutionModeHint?.() || null);
+
+const requestedMode = explicitModeFromUser || normalizeConfigExecutionMode(orchestrationContext.config.execution_mode) || 'auto';
+const probeEnabled = orchestrationContext.config.capability_probe;
+
+const supports = { subagent: false, agentTeam: false };
+if (probeEnabled) {
+  supports.subagent = runtime.canLaunchSubagents?.() === true;
+  supports.agentTeam = runtime.canLaunchAgentTeams?.() === true;
+}
+
+let resolvedMode = requestedMode;
+if (requestedMode === 'auto') {
+  if (supports.agentTeam) resolvedMode = 'agent-team';
+  else if (supports.subagent) resolvedMode = 'subagent';
+  else resolvedMode = 'sequential';
+} else if (probeEnabled && requestedMode === 'agent-team' && !supports.agentTeam) {
+  resolvedMode = supports.subagent ? 'subagent' : 'sequential';
+} else if (probeEnabled && requestedMode === 'subagent' && !supports.subagent) {
+  resolvedMode = 'sequential';
+}
+```
+
+Resolution precedence:
+
+1. Explicit user request in this run (`agent team` => `agent-team`; `subagent` => `subagent`; `sequential`; `auto`)
+2. `tea_execution_mode` from config
+3. Runtime capability fallback (when probing enabled)
+
+## 1. Create Directory Structure
+
+Use `{detected_stack}` from Step 1 to determine directory layout.
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+- `{test_dir}/e2e/`
+- `{test_dir}/support/fixtures/`
+- `{test_dir}/support/helpers/`
+- `{test_dir}/support/page-objects/` (optional)
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+Create the idiomatic test directory for the detected language:
+
+- **Python (pytest)**: `tests/` with `conftest.py`, `tests/unit/`, `tests/integration/`, `tests/api/`
+- **Java/Kotlin (JUnit)**: `src/test/java/` mirroring `src/main/java/` package structure, with `unit/`, `integration/`, `api/` sub-packages
+- **Go**: `*_test.go` files alongside source files (Go convention), plus `testdata/` for fixtures
+- **C#/.NET (xUnit)**: `tests/` project with `Unit/`, `Integration/`, `Api/` directories
+- **Ruby (RSpec)**: `spec/` with `spec/unit/`, `spec/integration/`, `spec/api/`, `spec/support/`
+- **Rust**: `tests/` for integration tests, inline `#[cfg(test)]` modules for unit tests
+
+**If `config.tea_use_pactjs_utils` is enabled and runtime is Node.js/TypeScript** (i.e., `{detected_stack}` is `frontend` or `fullstack`, or `{detected_stack}` is `backend` with Node.js/TypeScript runtime):
+
+Create Node.js/TypeScript contract testing directory structure per `pact-consumer-framework-setup.md`:
+
+- `tests/contract/consumer/` — consumer contract test files (`.pacttest.ts` extension)
+- `tests/contract/support/` — pact config, provider state factories, consumer helpers shim
+- `scripts/` — shell scripts (`env-setup.sh`, `publish-pact.sh`, `can-i-deploy.sh`, `record-deployment.sh`)
+- `.github/actions/detect-breaking-change/` — PR checkbox-driven breaking change detection
+- `.github/workflows/contract-test-consumer.yml` — consumer CDC CI workflow
+
+---
+
+## 2. Generate Framework Config
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+Create `playwright.config.ts` or `cypress.config.ts` with:
+
+- **Timeouts**: action 15s, navigation 30s, test 60s
+- **Base URL**: env fallback (`BASE_URL`)
+- **Artifacts**: trace `retain-on-failure-and-retries`, screenshot `only-on-failure`, video `retain-on-failure`
+- **Reporters**: HTML + JUnit + console
+- **Parallelism**: enabled (CI tuned)
+
+Use TypeScript if `use_typescript: true`.
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+Create the idiomatic test config for the detected framework:
+
+- **pytest**: `pyproject.toml` `[tool.pytest.ini_options]` or `pytest.ini` with markers, test paths, coverage settings
+- **JUnit**: `build.gradle`/`pom.xml` test configuration with JUnit 5 dependencies, Surefire/Failsafe plugins
+- **Go test**: no config file needed (Go convention); optionally create `Makefile` test targets
+- **xUnit**: `.csproj` test project with xUnit and coverlet dependencies
+- **RSpec**: `.rspec` config file with `spec_helper.rb` and `rails_helper.rb` (if Rails)
+
+---
+
+## 3. Environment Setup
+
+Create `.env.example` with `TEST_ENV`, `BASE_URL`, `API_URL`.
+
+**Stack-conditional environment files:**
+
+**If {detected_stack} is `frontend` or `fullstack` (Node.js):**
+
+- `.nvmrc` using current LTS Node (prefer Node 24+)
+
+**If {detected_stack} is `backend`:**
+
+Create the idiomatic version file for the detected language:
+
+- **Python**: `.python-version` with current stable Python (prefer 3.12+)
+- **Java**: `.java-version` or `JAVA_HOME` documentation in `.env.example`
+- **Go**: Go version is already in `go.mod` (no additional file needed)
+- **C#/.NET**: `global.json` with SDK version if not already present
+- **Ruby**: `.ruby-version` with current stable Ruby
+
+---
+
+## 4. Fixtures & Factories
+
+Read `{config_source}` and use `/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv` to load fragments based on `config.tea_use_playwright_utils`:
+
+**If Playwright Utils enabled:**
+
+- `overview.md`, `fixtures-composition.md`, `auth-session.md`, `api-request.md`, `recurse.md`, `log.md`, `burn-in.md`, `network-error-monitor.md`, `data-factories.md`
+- If `{detected_stack}` is `frontend` or `fullstack`, also load `intercept-network-call.md`
+- Recommend installing `@seontechnologies/playwright-utils`
+
+**If disabled:**
+
+- `fixture-architecture.md`, `data-factories.md`, `network-first.md`, `playwright-config.md`, `test-quality.md`
+
+**If Pact.js Utils enabled** (`config.tea_use_pactjs_utils`):
+
+- `pact-consumer-framework-setup.md` (CRITICAL: load this for directory structure, scripts, CI workflow, and PactV4 patterns — includes `fileParallelism: false` + `pool: 'forks'` + `singleFork: true`, determinism gate, and `jq` publish normalization)
+- `pactjs-utils-overview.md`, `pactjs-utils-consumer-helpers.md` (one-interaction-per-`it()` rule), `pactjs-utils-provider-verifier.md` (same `pool: 'forks'` + `singleFork` rule applies to consumer AND provider), `pactjs-utils-request-filter.md`, `contract-testing.md`
+- `pact-broker-webhooks.md` — when scaffolding the provider repo and any CI step that depends on `can-i-deploy`
+- Recommend installing `@seontechnologies/pactjs-utils` and `@pact-foundation/pact`
+- Ensure `jq` is available on CI runners (default on `ubuntu-latest`; document `brew install jq` for macOS dev machines) — required by `scripts/check-pact-determinism.sh` and `scripts/publish-pact.sh`
+
+**If Pact.js Utils disabled but contract testing relevant:**
+
+- `contract-testing.md`
+
+**If Pact MCP enabled** (`config.tea_pact_mcp` is `"mcp"`):
+
+- `pact-mcp.md`
+
+Implement:
+
+- Fixture index with `mergeTests`
+- Auto-cleanup hooks
+- Faker-based data factories with overrides
+
+---
+
+## 5. Sample Tests & Helpers
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+Create example tests in `{test_dir}/e2e/` demonstrating:
+
+- Given/When/Then format
+- data-testid selector strategy
+- Factory usage
+- Network interception pattern (if applicable)
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+Create example tests in the idiomatic location for the detected language:
+
+- **Python**: `tests/test_example.py` with pytest fixtures, parametrize, and factory usage
+- **Java**: `src/test/java/.../ExampleTest.java` with JUnit 5 annotations, `@BeforeEach` setup
+- **Go**: `example_test.go` alongside source with table-driven tests and `testify` assertions
+- **C#/.NET**: `tests/ExampleTests.cs` with xUnit `[Fact]`/`[Theory]` and fixture injection
+- **Ruby**: `spec/example_spec.rb` with RSpec `describe`/`context`/`it` and factory_bot
+
+Create helpers for:
+
+- API clients (if needed)
+- Network utilities (frontend/fullstack only)
+- Auth helpers
+- Test data factories (language-idiomatic patterns)
+
+**If `config.tea_use_pactjs_utils` is enabled and runtime is Node.js/TypeScript** (i.e., `{detected_stack}` is `frontend` or `fullstack`, or `{detected_stack}` is `backend` with Node.js/TypeScript runtime):
+
+Create Node.js/TypeScript contract test samples per `pact-consumer-framework-setup.md`:
+
+- **Consumer test**: Example using PactV4 `addInteraction()` builder + `createProviderState` + real consumer code with URL injection (`.pacttest.ts` extension). **One `addInteraction()` per `it()` block** — never chain multiple interactions in a single test (PactV4 FFI drops them non-deterministically; see `pactjs-utils-consumer-helpers.md` Example 6).
+- **Support files**: Pact config factory (`pact-config.ts`), provider state factories (`provider-states.ts`), local consumer-helpers shim (`consumer-helpers.ts`)
+- **Vitest config (consumer)**: Minimal `vitest.config.pact.ts` with **`fileParallelism: false` AND `pool: 'forks'` + `poolOptions.forks.singleFork: true`** (both required — `fileParallelism: false` prevents shared pact JSON corruption from parallel workers; forks pool + singleFork prevents the Pact Rust FFI from leaking state across files and flaking on Linux CI. See `pact-consumer-framework-setup.md` Example 2). Do NOT copy settings from unit config.
+- **Vitest config (provider)**: `vitest.config.contract.ts` with **`pool: 'forks'` + `poolOptions.forks.singleFork: true`** (same rule as consumer; required for message providers and multi-file HTTP providers; see `pactjs-utils-provider-verifier.md` Example 7).
+- **Shell scripts**: `env-setup.sh`, `check-pact-determinism.sh` (primary defense against non-deterministic pact generation), `publish-pact.sh` (with `jq -S` interaction sort normalization), `can-i-deploy.sh`, `record-deployment.sh` in `scripts/`
+- **package.json scripts**: Split `test:pact:consumer` (determinism gate — runs `check-pact-determinism.sh` with 3 runs) and `test:pact:consumer:run` (inner single-pass vitest invocation). CI and local both call `npm run test:pact:consumer` for 1:1 parity.
+- **CI workflow**: `contract-test-consumer.yml` with detect-breaking-change action
+- **package.json scripts**: `test:pact:consumer` (determinism gate), `test:pact:consumer:run` (inner single-pass vitest), `publish:pact`, `can:i:deploy:consumer`, `record:consumer:deployment`
+- **.gitignore**: Add `/pacts/` and `pact-logs/`
+
+---
+
+### 6. Orchestration Notes for This Step
+
+For this step, treat these work units as parallelizable when `resolvedMode` is `agent-team` or `subagent`:
+
+- Worker A: directory + framework config + env setup (sections 1-3)
+- Worker B: fixtures + factories (section 4)
+- Worker C: sample tests + helpers (section 5)
+
+In parallel-capable modes, runtime decides worker scheduling and concurrency.
+
+If `resolvedMode` is `sequential`, execute sections 1→5 in order.
+
+Regardless of mode, outputs must be identical in structure and quality.
+
+### 7. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-03-scaffold-framework']
+  lastStep: 'step-03-scaffold-framework'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-03-scaffold-framework'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-03-scaffold-framework'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-04-docs-and-scripts -->
+# Step 4: Documentation & Scripts
+
+## STEP GOAL
+
+Create test documentation and add build/test scripts appropriate for `{detected_stack}`.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. tests/README.md
+
+Create `{outputFile}` and include:
+
+- Setup instructions
+- Running tests (local/headed/debug)
+- Architecture overview (fixtures, factories, helpers)
+- Best practices (selectors, isolation, cleanup)
+- CI integration notes
+- Knowledge base references
+
+---
+
+## 2. Build & Test Scripts
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+Add to `package.json` at minimum:
+
+- `test:e2e`: framework execution command (e.g., `npx playwright test`)
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+Add the idiomatic test commands for the detected framework:
+
+- **Python (pytest)**: Add to `pyproject.toml` scripts or `Makefile`: `pytest`, `pytest --cov`, `pytest -m integration`
+- **Java (JUnit)**: Add to `build.gradle`/`pom.xml`: `./gradlew test`, `mvn test`, `mvn verify` (integration)
+- **Go**: Add to `Makefile`: `go test ./...`, `go test -race ./...`, `go test -cover ./...`
+- **C#/.NET**: Add to CI scripts or `Makefile`: `dotnet test`, `dotnet test --collect:"XPlat Code Coverage"`
+- **Ruby (RSpec)**: Add to `Gemfile` binstubs or `Makefile`: `bundle exec rspec`, `bundle exec rspec spec/integration`
+
+---
+
+### 3. Save Progress
+
+**Save this step's accumulated work to `{progressFile}`.**
+
+- **If `{progressFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-04-docs-and-scripts']
+  lastStep: 'step-04-docs-and-scripts'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{progressFile}` already exists**, update:
+  - Add `'step-04-docs-and-scripts'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-04-docs-and-scripts'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-05-validate-and-summary -->
+# Step 5: Validate & Summarize
+
+## STEP GOAL
+
+Validate framework setup and provide a completion summary.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Validation
+
+Validate against `checklist.md`:
+
+- Preflight success
+- Directory structure created
+- Config correctness
+- Fixtures/factories created
+- Docs and scripts present
+
+Fix any gaps before completion.
+
+---
+
+## 2. Completion Summary
+
+Report:
+
+- Framework selected
+- Artifacts created
+- Next steps (install deps, run tests)
+- Knowledge fragments applied
+
+---
+
+### 3. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-05-validate-and-summary']
+  lastStep: 'step-05-validate-and-summary'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-05-validate-and-summary'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-05-validate-and-summary'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+## On Complete
+
+Run: `python3 _bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow.on_complete`
+
+If the resolver succeeds and returns a non-empty `workflow.on_complete`, execute that value as the final terminal instruction before exiting.
+
+If the resolver fails, returns no output, or resolves an empty value, skip the hook and exit normally.
 
 ]]></instructions>
 <output-template></output-template>

@@ -24,7 +24,6 @@ Analyze test coverage and make quality gate decision.
 
 Minimal context.
 
-
 ]]></file>
 <file id="7435f609" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
 
@@ -33,7 +32,6 @@ Minimal context.
 ## Story 10.1: Initial Setup
 
 Content.
-
 
 ]]></file>
 <file id="ef16e0c9" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -56,7 +54,6 @@ ready-for-dev
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
@@ -64,7 +61,10 @@ Minimal notes.
 <var name="gate_type">epic</var>
 <var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
 <var name="source_dir">src</var>
-<var name="step_01_load_context_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/{skill-root}/steps-c/step-02-discover-tests.md</var>
+<var name="step_01_load_context_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/step-02-discover-tests.md</var>
+<var name="step_02_discover_tests_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/step-03-map-criteria.md</var>
+<var name="step_03_map_criteria_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/step-04-analyze-gaps.md</var>
+<var name="step_04_analyze_gaps_nextStepFile">.claude/skills/bmad-testarch-trace/steps-c/step-05-gate-decision.md</var>
 <var name="story_file" file_id="ef16e0c9">embedded in prompt, file id: ef16e0c9</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
@@ -222,7 +222,7 @@ Summarize what was found and explicitly state the resolved oracle, its confidenc
   - Set `externalPointerStatus` to the resolved external pointer status
   - Append this step's output to the appropriate section of the document.
 
-Load next step: `{nextStepFile}`
+Load next step: ``
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
@@ -235,6 +235,1527 @@ Load next step: `{nextStepFile}`
 - Skipped sequence steps or missing outputs
   **Master Rule:** Skipping steps is FORBIDDEN.
 
+<!-- STEP: step-02-discover-tests -->
+# Step 2: Discover & Catalog Tests
+
+## STEP GOAL
+
+Identify tests relevant to the resolved coverage oracle and classify by test level.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Discover Tests
+
+Search `/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-testarch-trace/proj/tests` for:
+
+- Test IDs (e.g., `1.3-E2E-001`)
+- Feature name matches
+- Resolved oracle item IDs/titles
+- Spec patterns (`*.spec.*`, `*.test.*`)
+
+When the oracle is synthetic (`synthetic_requirements` or `user_journeys`), also search for:
+
+- route/path matches
+- page/screen/component names
+- visible UI labels and CTA names
+- form action verbs (create, edit, save, delete, submit, search, checkout, etc.)
+- auth/session/logout flows
+
+---
+
+## 2. Categorize by Level
+
+Classify as:
+
+- E2E
+- API
+- Component
+- Unit
+
+Record test IDs, describe blocks, priority markers, and the per-test identity fields needed for machine-readable output:
+
+- Stable identity fields: `id`, `title`, `file`, `line`, `level`
+- Execution state flags: `skipped`, `pending`, `fixme`
+- Skip or blocker reason when it can be discovered from the test source or runtime metadata
+
+---
+
+## 3. Build Coverage Heuristics Inventory
+
+Capture explicit coverage signals so Phase 1 can detect common blind spots:
+
+- API endpoint coverage
+  - Inventory endpoints referenced by requirements/specs and endpoints exercised by API tests
+  - Mark endpoints with no direct tests
+- Authentication/authorization coverage
+  - Detect tests for login/session/token flows and permission-denied paths
+  - Mark auth/authz requirements with missing negative-path tests
+- Error-path coverage
+  - Detect validation, timeout, network-failure, and server-error scenarios
+  - Mark criteria with happy-path-only tests
+
+- UI journey coverage (when tracing UI/source-derived oracle items)
+  - Inventory routes/screens/journeys referenced by the oracle and journeys exercised by E2E/component tests
+  - Mark journeys with no end-to-end coverage
+- UI state coverage
+  - Detect loading, empty, validation, error, and permission-denied state assertions
+  - Mark journeys that only verify happy-path rendering
+
+Record these findings in step output as `coverage_heuristics` for Step 3/4.
+
+---
+
+### 4. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-02-discover-tests']
+  lastStep: 'step-02-discover-tests'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-02-discover-tests'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-02-discover-tests'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-03-map-criteria -->
+# Step 3: Map Coverage Oracle to Tests
+
+## STEP GOAL
+
+Create the traceability matrix linking the resolved oracle items to tests.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Build Matrix
+
+For each resolved oracle item (formal requirement, endpoint/spec item, or synthetic journey):
+
+- Map to matching tests
+- Mark coverage status: FULL / PARTIAL / NONE / UNIT-ONLY / INTEGRATION-ONLY
+- Record test level and priority
+- Preserve each mapped test's stable identity fields (`id`, `title`, `file`, `line`, `level`, status flags) so Phase 1 can deduplicate unique tests before JSON export
+- Record heuristic signals:
+  - Endpoint coverage present/missing (for API-impacting items)
+  - Auth/authz coverage present/missing (positive and negative paths)
+  - Error-path coverage present/missing (validation, timeout, network/server failures)
+  - UI journey E2E coverage present/missing (for source-derived journeys)
+  - UI state coverage present/missing (loading, empty, validation, error, permission-denied)
+
+---
+
+## 2. Validate Coverage Logic
+
+Ensure:
+
+- P0/P1 items have coverage
+- No duplicate coverage across levels without justification
+- Items are not happy-path-only when the oracle implies error handling or alternate states
+- API items are not marked FULL if endpoint-level checks are missing
+- Auth/authz items include at least one denied/invalid-path test where applicable
+- Synthetic UI journeys are not marked FULL when no E2E or component test asserts the critical path and key failure states
+
+---
+
+### 3. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-03-map-criteria']
+  lastStep: 'step-03-map-criteria'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-03-map-criteria'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-03-map-criteria'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-04-analyze-gaps -->
+# Step 4: Complete Phase 1 - Coverage Matrix Generation
+
+## STEP GOAL
+
+**Phase 1 Final Step:** Analyze coverage gaps (including endpoint/auth/error-path blind spots), generate recommendations, and output complete coverage matrix to temp file for Phase 2 (gate decision).
+
+---
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Output coverage matrix to temp file
+- ✅ Resolve execution mode from explicit user request first, then config
+- ✅ Apply fallback rules deterministically when requested mode is unsupported
+- ❌ Do NOT make gate decision (that's Phase 2 - Step 5)
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: resolved oracle items from Step 1, tests from Step 2, traceability matrix from Step 3
+- Focus: gap analysis and matrix completion
+- Limits: do not make gate decision (Phase 2 responsibility)
+
+---
+
+## MANDATORY SEQUENCE
+
+### 0. Resolve Execution Mode (User Override First)
+
+```javascript
+const parseBooleanFlag = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const orchestrationContext = {
+  config: {
+    execution_mode: config.tea_execution_mode || 'auto', // "auto" | "subagent" | "agent-team" | "sequential"
+    capability_probe: parseBooleanFlag(config.tea_capability_probe, true), // supports booleans and "false"/"true" strings
+  },
+  timestamp: new Date().toISOString().replace(/[:.]/g, '-'),
+};
+
+const normalizeUserExecutionMode = (mode) => {
+  if (typeof mode !== 'string') return null;
+  const normalized = mode.trim().toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
+
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'sequential') return 'sequential';
+  if (normalized === 'subagent' || normalized === 'sub agent' || normalized === 'subagents' || normalized === 'sub agents') {
+    return 'subagent';
+  }
+  if (normalized === 'agent team' || normalized === 'agent teams' || normalized === 'agentteam') {
+    return 'agent-team';
+  }
+
+  return null;
+};
+
+const normalizeConfigExecutionMode = (mode) => {
+  if (mode === 'subagent') return 'subagent';
+  if (mode === 'auto' || mode === 'sequential' || mode === 'subagent' || mode === 'agent-team') {
+    return mode;
+  }
+  return null;
+};
+
+// Explicit user instruction in the active run takes priority over config.
+const explicitModeFromUser = normalizeUserExecutionMode(runtime.getExplicitExecutionModeHint?.() || null);
+
+const requestedMode = explicitModeFromUser || normalizeConfigExecutionMode(orchestrationContext.config.execution_mode) || 'auto';
+const probeEnabled = orchestrationContext.config.capability_probe;
+
+const supports = { subagent: false, agentTeam: false };
+if (probeEnabled) {
+  supports.subagent = runtime.canLaunchSubagents?.() === true;
+  supports.agentTeam = runtime.canLaunchAgentTeams?.() === true;
+}
+
+let resolvedMode = requestedMode;
+if (requestedMode === 'auto') {
+  if (supports.agentTeam) resolvedMode = 'agent-team';
+  else if (supports.subagent) resolvedMode = 'subagent';
+  else resolvedMode = 'sequential';
+} else if (probeEnabled && requestedMode === 'agent-team' && !supports.agentTeam) {
+  resolvedMode = supports.subagent ? 'subagent' : 'sequential';
+} else if (probeEnabled && requestedMode === 'subagent' && !supports.subagent) {
+  resolvedMode = 'sequential';
+}
+```
+
+Resolution precedence:
+
+1. Explicit user request in this run (`agent team` => `agent-team`; `subagent` => `subagent`; `sequential`; `auto`)
+2. `tea_execution_mode` from config
+3. Runtime capability fallback (when probing enabled)
+
+### 1. Gap Analysis
+
+**Identify uncovered requirements:**
+
+```javascript
+const uncoveredRequirements = traceabilityMatrix.filter((req) => req.coverage === 'NONE');
+const partialCoverage = traceabilityMatrix.filter((req) => req.coverage === 'PARTIAL');
+const unitOnlyCoverage = traceabilityMatrix.filter((req) => req.coverage === 'UNIT-ONLY');
+```
+
+**Prioritize gaps by risk:**
+
+```javascript
+const criticalGaps = uncoveredRequirements.filter((req) => req.priority === 'P0');
+const highGaps = uncoveredRequirements.filter((req) => req.priority === 'P1');
+const mediumGaps = uncoveredRequirements.filter((req) => req.priority === 'P2');
+const lowGaps = uncoveredRequirements.filter((req) => req.priority === 'P3');
+```
+
+---
+
+### 2. Coverage Heuristics Checks
+
+Use the heuristics inventory from Step 2 and mapped criteria from Step 3 to flag common coverage blind spots:
+
+```javascript
+const endpointCoverageGaps = coverageHeuristics?.endpoints_without_tests || [];
+const authCoverageGaps = coverageHeuristics?.auth_missing_negative_paths || [];
+const errorPathGaps = coverageHeuristics?.criteria_happy_path_only || [];
+const uiJourneyGaps = coverageHeuristics?.ui_journeys_without_e2e || [];
+const uiStateGaps = coverageHeuristics?.ui_states_missing_coverage || [];
+
+const heuristicGapCounts = {
+  endpoints_without_tests: endpointCoverageGaps.length,
+  auth_missing_negative_paths: authCoverageGaps.length,
+  happy_path_only_criteria: errorPathGaps.length,
+  ui_journeys_without_e2e: uiJourneyGaps.length,
+  ui_states_missing_coverage: uiStateGaps.length,
+};
+```
+
+Heuristics are advisory but must influence gap severity and recommendations, especially for P0/P1 criteria.
+
+---
+
+### 3. Generate Recommendations
+
+**Based on gap analysis:**
+
+```javascript
+const progressDoc = fs.existsSync('{outputFile}') ? fs.readFileSync('{outputFile}', 'utf8') : '';
+const progressFrontmatterMatch = progressDoc.match(/^---\n([\s\S]*?)\n---/);
+const progressFrontmatter = progressFrontmatterMatch ? yaml.parse(progressFrontmatterMatch[1]) : {};
+
+const isUnresolved = (value) => typeof value === 'string' && value.startsWith('{') && value.endsWith('}');
+const normalizeResolvedToken = (value) => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized || normalized === 'auto' || isUnresolved(normalized)) return null;
+  return normalized;
+};
+const firstResolvedToken = (...values) => {
+  for (const value of values) {
+    const normalized = normalizeResolvedToken(value);
+    if (normalized) return normalized;
+  }
+  return null;
+};
+
+const oracleResolutionMode =
+  firstResolvedToken(runtime.getOracleResolutionMode?.(), progressFrontmatter.oracleResolutionMode) || 'formal_requirements';
+const resolvedCoverageBasis =
+  firstResolvedToken(runtime.getResolvedCoverageBasis?.(), progressFrontmatter.coverageBasis) ||
+  {
+    formal_requirements: 'acceptance_criteria',
+    spec_artifact: 'openapi_endpoints',
+    external_pointer: 'acceptance_criteria',
+    synthetic_source: 'user_journeys',
+  }[oracleResolutionMode] ||
+  'acceptance_criteria';
+const resolvedOracleConfidence =
+  firstResolvedToken(runtime.getResolvedOracleConfidence?.(), progressFrontmatter.oracleConfidence) ||
+  {
+    formal_requirements: 'high',
+    spec_artifact: 'high',
+    external_pointer: 'medium',
+    synthetic_source: 'medium',
+  }[oracleResolutionMode] ||
+  'medium';
+const oracleSources = runtime.getOracleSources?.() || progressFrontmatter.oracleSources || [];
+const externalPointerStatus =
+  firstResolvedToken(runtime.getExternalPointerStatus?.(), progressFrontmatter.externalPointerStatus) || 'not_used';
+const recommendations = [];
+
+// Critical gaps (P0)
+if (criticalGaps.length > 0) {
+  recommendations.push({
+    priority: 'URGENT',
+    action: `Run /bmad:tea:atdd for ${criticalGaps.length} P0 requirements`,
+    requirements: criticalGaps.map((r) => r.id),
+  });
+}
+
+// High priority gaps (P1)
+if (highGaps.length > 0) {
+  recommendations.push({
+    priority: 'HIGH',
+    action: `Run /bmad:tea:automate to expand coverage for ${highGaps.length} P1 requirements`,
+    requirements: highGaps.map((r) => r.id),
+  });
+}
+
+// Partial coverage
+if (partialCoverage.length > 0) {
+  recommendations.push({
+    priority: 'MEDIUM',
+    action: `Complete coverage for ${partialCoverage.length} partially covered requirements`,
+    requirements: partialCoverage.map((r) => r.id),
+  });
+}
+
+if (endpointCoverageGaps.length > 0) {
+  recommendations.push({
+    priority: 'HIGH',
+    action: `Add API tests for ${endpointCoverageGaps.length} uncovered endpoint(s)`,
+    requirements: endpointCoverageGaps.map((r) => r.id || r.endpoint || 'unknown'),
+  });
+}
+
+if (authCoverageGaps.length > 0) {
+  recommendations.push({
+    priority: 'HIGH',
+    action: `Add negative-path auth/authz tests for ${authCoverageGaps.length} requirement(s)`,
+    requirements: authCoverageGaps.map((r) => r.id || 'unknown'),
+  });
+}
+
+if (errorPathGaps.length > 0) {
+  recommendations.push({
+    priority: 'MEDIUM',
+    action: `Add error/edge scenario tests for ${errorPathGaps.length} happy-path-only criterion/criteria`,
+    requirements: errorPathGaps.map((r) => r.id || 'unknown'),
+  });
+}
+
+if (uiJourneyGaps.length > 0) {
+  recommendations.push({
+    priority: 'HIGH',
+    action: `Add E2E or component coverage for ${uiJourneyGaps.length} inferred UI journey(s)`,
+    requirements: uiJourneyGaps.map((r) => r.id || r.route || r.journey || 'unknown'),
+  });
+}
+
+if (uiStateGaps.length > 0) {
+  recommendations.push({
+    priority: 'MEDIUM',
+    action: `Add loading/empty/error/permission state coverage for ${uiStateGaps.length} UI journey(s)`,
+    requirements: uiStateGaps.map((r) => r.id || r.route || r.journey || 'unknown'),
+  });
+}
+
+// Quality issues
+recommendations.push({
+  priority: 'LOW',
+  action: 'Run /bmad:tea:test-review to assess test quality',
+  requirements: [],
+});
+
+if (oracleResolutionMode === 'synthetic_source') {
+  recommendations.push({
+    priority: 'MEDIUM',
+    action: 'Promote inferred journeys into formal acceptance criteria when the team confirms they reflect intended behavior',
+    requirements: traceabilityMatrix.map((r) => r.id),
+  });
+}
+```
+
+---
+
+### 4. Calculate Coverage Statistics
+
+```javascript
+const totalRequirements = traceabilityMatrix.length;
+const coveredRequirements = traceabilityMatrix.filter((r) => r.coverage === 'FULL' || r.coverage === 'PARTIAL').length;
+const fullyCovered = traceabilityMatrix.filter((r) => r.coverage === 'FULL').length;
+
+const safePct = (covered, total) => (total > 0 ? Math.round((covered / total) * 100) : 100);
+const coveragePercentage = safePct(fullyCovered, totalRequirements);
+
+// Priority-specific coverage
+const p0Total = traceabilityMatrix.filter((r) => r.priority === 'P0').length;
+const p0Covered = traceabilityMatrix.filter((r) => r.priority === 'P0' && r.coverage === 'FULL').length;
+const p1Total = traceabilityMatrix.filter((r) => r.priority === 'P1').length;
+const p1Covered = traceabilityMatrix.filter((r) => r.priority === 'P1' && r.coverage === 'FULL').length;
+const p2Total = traceabilityMatrix.filter((r) => r.priority === 'P2').length;
+const p2Covered = traceabilityMatrix.filter((r) => r.priority === 'P2' && r.coverage === 'FULL').length;
+const p3Total = traceabilityMatrix.filter((r) => r.priority === 'P3').length;
+const p3Covered = traceabilityMatrix.filter((r) => r.priority === 'P3' && r.coverage === 'FULL').length;
+
+const p0CoveragePercentage = safePct(p0Covered, p0Total);
+const p1CoveragePercentage = safePct(p1Covered, p1Total);
+const p2CoveragePercentage = safePct(p2Covered, p2Total);
+const p3CoveragePercentage = safePct(p3Covered, p3Total);
+```
+
+---
+
+### 4b. Build Deduplicated Test Inventory and Trace Metadata
+
+Persist the unique discovered tests in Phase 1 so Step 5 does not need to reconstruct counts from per-requirement mappings.
+
+```javascript
+const coverageEligibleStatuses = new Set(['FULL', 'PARTIAL', 'UNIT-ONLY', 'INTEGRATION-ONLY']);
+const byLevel = {
+  e2e: { tests: 0, criteria_covered: 0 },
+  api: { tests: 0, criteria_covered: 0 },
+  component: { tests: 0, criteria_covered: 0 },
+  unit: { tests: 0, criteria_covered: 0 },
+  other: { tests: 0, criteria_covered: 0 }, // captures tests with unrecognized or empty level
+};
+
+const normalizeTestStatus = (test) => {
+  const explicitStatus = String(test.status || '')
+    .trim()
+    .toLowerCase();
+  if (['skipped', 'pending', 'fixme'].includes(explicitStatus)) return explicitStatus;
+  if (test.fixme === true) return 'fixme';
+  if (test.pending === true) return 'pending';
+  if (test.skipped === true) return 'skipped';
+  return 'active';
+};
+
+const uniqueTests = new Map();
+(traceabilityMatrix || []).forEach((req) => {
+  (req.tests || []).forEach((test, index) => {
+    // Do NOT use the per-requirement `index` as a fallback — the same test can appear
+    // at different indices across requirements, producing spurious duplicate entries.
+    // Use only stable, test-intrinsic fields; omit line when unavailable.
+    const stableId =
+      test.id ||
+      [test.file, test.title || test.name, test.line].filter((value) => value !== undefined && value !== null && value !== '').join(':') ||
+      null; // unresolvable — skip rather than manufacture a key
+
+    if (stableId === null || uniqueTests.has(stableId)) return;
+    const status = normalizeTestStatus(test);
+    uniqueTests.set(stableId, {
+      id: stableId,
+      file: test.file || '',
+      line: test.line ?? null,
+      title: test.title || test.name || stableId,
+      level: String(test.level || '')
+        .trim()
+        .toLowerCase(),
+      status: status,
+      skipped: status === 'skipped',
+      fixme: status === 'fixme',
+      pending: status === 'pending',
+      blocker_reason: test.skip_reason || test.blocker_reason || test.fixme_reason || test.pending_reason || '',
+    });
+  });
+});
+
+[...uniqueTests.values()].forEach((test) => {
+  const bucket = byLevel[test.level] ? test.level : 'other';
+  if (bucket === 'other' && test.level) {
+    console.warn(`[trace] unknown test level "${test.level}" for test "${test.id}" — counted in "other"`);
+  }
+  byLevel[bucket].tests += 1;
+});
+
+(traceabilityMatrix || []).forEach((req) => {
+  if (!coverageEligibleStatuses.has(req.coverage)) return;
+  const requirementLevels = new Set(
+    (req.tests || []).map((test) => {
+      const level = String(test.level || '')
+        .trim()
+        .toLowerCase();
+      return byLevel[level] ? level : 'other';
+    }),
+  );
+  requirementLevels.forEach((level) => {
+    byLevel[level].criteria_covered += 1;
+  });
+});
+
+const deduplicatedTests = [...uniqueTests.values()];
+const deduplicatedTestInventory = {
+  summary: {
+    files: [...new Set(deduplicatedTests.map((test) => test.file).filter(Boolean))].length,
+    cases: deduplicatedTests.length,
+    skipped_cases: deduplicatedTests.filter((test) => test.skipped).length,
+    fixme_cases: deduplicatedTests.filter((test) => test.fixme).length,
+    pending_cases: deduplicatedTests.filter((test) => test.pending).length,
+    by_level: byLevel,
+  },
+  tests: deduplicatedTests,
+  blockers: deduplicatedTests
+    .filter((test) => ['skipped', 'pending', 'fixme'].includes(test.status))
+    .map((test) => ({
+      id: test.id,
+      severity: test.status === 'skipped' ? 'high' : 'medium',
+      reason: test.blocker_reason || `Test marked ${test.status} during trace collection`,
+      test_file: test.file,
+      test_title: test.title,
+    })),
+};
+
+const extractedTargetId = runtime.getTraceTargetId?.() || null;
+const extractedTargetLabel = runtime.getTraceTargetLabel?.() || null;
+const traceTarget = {
+  type: 'epic',
+  id: extractedTargetId, // story_id / epic_num / release_version / hotfix identifier from Step 1
+  label: extractedTargetLabel || null,
+};
+```
+
+---
+
+### 5. Generate Complete Coverage Matrix
+
+**Compile all Phase 1 outputs:**
+
+```javascript
+const coverageMatrix = {
+  phase: 'PHASE_1_COMPLETE',
+  generated_at: new Date().toISOString(),
+  trace_target: traceTarget,
+  collection_mode: '{collection_mode}',
+  allow_gate: '{allow_gate}',
+  coverage_basis: resolvedCoverageBasis,
+  summary_confidence: resolvedOracleConfidence,
+  oracle: {
+    resolution_mode: oracleResolutionMode,
+    confidence: resolvedOracleConfidence,
+    sources: oracleSources,
+    external_pointer_status: externalPointerStatus,
+    synthetic: oracleResolutionMode === 'synthetic_source',
+  },
+
+  requirements: traceabilityMatrix, // Full matrix from Step 3
+
+  coverage_statistics: {
+    total_requirements: totalRequirements,
+    fully_covered: fullyCovered,
+    partially_covered: partialCoverage.length,
+    uncovered: uncoveredRequirements.length,
+    overall_coverage_percentage: coveragePercentage,
+
+    priority_breakdown: {
+      P0: { total: p0Total, covered: p0Covered, percentage: p0CoveragePercentage },
+      P1: { total: p1Total, covered: p1Covered, percentage: p1CoveragePercentage },
+      P2: { total: p2Total, covered: p2Covered, percentage: p2CoveragePercentage },
+      P3: { total: p3Total, covered: p3Covered, percentage: p3CoveragePercentage },
+    },
+  },
+
+  gap_analysis: {
+    critical_gaps: criticalGaps,
+    high_gaps: highGaps,
+    medium_gaps: mediumGaps,
+    low_gaps: lowGaps,
+    partial_coverage_items: partialCoverage,
+    unit_only_items: unitOnlyCoverage,
+  },
+
+  coverage_heuristics: {
+    endpoint_gaps: endpointCoverageGaps,
+    auth_negative_path_gaps: authCoverageGaps,
+    happy_path_only_gaps: errorPathGaps,
+    ui_journey_gaps: uiJourneyGaps,
+    ui_state_gaps: uiStateGaps,
+    counts: heuristicGapCounts,
+  },
+
+  test_inventory: deduplicatedTestInventory,
+  blockers: deduplicatedTestInventory.blockers,
+  recommendations: recommendations,
+};
+```
+
+---
+
+### 6. Output Coverage Matrix to Temp File
+
+**Write to temp file for Phase 2:**
+
+```javascript
+const outputPath = '{tempOutputFile}';
+fs.writeFileSync(outputPath, JSON.stringify(coverageMatrix, null, 2), 'utf8');
+
+console.log(`✅ Phase 1 Complete: Coverage matrix saved to ${outputPath}`);
+```
+
+**Record the resolved path in the progress document** so Step 5 can read the exact same file rather than re-evaluating the timestamp expression:
+
+After writing the temp file, update the YAML frontmatter in `{outputFile}` to include:
+
+```yaml
+tempCoverageMatrixPath: '<resolved outputPath>'
+```
+
+Step 5 reads `tempCoverageMatrixPath` from the frontmatter first; falls back to reconstructing `{tempOutputFile}` only when the key is absent.
+
+---
+
+### 7. Display Phase 1 Summary
+
+```
+✅ Phase 1 Complete: Coverage Matrix Generated
+
+📊 Coverage Statistics:
+- Total Requirements: {totalRequirements}
+- Fully Covered: {fullyCovered} ({coveragePercentage}%)
+- Partially Covered: {partialCoverage.length}
+- Uncovered: {uncoveredRequirements.length}
+
+🎯 Priority Coverage:
+- P0: {p0Covered}/{p0Total} ({p0CoveragePercentage}%)
+- P1: {p1Covered}/{p1Total} ({p1CoveragePercentage}%)
+- P2: {p2Covered}/{p2Total} ({p2CoveragePercentage}%)
+- P3: {p3Covered}/{p3Total} ({p3CoveragePercentage}%)
+
+⚠️ Gaps Identified:
+- Critical (P0): {criticalGaps.length}
+- High (P1): {highGaps.length}
+- Medium (P2): {mediumGaps.length}
+- Low (P3): {lowGaps.length}
+
+🔍 Coverage Heuristics:
+- Endpoints without tests: {endpointCoverageGaps.length}
+- Auth negative-path gaps: {authCoverageGaps.length}
+- Happy-path-only criteria: {errorPathGaps.length}
+
+📝 Recommendations: {recommendations.length}
+
+🔄 Phase 2: Gate decision (next step)
+```
+
+### Orchestration Notes for This Step
+
+When `resolvedMode` is `agent-team` or `subagent`, parallelize only dependency-safe sections:
+
+- Worker A: gap classification (section 1)
+- Worker B: heuristics gap extraction (section 2)
+- Worker C: coverage statistics (section 4)
+
+Section 3 (recommendation synthesis) depends on outputs from sections 1 and 2, so run it only after Workers A and B complete.
+
+Section 5 remains the deterministic merge point after sections 1-4 are finished.
+
+If `resolvedMode` is `sequential`, execute sections 1→7 in order.
+
+---
+
+## EXIT CONDITION
+
+**PHASE 1 COMPLETE when:**
+
+- ✅ Gap analysis complete
+- ✅ Recommendations generated
+- ✅ Coverage statistics calculated
+- ✅ Coverage matrix saved to temp file
+- ✅ Summary displayed
+
+**Proceed to Phase 2 (Step 5: Gate Decision)**
+
+---
+
+### 8. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-04-analyze-gaps']
+  lastStep: 'step-04-analyze-gaps'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-04-analyze-gaps'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-04-analyze-gaps'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section of the document.
+
+Load next step: ``
+
+---
+
+## 🚨 PHASE 1 SUCCESS METRICS
+
+### ✅ SUCCESS:
+
+- Coverage matrix complete and accurate
+- All gaps identified and prioritized
+- Recommendations actionable
+- Temp file output valid JSON
+
+### ❌ FAILURE:
+
+- Coverage matrix incomplete
+- Gap analysis missing
+- Invalid JSON output
+
+**Master Rule:** Phase 1 MUST output complete coverage matrix to temp file before Phase 2 can proceed.
+
+<!-- STEP: step-05-gate-decision -->
+# Step 5: Phase 2 - Gate Decision
+
+## STEP GOAL
+
+**Phase 2:** Read coverage matrix from Phase 1, apply deterministic gate decision logic when gate-eligible, and generate the traceability report plus machine-readable outputs.
+
+---
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Read coverage matrix from Phase 1 temp file
+- ✅ Resolve collection status and gate eligibility before applying gate decision logic
+- ❌ Do NOT regenerate coverage matrix (use Phase 1 output)
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 This is the FINAL step
+
+## CONTEXT BOUNDARIES:
+
+- Available context: Coverage matrix from Phase 1 temp file
+- Focus: gate decision logic only
+- Dependencies: Phase 1 complete (coverage matrix exists)
+
+---
+
+## MANDATORY SEQUENCE
+
+### 1. Read Phase 1 Coverage Matrix
+
+Read `{outputFile}` frontmatter for `tempCoverageMatrixPath`. Halt when missing — the fallback timestamp cannot be reconstructed reliably in a different execution context:
+
+```javascript
+const progressDoc = fs.readFileSync('{outputFile}', 'utf8');
+const frontmatterMatch = progressDoc.match(/^---\n([\s\S]*?)\n---/);
+const frontmatter = frontmatterMatch ? yaml.parse(frontmatterMatch[1]) : {};
+
+const matrixPath = frontmatter.tempCoverageMatrixPath;
+if (!matrixPath) {
+  throw new Error(
+    '❌ tempCoverageMatrixPath not found in progress frontmatter. ' +
+      'Step 4 must record the resolved temp file path before Step 5 can proceed.',
+  );
+}
+const coverageMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
+
+console.log('✅ Phase 1 coverage matrix loaded');
+```
+
+**Verify Phase 1 complete:**
+
+```javascript
+if (coverageMatrix.phase !== 'PHASE_1_COMPLETE') {
+  throw new Error('Phase 1 not complete - cannot proceed to gate decision');
+}
+```
+
+---
+
+### 2. Apply Gate Decision Logic
+
+**Decision Tree:**
+
+```javascript
+const stats = coverageMatrix.coverage_statistics;
+if (
+  !stats ||
+  typeof stats !== 'object' ||
+  !stats.priority_breakdown ||
+  !stats.priority_breakdown.P0 ||
+  !stats.priority_breakdown.P1 ||
+  !stats.priority_breakdown.P2 ||
+  !stats.priority_breakdown.P3
+) {
+  throw new Error(
+    'Phase 1 coverage_statistics.priority_breakdown is missing or incomplete. ' +
+      'Step 4 must emit P0-P3 totals and coverage percentages before Step 5 can proceed.',
+  );
+}
+const priorityBreakdown = stats.priority_breakdown;
+const p0Coverage = priorityBreakdown.P0.percentage;
+const p1Coverage = priorityBreakdown.P1.percentage;
+const hasP1Requirements = (priorityBreakdown.P1.total || 0) > 0;
+const effectiveP1Coverage = hasP1Requirements ? p1Coverage : 100;
+const overallCoverage = stats.overall_coverage_percentage;
+const criticalGaps = (coverageMatrix.gap_analysis?.critical_gaps || []).length;
+const isUnresolved = (value) => typeof value === 'string' && value.startsWith('{') && value.endsWith('}');
+const normalizeResolvedToken = (value) => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized || normalized === 'auto' || isUnresolved(normalized)) return null;
+  return normalized;
+};
+const oracleResolutionMode = normalizeResolvedToken(coverageMatrix.oracle?.resolution_mode) || 'formal_requirements';
+const coverageBasis =
+  normalizeResolvedToken(coverageMatrix.coverage_basis) ||
+  {
+    formal_requirements: 'acceptance_criteria',
+    spec_artifact: 'openapi_endpoints',
+    external_pointer: 'acceptance_criteria',
+    synthetic_source: 'user_journeys',
+  }[oracleResolutionMode] ||
+  'acceptance_criteria';
+const oracleConfidence =
+  normalizeResolvedToken(coverageMatrix.oracle?.confidence || coverageMatrix.summary_confidence) ||
+  {
+    formal_requirements: 'high',
+    spec_artifact: 'high',
+    external_pointer: 'medium',
+    synthetic_source: 'medium',
+  }[oracleResolutionMode] ||
+  'medium';
+const syntheticOracle = coverageMatrix.oracle?.synthetic === true || ['synthetic_requirements', 'user_journeys'].includes(coverageBasis);
+const deriveActiveTestCasesFromRequirements = (requirements) => {
+  const uniqueTests = new Map();
+
+  (requirements || []).forEach((req) => {
+    (req.tests || []).forEach((test) => {
+      const stableId =
+        test.id ||
+        [test.file, test.title || test.name, test.line]
+          .filter((value) => value !== undefined && value !== null && value !== '')
+          .join(':') ||
+        null;
+
+      if (stableId === null || uniqueTests.has(stableId)) return;
+
+      const explicitStatus = String(test.status || '')
+        .trim()
+        .toLowerCase();
+      const status = ['skipped', 'pending', 'fixme'].includes(explicitStatus)
+        ? explicitStatus
+        : test.fixme === true
+          ? 'fixme'
+          : test.pending === true
+            ? 'pending'
+            : test.skipped === true
+              ? 'skipped'
+              : 'active';
+
+      uniqueTests.set(stableId, status);
+    });
+  });
+
+  return [...uniqueTests.values()].filter((status) => status === 'active').length;
+};
+const summarizedTestInventory = coverageMatrix.test_inventory?.summary || null;
+const activeTestCases =
+  summarizedTestInventory === null
+    ? deriveActiveTestCasesFromRequirements(coverageMatrix.requirements)
+    : Math.max(
+        0,
+        (summarizedTestInventory.cases || 0) -
+          (summarizedTestInventory.skipped_cases || 0) -
+          (summarizedTestInventory.fixme_cases || 0) -
+          (summarizedTestInventory.pending_cases || 0),
+      );
+let effectiveOracleConfidence = oracleConfidence;
+if (effectiveOracleConfidence === 'high' && activeTestCases === 0) {
+  effectiveOracleConfidence = 'medium';
+}
+
+const normalizeBoolean = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const collectionMode = String(!isUnresolved(coverageMatrix.collection_mode) ? coverageMatrix.collection_mode : 'contract_static')
+  .trim()
+  .toLowerCase();
+const rawAllowGate = !isUnresolved(coverageMatrix.allow_gate) ? coverageMatrix.allow_gate : true;
+const allowGate = normalizeBoolean(rawAllowGate, true);
+const rawCollectionStatus =
+  coverageMatrix.collection_status ||
+  {
+    waived: 'WAIVED',
+    restricted: 'RESTRICTED',
+    inaccessible: 'INACCESSIBLE',
+    deferred_shared: 'DEFERRED_SHARED',
+  }[collectionMode] ||
+  'COLLECTED';
+// Normalize to UPPER_CASE + trimmed so comparisons are whitespace/case-safe.
+const collectionStatus = String(rawCollectionStatus).trim().toUpperCase();
+const gateEligible = allowGate && collectionStatus === 'COLLECTED';
+
+let gateDecision = 'NOT_EVALUATED'; // default; overwritten when gateEligible
+let rationale;
+
+if (!gateEligible) {
+  rationale = `Gate decision skipped because allow_gate=${allowGate} and collection_status=${collectionStatus}.`;
+} else {
+  // Rule 1: P0 coverage must be 100%
+  if (p0Coverage < 100) {
+    gateDecision = 'FAIL';
+    rationale = `P0 coverage is ${p0Coverage}% (required: 100%). ${criticalGaps} critical requirements uncovered.`;
+  }
+  // Rule 2: Overall coverage must be >= 80%
+  else if (overallCoverage < 80) {
+    gateDecision = 'FAIL';
+    rationale = `Overall coverage is ${overallCoverage}% (minimum: 80%). Significant gaps exist.`;
+  }
+  // Rule 3: P1 coverage < 80% → FAIL
+  else if (effectiveP1Coverage < 80) {
+    gateDecision = 'FAIL';
+    rationale = hasP1Requirements
+      ? `P1 coverage is ${effectiveP1Coverage}% (minimum: 80%). High-priority gaps must be addressed.`
+      : `P1 requirements are not present; continuing with remaining gate criteria.`;
+  }
+  // Rule 4: P1 coverage >= 90% and overall >= 80% with P0 at 100% → PASS
+  else if (effectiveP1Coverage >= 90) {
+    gateDecision = 'PASS';
+    rationale = hasP1Requirements
+      ? `P0 coverage is 100%, P1 coverage is ${effectiveP1Coverage}% (target: 90%), and overall coverage is ${overallCoverage}% (minimum: 80%).`
+      : `P0 coverage is 100% and overall coverage is ${overallCoverage}% (minimum: 80%). No P1 requirements detected.`;
+  }
+  // Rule 5: P1 coverage 80-89% with P0 at 100% and overall >= 80% → CONCERNS
+  else if (effectiveP1Coverage >= 80) {
+    gateDecision = 'CONCERNS';
+    rationale = hasP1Requirements
+      ? `P0 coverage is 100% and overall coverage is ${overallCoverage}% (minimum: 80%), but P1 coverage is ${effectiveP1Coverage}% (target: 90%).`
+      : `P0 coverage is 100% and overall coverage is ${overallCoverage}% (minimum: 80%), but additional non-P1 gaps need mitigation.`;
+  }
+
+  // Rule 6: Manual waiver — set gateDecision = 'WAIVED' and update rationale here
+  // if a stakeholder-approved waiver applies (wired through config or user input upstream).
+
+  // Oracle confidence overlay
+  if (syntheticOracle && gateDecision === 'PASS' && effectiveOracleConfidence !== 'high') {
+    gateDecision = 'CONCERNS';
+    rationale =
+      `Coverage traced against inferred ${coverageBasis.replace('_', ' ')} with ${effectiveOracleConfidence} confidence. ` +
+      `Base coverage meets PASS thresholds, but confidence is not high enough for an unconditional PASS.`;
+  } else if (syntheticOracle && effectiveOracleConfidence === 'low' && gateDecision === 'NOT_EVALUATED') {
+    gateDecision = 'CONCERNS';
+    rationale =
+      `Coverage traced against inferred ${coverageBasis.replace('_', ' ')} with low confidence. ` +
+      `Treat this result as advisory until the inferred journeys are confirmed or formalized.`;
+  }
+}
+```
+
+---
+
+### 3. Generate Gate Report
+
+```javascript
+const gateReport = {
+  gate_eligible: gateEligible,
+  collection_status: collectionStatus,
+  decision: gateEligible ? gateDecision : 'NOT_EVALUATED',
+  rationale: rationale,
+  decision_date: new Date().toISOString(),
+
+  coverage_matrix: coverageMatrix,
+
+  gate_criteria: gateEligible
+    ? {
+        p0_coverage_required: '100%',
+        p0_coverage_actual: `${p0Coverage}%`,
+        p0_status: p0Coverage === 100 ? 'MET' : 'NOT_MET',
+
+        p1_coverage_target: '90%',
+        p1_coverage_minimum: '80%',
+        p1_coverage_actual: `${effectiveP1Coverage}%`,
+        p1_status: effectiveP1Coverage >= 90 ? 'MET' : effectiveP1Coverage >= 80 ? 'PARTIAL' : 'NOT_MET',
+
+        overall_coverage_minimum: '80%',
+        overall_coverage_actual: `${overallCoverage}%`,
+        overall_status: overallCoverage >= 80 ? 'MET' : 'NOT_MET',
+      }
+    : null,
+
+  uncovered_requirements: (coverageMatrix.gap_analysis?.critical_gaps || []).concat(coverageMatrix.gap_analysis?.high_gaps || []),
+
+  recommendations: coverageMatrix.recommendations,
+};
+```
+
+---
+
+### 3b. Emit `e2e-trace-summary.json`
+
+**After the gate report is assembled, write the machine-readable summary to `{e2e_trace_summary_output}`.**
+
+This file is the portable, automation-friendly companion to the markdown report. Any CI/CD pipeline, reporting dashboard, or LLM agent can consume it without parsing markdown.
+
+```javascript
+const buildFallbackInventory = () => {
+  const byLevel = {
+    e2e: { tests: 0, criteria_covered: 0 },
+    api: { tests: 0, criteria_covered: 0 },
+    component: { tests: 0, criteria_covered: 0 },
+    unit: { tests: 0, criteria_covered: 0 },
+    other: { tests: 0, criteria_covered: 0 }, // captures tests with unrecognized or empty level
+  };
+  const coverageEligibleStatuses = new Set(['FULL', 'PARTIAL', 'UNIT-ONLY', 'INTEGRATION-ONLY']);
+  const uniqueTests = new Map();
+
+  (coverageMatrix.requirements || []).forEach((req) => {
+    (req.tests || []).forEach((test) => {
+      const stableId =
+        test.id ||
+        [test.file, test.title || test.name, test.line]
+          .filter((value) => value !== undefined && value !== null && value !== '')
+          .join(':') ||
+        null; // unresolvable — skip rather than manufacture a key
+
+      if (stableId === null || uniqueTests.has(stableId)) return;
+      const explicitStatus = String(test.status || '')
+        .trim()
+        .toLowerCase();
+      const status = ['skipped', 'pending', 'fixme'].includes(explicitStatus)
+        ? explicitStatus
+        : test.fixme === true
+          ? 'fixme'
+          : test.pending === true
+            ? 'pending'
+            : test.skipped === true
+              ? 'skipped'
+              : 'active';
+
+      uniqueTests.set(stableId, {
+        id: stableId,
+        file: test.file || '',
+        title: test.title || test.name || stableId,
+        level: String(test.level || '')
+          .trim()
+          .toLowerCase(),
+        skipped: status === 'skipped',
+        fixme: status === 'fixme',
+        pending: status === 'pending',
+        status: status,
+        blocker_reason: test.skip_reason || test.blocker_reason || test.fixme_reason || test.pending_reason || '',
+      });
+    });
+
+    if (!coverageEligibleStatuses.has(req.coverage)) return;
+    const requirementLevels = new Set(
+      (req.tests || []).map((test) => {
+        const level = String(test.level || '')
+          .trim()
+          .toLowerCase();
+        return byLevel[level] ? level : 'other';
+      }),
+    );
+    requirementLevels.forEach((level) => {
+      byLevel[level].criteria_covered += 1;
+    });
+  });
+
+  const deduplicatedTests = [...uniqueTests.values()];
+  deduplicatedTests.forEach((test) => {
+    const bucket = byLevel[test.level] ? test.level : 'other';
+    byLevel[bucket].tests += 1;
+  });
+
+  return {
+    summary: {
+      files: [...new Set(deduplicatedTests.map((test) => test.file).filter(Boolean))].length,
+      cases: deduplicatedTests.length,
+      skipped_cases: deduplicatedTests.filter((test) => test.skipped).length,
+      fixme_cases: deduplicatedTests.filter((test) => test.fixme).length,
+      pending_cases: deduplicatedTests.filter((test) => test.pending).length,
+      by_level: byLevel,
+    },
+    blockers: deduplicatedTests
+      .filter((test) => ['skipped', 'pending', 'fixme'].includes(test.status))
+      .map((test) => ({
+        id: test.id,
+        severity: test.status === 'skipped' ? 'high' : 'medium',
+        reason: test.blocker_reason || `Test marked ${test.status} during trace collection`,
+        test_file: test.file,
+        test_title: test.title,
+      })),
+  };
+};
+
+const fallbackInventory = buildFallbackInventory();
+const testInventory = coverageMatrix.test_inventory?.summary || fallbackInventory.summary;
+const blockers = coverageMatrix.blockers || coverageMatrix.test_inventory?.blockers || fallbackInventory.blockers;
+
+const heuristicCounts = coverageMatrix.coverage_heuristics?.counts || {};
+const endpointGapCount = heuristicCounts.endpoints_without_tests ?? 0;
+const authGapCount = heuristicCounts.auth_missing_negative_paths ?? 0;
+const errorPathGapCount = heuristicCounts.happy_path_only_criteria ?? 0;
+const uiJourneyGapCount = heuristicCounts.ui_journeys_without_e2e;
+const uiStateGapCount = heuristicCounts.ui_states_missing_coverage;
+const sourceSha = process.env.GITHUB_SHA || runtime.getSourceSha?.() || '';
+const mapOptionalHeuristicStatus = (count, applicable) => {
+  if (!applicable) return 'not_applicable';
+  if (typeof count !== 'number' || Number.isNaN(count)) return 'unknown';
+  if (count === 0) return 'present';
+  return count <= 2 ? 'partial' : 'none';
+};
+const gateBasis = gateEligible ? 'priority_thresholds' : 'none';
+
+const e2eTraceSummary = {
+  schema_version: '0.1.0',
+  snapshot_at: new Date().toISOString(),
+  repo: '{project_name}',
+  collection_mode: collectionMode,
+  collection_status: collectionStatus,
+  inventory_basis: coverageBasis,
+  gate_basis: gateBasis,
+  source_sha: sourceSha || '',
+  target: coverageMatrix.trace_target || { type: 'epic', id: null, label: null },
+  decision_mode: '{decision_mode}',
+  evaluator: '{user_name}',
+  confidence: effectiveOracleConfidence,
+  oracle: {
+    resolution_mode: oracleResolutionMode,
+    confidence: effectiveOracleConfidence,
+    sources: coverageMatrix.oracle?.sources || [],
+    external_pointer_status: coverageMatrix.oracle?.external_pointer_status || 'not_used',
+    synthetic: syntheticOracle,
+  },
+
+  coverage: {
+    inventory: {
+      covered: stats.fully_covered,
+      total: stats.total_requirements,
+      pct: stats.overall_coverage_percentage,
+    },
+    priority_breakdown: {
+      P0: {
+        total: priorityBreakdown.P0.total,
+        covered: priorityBreakdown.P0.covered,
+        pct: priorityBreakdown.P0.percentage,
+      },
+      P1: {
+        total: priorityBreakdown.P1.total,
+        covered: priorityBreakdown.P1.covered,
+        pct: priorityBreakdown.P1.percentage,
+      },
+      P2: {
+        total: priorityBreakdown.P2.total,
+        covered: priorityBreakdown.P2.covered,
+        pct: priorityBreakdown.P2.percentage,
+      },
+      P3: {
+        total: priorityBreakdown.P3.total,
+        covered: priorityBreakdown.P3.covered,
+        pct: priorityBreakdown.P3.percentage,
+      },
+    },
+    by_level: testInventory.by_level,
+  },
+
+  tests: {
+    files: testInventory.files || 0,
+    cases: testInventory.cases || 0,
+    skipped_cases: testInventory.skipped_cases || 0,
+    fixme_cases: testInventory.fixme_cases || 0,
+    pending_cases: testInventory.pending_cases || 0,
+  },
+
+  risk_summary: {
+    critical_open: (coverageMatrix.gap_analysis?.critical_gaps || []).length,
+    high_open: (coverageMatrix.gap_analysis?.high_gaps || []).length,
+    medium_open: (coverageMatrix.gap_analysis?.medium_gaps || []).length,
+    low_open: (coverageMatrix.gap_analysis?.low_gaps || []).length,
+  },
+
+  heuristics: {
+    endpoint_gaps: endpointGapCount,
+    auth_negative_path_status: authGapCount === 0 ? 'present' : authGapCount <= 2 ? 'partial' : 'none',
+    error_path_status: errorPathGapCount === 0 ? 'present' : errorPathGapCount <= 2 ? 'partial' : 'none',
+    ui_journey_status: mapOptionalHeuristicStatus(uiJourneyGapCount, syntheticOracle),
+    ui_state_status: mapOptionalHeuristicStatus(uiStateGapCount, syntheticOracle),
+  },
+
+  blockers: blockers,
+  recommendations: coverageMatrix.recommendations,
+
+  links: {
+    trace_report_path: '{outputFile}',
+    trace_report_url: '', // populated by CI/CD runner after artifact upload
+    artifact_url: '',
+    journey_evidence_url: '',
+  },
+};
+
+if (gateEligible) {
+  e2eTraceSummary.gate_status = gateDecision;
+  e2eTraceSummary.gate_criteria = {
+    p0_coverage_required: '100%',
+    p0_coverage_actual: `${p0Coverage}%`,
+    p0_status: p0Coverage === 100 ? 'MET' : 'NOT_MET',
+    p1_coverage_target: '90%',
+    p1_coverage_minimum: '80%',
+    p1_coverage_actual: `${effectiveP1Coverage}%`,
+    p1_status: effectiveP1Coverage >= 90 ? 'MET' : effectiveP1Coverage >= 80 ? 'PARTIAL' : 'NOT_MET',
+    overall_coverage_minimum: '80%',
+    overall_coverage_actual: `${overallCoverage}%`,
+    overall_status: overallCoverage >= 80 ? 'MET' : 'NOT_MET',
+  };
+}
+
+fs.writeFileSync('{e2e_trace_summary_output}', JSON.stringify(e2eTraceSummary, null, 2), 'utf8');
+console.log(`✅ e2e-trace-summary.json written to {e2e_trace_summary_output}`);
+```
+
+**Optional: emit `gate-decision.json`** for pipelines that only need the gate signal without the full summary:
+
+```javascript
+// Construct and write only when gate evaluation was performed and produced a meaningful decision.
+// gateDecisionSlim is intentionally inside this guard: e2eTraceSummary.gate_criteria is only
+// populated when gateEligible is true, so constructing it outside would throw when !gateEligible.
+if (gateEligible && ['PASS', 'CONCERNS', 'FAIL', 'WAIVED'].includes(gateDecision)) {
+  const gateDecisionSlim = {
+    schema_version: '0.1.0',
+    evaluated_at: e2eTraceSummary.snapshot_at,
+    repo: e2eTraceSummary.repo,
+    target: e2eTraceSummary.target,
+    collection_status: e2eTraceSummary.collection_status,
+    gate_basis: e2eTraceSummary.gate_basis,
+    gate_status: gateDecision,
+    rationale: rationale,
+    p0_status: e2eTraceSummary.gate_criteria.p0_status,
+    p1_status: e2eTraceSummary.gate_criteria.p1_status,
+    overall_status: e2eTraceSummary.gate_criteria.overall_status,
+    critical_open: e2eTraceSummary.risk_summary.critical_open,
+    links: e2eTraceSummary.links,
+  };
+  fs.writeFileSync('{gate_decision_output}', JSON.stringify(gateDecisionSlim, null, 2), 'utf8');
+  console.log(`✅ gate-decision.json written to {gate_decision_output}`);
+}
+```
+
+---
+
+### 4. Generate Traceability Report
+
+**Use trace-template.md to generate:**
+
+```markdown
+# Traceability Report
+
+## Gate Decision: {gateDecision}
+
+**Rationale:** {rationale}
+
+## Coverage Summary
+
+- Total Requirements: {totalRequirements}
+- Covered: {fullyCovered} ({coveragePercentage}%)
+- P0 Coverage: {p0CoveragePercentage}%
+
+## Traceability Matrix
+
+[Full matrix with requirement → test mappings]
+
+## Gaps & Recommendations
+
+[List of uncovered requirements with recommended actions]
+
+## Next Actions
+
+{recommendations}
+```
+
+**Save to:**
+
+```javascript
+fs.writeFileSync('{outputFile}', reportContent, 'utf8');
+```
+
+---
+
+### 5. Display Gate Decision
+
+```
+🚨 GATE DECISION: {gateDecision}
+
+📊 Coverage Analysis:
+- P0 Coverage: {p0Coverage}% (Required: 100%) → {p0_status}
+- P1 Coverage: {effectiveP1Coverage}% (PASS target: 90%, minimum: 80%) → {p1_status}
+- Overall Coverage: {overallCoverage}% (Minimum: 80%) → {overall_status}
+
+✅ Decision Rationale:
+{rationale}
+
+⚠️ Critical Gaps: {criticalGaps.length}
+
+📝 Recommended Actions:
+{list top 3 recommendations}
+
+📂 Full Report: {outputFile}
+
+{if !gateEligible}
+ℹ️ GATE: NOT EVALUATED - collection status is {collectionStatus}; machine-readable summary still emitted
+{endif}
+
+{if FAIL}
+🚫 GATE: FAIL - Release BLOCKED until coverage improves
+{endif}
+
+{if CONCERNS}
+⚠️ GATE: CONCERNS - Proceed with caution, address gaps soon
+{endif}
+
+{if PASS}
+✅ GATE: PASS - Release approved, coverage meets standards
+{endif}
+```
+
+---
+
+### 6. Save Progress
+
+**Update the YAML frontmatter in `{outputFile}` to mark this final step complete.**
+
+Since step 4 (Generate Traceability Report) already wrote the report content to `{outputFile}`, do NOT overwrite it. Instead, update only the frontmatter at the top of the existing file:
+
+- Add `'step-05-gate-decision'` to `stepsCompleted` array (only if not already present)
+- Set `lastStep: 'step-05-gate-decision'`
+- Set `lastSaved: '{date}'`
+
+Then append the gate decision summary (from section 5 above) to the end of the existing report content.
+
+---
+
+## EXIT CONDITION
+
+**WORKFLOW COMPLETE when:**
+
+- ✅ Phase 1 coverage matrix read successfully
+- ✅ Collection status resolved and gate decision logic applied when eligible
+- ✅ `e2e-trace-summary.json` written to `{e2e_trace_summary_output}`
+- ✅ `gate-decision.json` written to `{gate_decision_output}` (when gate-eligible)
+- ✅ Traceability report generated
+- ✅ Gate decision displayed
+
+**Workflow terminates here.**
+
+---
+
+## 🚨 PHASE 2 SUCCESS METRICS
+
+### ✅ SUCCESS:
+
+- Coverage matrix read from Phase 1
+- Gate decision made with clear rationale when gate-eligible
+- `e2e-trace-summary.json` written and valid
+- `gate-decision.json` written when gate-eligible
+- Report generated and saved
+- Decision communicated clearly
+
+### ❌ FAILURE:
+
+- Could not read Phase 1 matrix
+- Gate eligibility or gate decision logic incorrect
+- `e2e-trace-summary.json` missing or invalid JSON
+- Report missing or incomplete
+
+**Master Rule:** Gate decision MUST be deterministic based on clear criteria (P0 100%, P1 90/80, overall >=80) whenever `allow_gate` is true and `collection_status` is `COLLECTED`. `e2e-trace-summary.json` MUST be written before the workflow terminates.
+
+## On Complete
+
+Run: `python3 _bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow.on_complete`
+
+If the resolver succeeds and returns a non-empty `workflow.on_complete`, execute that value as the final terminal instruction before exiting.
+
+If the resolver fails, returns no output, or resolves an empty value, skip the hook and exit normally.
 
 ]]></instructions>
 <output-template></output-template>

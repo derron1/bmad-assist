@@ -23,7 +23,6 @@ embedded ux-elements.md. NEVER invent or guess selector names.
 FR-1: example.
 NFR-1: example.
 
-
 ]]></file>
 <file id="a9808fff" path="ux-elements.md" label="UX DESIGN"><![CDATA[
 
@@ -34,14 +33,12 @@ NFR-1: example.
 - `[data-testid="main-panel"]`
 - `[data-testid="submit-btn"]`
 
-
 ]]></file>
 <file id="4e03c430" path="architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="eec95053" path="epic-10.md" label="EPIC"><![CDATA[
@@ -54,7 +51,6 @@ Objectives.
 
 Content.
 
-
 ]]></file>
 </context>
 <variables>
@@ -64,10 +60,9 @@ Content.
 <var name="epic_num">10</var>
 <var name="name">bmad-qa-plan-generate</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-<var name="sprint_status">none</var>
-<var name="template">.claude/skills/bmad-qa-plan-generate/template.md</var>
+
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-qa-plan-generate/checklist.md</var>
+
 </variables>
 <instructions><![CDATA[
 
@@ -260,7 +255,6 @@ Activation is complete. Begin the workflow below.
 
 </workflow>
 
-
 ]]></instructions>
 <output-template><![CDATA[
 
@@ -364,7 +358,6 @@ async function forceClick(page: Page, selector: string) {
 {recommendations}
 
 <!-- QA_PLAN_END -->
-
 
 ]]></output-template>
 </compiled-workflow>

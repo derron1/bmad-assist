@@ -22,7 +22,6 @@ Target: Story 10.1
 
 Minimal context.
 
-
 ]]></file>
 <file id="3ea8523e" path="docs/prd.md" label="PRD"><![CDATA[
 
@@ -30,14 +29,12 @@ Minimal context.
 
 Project requirements.
 
-
 ]]></file>
 <file id="a09dff38" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="81b514b0" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -60,13 +57,15 @@ ready-for-dev
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
 <var name="epic_num">10</var>
 <var name="knowledgeIndex">/Users/derron.carr/Documents/Folder/bmad-assist/src/bmad_assist/testarch/knowledge_base/tea-index.csv</var>
-<var name="step_01_preflight_and_context_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/{skill-root}/steps-c/step-02-identify-targets.md</var>
+<var name="step_01_preflight_and_context_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/step-02-identify-targets.md</var>
+<var name="step_02_identify_targets_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/step-03-generate-tests.md</var>
+<var name="step_03_generate_tests_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/step-03c-aggregate.md</var>
+<var name="step_03c_aggregate_nextStepFile">.claude/skills/bmad-testarch-automate/steps-c/step-04-validate-and-summarize.md</var>
 <var name="story_file" file_id="81b514b0">embedded in prompt, file id: 81b514b0</var>
 <var name="story_id">10.1</var>
 <var name="story_num">1</var>
@@ -294,7 +293,7 @@ Summarize loaded artifacts, framework, and knowledge fragments, then proceed.
 
 **Update `inputDocuments`**: Set `inputDocuments` in the output template frontmatter to the list of artifact paths loaded in this step (e.g., knowledge fragments, test design documents, configuration files).
 
-Load next step: `{nextStepFile}`
+Load next step: ``
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
@@ -307,6 +306,1062 @@ Load next step: `{nextStepFile}`
 - Skipped sequence steps or missing outputs
   **Master Rule:** Skipping steps is FORBIDDEN.
 
+<!-- STEP: step-02-identify-targets -->
+# Step 2: Identify Automation Targets
+
+## STEP GOAL
+
+Determine what needs to be tested and select appropriate test levels and priorities.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- 🚫 Avoid duplicate coverage across test levels
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Determine Targets
+
+**BMad-Integrated:**
+
+- Map acceptance criteria to test scenarios
+- Check for existing ATDD outputs to avoid duplication
+- Expand coverage with edge cases and negative paths
+
+**Standalone:**
+
+- If specific target feature/files are provided, focus there
+- Otherwise auto-discover features in `{source_dir}`
+- Prioritize critical paths, integrations, and untested logic
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+**Browser Exploration (if `tea_browser_automation` is `cli` or `auto`):**
+
+> **Fallback:** If CLI is not installed, fall back to MCP (if available) or skip browser exploration and rely on code/doc analysis.
+
+Use CLI to explore the application and identify testable pages/flows:
+
+1. `playwright-cli -s=tea-automate open <target_url>`
+2. `playwright-cli -s=tea-automate snapshot` → capture page structure and element refs
+3. Analyze snapshot output to identify testable elements and flows
+4. `playwright-cli -s=tea-automate close`
+
+> **Session Hygiene:** Always close sessions using `playwright-cli -s=tea-automate close`. Do NOT use `close-all` — it kills every session on the machine and breaks parallel execution.
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+**Source & API Analysis (no browser exploration):**
+
+- Scan source code for route handlers, controllers, service classes, and public APIs
+- Read OpenAPI/Swagger specs (`openapi.yaml`, `swagger.json`) if available
+- Identify database models, migrations, and data access patterns
+- Map service-to-service integrations and message queue consumers/producers
+- Check for existing contract tests (Pact, etc.)
+
+---
+
+**If `use_pactjs_utils` is enabled — Provider Endpoint Mapping (all stacks):**
+
+When consumer-driven contract tests will be generated, build a Provider Endpoint Map during target identification. This applies to all `{detected_stack}` values — frontend, backend, and fullstack consumers all need provider scrutiny.
+
+1. **Locate provider source and/or OpenAPI spec**: Scan workspace for provider project (from config, monorepo structure, or adjacent repositories). Also check for OpenAPI/Swagger spec files (`openapi.yaml`, `openapi.json`, `swagger.json`) — these document the provider's contract explicitly and can supplement or replace handler code analysis.
+2. **Map each consumer endpoint** to its provider counterpart:
+   - Provider file path (route handler)
+   - Route pattern (METHOD + path)
+   - Validation schema location (Joi, Zod, class-validator) or OpenAPI request schema
+   - Response type/DTO definition location or OpenAPI response schema
+   - OpenAPI spec path (if available, e.g., `server/openapi.yaml`)
+3. **Output as "Provider Endpoint Map" table** in the coverage plan:
+
+```markdown
+| Consumer Endpoint     | Provider File                     | Route                     | Validation Schema                   | Response Type   | OpenAPI Spec                                      |
+| --------------------- | --------------------------------- | ------------------------- | ----------------------------------- | --------------- | ------------------------------------------------- |
+| GET /api/v2/users/:id | server/src/routes/userHandlers.ts | GET /api/v2/users/:userId | server/src/validation/user.ts       | UserResponseDto | server/openapi.yaml#/paths/~1api~1v2~1users~1{id} |
+| POST /api/v2/users    | server/src/routes/userHandlers.ts | POST /api/v2/users        | server/src/validation/createUser.ts | UserResponseDto | server/openapi.yaml#/paths/~1api~1v2~1users       |
+```
+
+4. **If provider source not accessible**: Mark entries with `TODO — provider source not accessible` and note in coverage plan that provider scrutiny will use graceful degradation (see `contract-testing.md` Provider Scrutiny Protocol)
+
+---
+
+## 2. Choose Test Levels
+
+Use `test-levels-framework.md` to select:
+
+- **E2E** for critical user journeys
+- **API** for business logic and service contracts
+- **Component** for UI behavior
+- **Unit** for pure logic and edge cases
+
+---
+
+## 3. Assign Priorities
+
+Use `test-priorities-matrix.md`:
+
+- P0: Critical path + high risk
+- P1: Important flows + medium/high risk
+- P2: Secondary + edge cases
+- P3: Optional/rare scenarios
+
+---
+
+## 4. Coverage Plan
+
+Produce a concise coverage plan:
+
+- Targets by test level
+- Priority assignments
+- Justification for coverage scope (critical-paths/comprehensive/selective)
+
+---
+
+## 5. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-02-identify-targets']
+  lastStep: 'step-02-identify-targets'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-02-identify-targets'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-02-identify-targets'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+Load next step: ``
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+<!-- STEP: step-03-generate-tests -->
+# Step 3: Orchestrate Adaptive Test Generation
+
+## STEP GOAL
+
+Select execution mode deterministically, then generate tests using agent-team, subagent, or sequential execution while preserving the same output contract. Worker selection depends on `{detected_stack}`.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Resolve execution mode from config (`tea_execution_mode`, `tea_capability_probe`)
+- ✅ Apply fallback rules deterministically when requested mode is unsupported
+- ✅ Preserve output schema and temp file naming across all modes
+- ❌ Do NOT skip capability checks when probing is enabled
+- ❌ Do NOT change output paths or JSON schema by mode
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Wait for subagent outputs
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, coverage plan from Step 2, knowledge fragments
+- Focus: orchestration only (mode selection + worker dispatch)
+- Limits: do not generate tests directly (delegate to worker steps)
+- Dependencies: Step 2 outputs (coverage plan, target features)
+
+---
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+### 1. Prepare Execution Context
+
+**Generate unique timestamp** for temp file naming:
+
+```javascript
+const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+```
+
+**Prepare input context for subagents:**
+
+```javascript
+const parseBooleanFlag = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const subagentContext = {
+  features: /* from Step 2 coverage plan */,
+  knowledge_fragments_loaded: /* list of fragments */,
+  config: {
+    test_framework: config.test_framework,
+    use_playwright_utils: config.tea_use_playwright_utils,
+    use_pactjs_utils: config.tea_use_pactjs_utils,
+    pact_mcp: config.tea_pact_mcp,  // "mcp" | "none"
+    browser_automation: config.tea_browser_automation,  // "auto" | "cli" | "mcp" | "none"
+    detected_stack: '{detected_stack}',  // "frontend" | "backend" | "fullstack"
+    execution_mode: config.tea_execution_mode || 'auto',  // "auto" | "subagent" | "agent-team" | "sequential"
+    capability_probe: parseBooleanFlag(config.tea_capability_probe, true),  // supports booleans and "false"/"true" strings
+    provider_endpoint_map: /* from Step 2 coverage plan, if use_pactjs_utils enabled */,
+  },
+  timestamp: timestamp
+};
+```
+
+---
+
+### 2. Resolve Execution Mode with Capability Probe
+
+```javascript
+const normalizeUserExecutionMode = (mode) => {
+  if (typeof mode !== 'string') return null;
+  const normalized = mode.trim().toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
+
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'sequential') return 'sequential';
+  if (normalized === 'subagent' || normalized === 'sub agent' || normalized === 'subagents' || normalized === 'sub agents') {
+    return 'subagent';
+  }
+  if (normalized === 'agent team' || normalized === 'agent teams' || normalized === 'agentteam') {
+    return 'agent-team';
+  }
+
+  return null;
+};
+
+const normalizeConfigExecutionMode = (mode) => {
+  if (mode === 'subagent') return 'subagent';
+  if (mode === 'auto' || mode === 'sequential' || mode === 'subagent' || mode === 'agent-team') {
+    return mode;
+  }
+  return null;
+};
+
+// Explicit user instruction in the active run takes priority over config.
+const explicitModeFromUser = normalizeUserExecutionMode(runtime.getExplicitExecutionModeHint?.() || null);
+
+const requestedMode = explicitModeFromUser || normalizeConfigExecutionMode(subagentContext.config.execution_mode) || 'auto';
+const probeEnabled = subagentContext.config.capability_probe;
+
+const supports = {
+  subagent: false,
+  agentTeam: false,
+};
+
+if (probeEnabled) {
+  // Probe using runtime-native capability checks or a no-op launch test.
+  supports.subagent = runtime.canLaunchSubagents?.() === true;
+  supports.agentTeam = runtime.canLaunchAgentTeams?.() === true;
+}
+
+let resolvedMode = requestedMode;
+
+if (requestedMode === 'auto') {
+  if (supports.agentTeam) resolvedMode = 'agent-team';
+  else if (supports.subagent) resolvedMode = 'subagent';
+  else resolvedMode = 'sequential';
+} else if (probeEnabled && requestedMode === 'agent-team' && !supports.agentTeam) {
+  resolvedMode = supports.subagent ? 'subagent' : 'sequential';
+} else if (probeEnabled && requestedMode === 'subagent' && !supports.subagent) {
+  resolvedMode = 'sequential';
+}
+
+subagentContext.execution = {
+  requestedMode,
+  resolvedMode,
+  probeEnabled,
+  supports,
+};
+```
+
+Resolution precedence:
+
+1. Explicit user request in this run (`agent team` => `agent-team`; `subagent` => `subagent`; `sequential`; `auto`)
+2. `tea_execution_mode` from config
+3. Runtime capability fallback (when probing enabled)
+
+If probing is disabled, honor the requested mode strictly. If that mode cannot be executed at runtime, fail with explicit error instead of silent fallback.
+
+Report selected mode before dispatch:
+
+```
+⚙️ Execution Mode Resolution:
+- Requested: {requestedMode}
+- Probe Enabled: {probeEnabled}
+- Supports agent-team: {supports.agentTeam}
+- Supports subagent: {supports.subagent}
+- Resolved: {resolvedMode}
+```
+
+---
+
+### 3. Subagent Dispatch Matrix
+
+**Select subagents based on `{detected_stack}`:**
+
+| `{detected_stack}` | Subagent A (API) | Subagent B (E2E) | Subagent B-backend |
+| ------------------ | ---------------- | ---------------- | ------------------ |
+| `frontend`         | Launch           | Launch           | Skip               |
+| `backend`          | Launch           | Skip             | Launch             |
+| `fullstack`        | Launch           | Launch           | Launch             |
+
+### 3A. Runtime-Managed Parallelism
+
+When `resolvedMode` is `agent-team` or `subagent`, let the runtime decide concurrency and scheduling. TEA does not impose an additional worker ceiling.
+
+---
+
+### Contract Test Generation Note
+
+When `use_pactjs_utils` is enabled, the API test generation subagent (step-03a) also generates:
+
+- **Consumer contract tests**: Using `createProviderState` for type-safe provider states
+- **Provider verification tests**: Using `buildVerifierOptions` for one-call verifier setup
+- **Message contract tests**: Using `buildMessageVerifierOptions` if async/Kafka patterns detected
+- **Helper files**: Request filter setup with `createRequestFilter`, shared state constants
+- **Provider scrutiny**: Subagent reads provider route handlers, types, and validation schemas before generating each interaction (see `contract-testing.md` Provider Scrutiny Protocol)
+
+When `pact_mcp` is `"mcp"`, the subagent can use SmartBear MCP tools to fetch existing provider states and generate tests informed by broker data.
+
+---
+
+### 4. Dispatch Worker A: API Test Generation (always)
+
+**Dispatch worker:**
+
+- **Subagent File:** `./step-03a-subagent-api.md`
+- **Output File:** `/tmp/tea-automate-api-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
+
+**System Action:**
+
+```
+🚀 Launching Subagent A: API Test Generation
+📝 Output: /tmp/tea-automate-api-tests-${timestamp}.json
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
+
+---
+
+### 5. Dispatch Worker B: E2E Test Generation (frontend/fullstack only)
+
+**If {detected_stack} is `frontend` or `fullstack`:**
+
+**Dispatch worker:**
+
+- **Subagent File:** `./step-03b-subagent-e2e.md`
+- **Output File:** `/tmp/tea-automate-e2e-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
+
+**System Action:**
+
+```
+🚀 Launching Subagent B: E2E Test Generation
+📝 Output: /tmp/tea-automate-e2e-tests-${timestamp}.json
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
+
+**If {detected_stack} is `backend`:** Skip this subagent.
+
+---
+
+### 6. Dispatch Worker B-backend: Backend Test Generation (backend/fullstack only)
+
+**If {detected_stack} is `backend` or `fullstack`:**
+
+**Dispatch worker:**
+
+- **Subagent File:** `./step-03b-subagent-backend.md`
+- **Output File:** `/tmp/tea-automate-backend-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
+
+**System Action:**
+
+```
+🚀 Launching Subagent B-backend: Backend Test Generation
+📝 Output: /tmp/tea-automate-backend-tests-${timestamp}.json
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
+
+**If {detected_stack} is `frontend`:** Skip this subagent.
+
+---
+
+### 7. Wait for Expected Worker Completion
+
+**If `resolvedMode` is `agent-team` or `subagent`:**
+
+```
+⏳ Waiting for subagents to complete...
+  ├── Subagent A (API): Running... ⟳
+  ├── Subagent B (E2E): Running... ⟳       [if frontend/fullstack]
+  └── Subagent B-backend: Running... ⟳     [if backend/fullstack]
+
+[... time passes ...]
+
+  ├── Subagent A (API): Complete ✅
+  ├── Subagent B (E2E): Complete ✅         [if frontend/fullstack]
+  └── Subagent B-backend: Complete ✅       [if backend/fullstack]
+
+✅ All subagents completed successfully!
+```
+
+**If `resolvedMode` is `sequential`:**
+
+```
+✅ Sequential mode: each worker already completed during dispatch.
+```
+
+**Verify outputs exist (based on `{detected_stack}`):**
+
+```javascript
+const apiOutputExists = fs.existsSync(`/tmp/tea-automate-api-tests-${timestamp}.json`);
+
+// Check based on detected_stack
+if (detected_stack === 'frontend' || detected_stack === 'fullstack') {
+  const e2eOutputExists = fs.existsSync(`/tmp/tea-automate-e2e-tests-${timestamp}.json`);
+  if (!e2eOutputExists) throw new Error('E2E subagent output missing!');
+}
+if (detected_stack === 'backend' || detected_stack === 'fullstack') {
+  const backendOutputExists = fs.existsSync(`/tmp/tea-automate-backend-tests-${timestamp}.json`);
+  if (!backendOutputExists) throw new Error('Backend subagent output missing!');
+}
+if (!apiOutputExists) throw new Error('API subagent output missing!');
+```
+
+---
+
+### Subagent Output Schema Contract
+
+The aggregate step expects both outputs to include `success`, but the payload shapes are intentionally different:
+
+- `step-03b-subagent-e2e.md` output includes `success`, `subagent`, `tests`, `fixture_needs`, `knowledge_fragments_used`, `test_count`, and `summary`.
+- `step-03b-subagent-backend.md` output includes `success`, `subagent`, `subagentType`, `testsGenerated`, `coverageSummary` (with `fixtureNeeds`), `status`, `knowledge_fragments_used`, and `summary`.
+
+The aggregate step reads whichever output file(s) exist based on `{detected_stack}` and must use the matching schema per subagent type.
+
+---
+
+### 8. Execution Report
+
+**Display performance metrics:**
+
+```
+🚀 Performance Report:
+- Execution Mode: {resolvedMode}
+- Stack Type: {detected_stack}
+- API Test Generation: ~X minutes
+- E2E Test Generation: ~Y minutes       [if frontend/fullstack]
+- Backend Test Generation: ~Z minutes    [if backend/fullstack]
+- Total Elapsed: ~mode-dependent
+- Parallel Gain: ~40-70% faster when mode is subagent/agent-team
+```
+
+---
+
+### 9. Proceed to Aggregation
+
+**Load aggregation step:**
+Load next step: ``
+
+The aggregation step (3C) will:
+
+- Read all subagent outputs (based on `{detected_stack}`)
+- Write all test files to disk
+- Generate shared fixtures and helpers
+- Calculate summary statistics
+
+---
+
+## EXIT CONDITION
+
+Proceed to Step 3C (Aggregation) when:
+
+- ✅ Subagent A (API tests) completed successfully
+- ✅ Subagent B (E2E tests) completed successfully [if frontend/fullstack]
+- ✅ Subagent B-backend (Backend tests) completed successfully [if backend/fullstack]
+- ✅ All expected output files exist and are valid JSON
+- ✅ Execution metrics displayed
+
+**Do NOT proceed if:**
+
+- ❌ Any launched subagent failed
+- ❌ Output files missing or corrupted
+- ❌ Timeout occurred (parallel mode only)
+
+---
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- All required subagents launched successfully (based on `{detected_stack}`)
+- All required worker steps completed without errors
+- Output files generated and valid
+- Fallback behavior respected configuration and capability probe rules
+
+### ❌ SYSTEM FAILURE:
+
+- Failed to launch subagents
+- One or more subagents failed
+- Output files missing or invalid
+- Unsupported requested mode with probing disabled
+
+**Master Rule:** Deterministic mode selection + stable output contract. Use the best supported mode, then aggregate normally.
+
+<!-- STEP: step-03c-aggregate -->
+# Step 3C: Aggregate Test Generation Results
+
+## STEP GOAL
+
+Read outputs from parallel subagents (API + E2E and/or Backend test generation based on `{detected_stack}`), aggregate results, and create supporting infrastructure (fixtures, helpers).
+
+---
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Read subagent outputs from temp files
+- ✅ Generate shared fixtures based on fixture needs from both subagents
+- ✅ Write all generated test files to disk
+- ❌ Do NOT regenerate tests (use subagent outputs)
+- ❌ Do NOT run tests yet (that's step 4)
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, subagent outputs from temp files
+- Focus: aggregation and fixture generation only
+- Limits: do not execute future steps
+- Dependencies: Step 3A and 3B subagent outputs
+
+---
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+### 1. Read Subagent Outputs
+
+**Read API test subagent output (always):**
+
+```javascript
+const apiTestsPath = '/tmp/tea-automate-api-tests-{{timestamp}}.json';
+const apiTestsOutput = JSON.parse(fs.readFileSync(apiTestsPath, 'utf8'));
+```
+
+**Read E2E test subagent output (if {detected_stack} is `frontend` or `fullstack`):**
+
+```javascript
+let e2eTestsOutput = null;
+if (detected_stack === 'frontend' || detected_stack === 'fullstack') {
+  const e2eTestsPath = '/tmp/tea-automate-e2e-tests-{{timestamp}}.json';
+  e2eTestsOutput = JSON.parse(fs.readFileSync(e2eTestsPath, 'utf8'));
+}
+```
+
+**Read Backend test subagent output (if {detected_stack} is `backend` or `fullstack`):**
+
+```javascript
+let backendTestsOutput = null;
+if (detected_stack === 'backend' || detected_stack === 'fullstack') {
+  const backendTestsPath = '/tmp/tea-automate-backend-tests-{{timestamp}}.json';
+  backendTestsOutput = JSON.parse(fs.readFileSync(backendTestsPath, 'utf8'));
+}
+```
+
+**Verify all launched subagents succeeded:**
+
+- Check `apiTestsOutput.success === true`
+- If E2E was launched: check `e2eTestsOutput.success === true`
+- If Backend was launched: check `backendTestsOutput.success === true`
+- If any failed, report error and stop (don't proceed)
+
+---
+
+### 2. Write All Test Files to Disk
+
+**Write API test files:**
+
+```javascript
+apiTestsOutput.tests.forEach((test) => {
+  fs.writeFileSync(test.file, test.content, 'utf8');
+  console.log(`✅ Created: ${test.file}`);
+});
+```
+
+**Write E2E test files (if {detected_stack} is `frontend` or `fullstack`):**
+
+```javascript
+if (e2eTestsOutput) {
+  e2eTestsOutput.tests.forEach((test) => {
+    fs.writeFileSync(test.file, test.content, 'utf8');
+    console.log(`✅ Created: ${test.file}`);
+  });
+}
+```
+
+**Write Backend test files (if {detected_stack} is `backend` or `fullstack`):**
+
+```javascript
+if (backendTestsOutput) {
+  backendTestsOutput.testsGenerated.forEach((test) => {
+    fs.writeFileSync(test.file, test.content, 'utf8');
+    console.log(`✅ Created: ${test.file}`);
+  });
+}
+```
+
+---
+
+### 3. Aggregate Fixture Needs
+
+**Collect all fixture needs from all launched subagents:**
+
+```javascript
+const allFixtureNeeds = [
+  ...apiTestsOutput.fixture_needs,
+  ...(e2eTestsOutput ? e2eTestsOutput.fixture_needs : []),
+  ...(backendTestsOutput ? backendTestsOutput.coverageSummary?.fixtureNeeds || [] : []),
+];
+
+// Remove duplicates
+const uniqueFixtures = [...new Set(allFixtureNeeds)];
+```
+
+**Categorize fixtures:**
+
+- **Authentication fixtures:** authToken, authenticatedUserFixture, etc.
+- **Data factories:** userDataFactory, productDataFactory, etc.
+- **Network mocks:** paymentMockFixture, apiResponseMocks, etc.
+- **Test helpers:** wait/retry/assertion helpers
+
+---
+
+### 4. Generate Fixture Infrastructure
+
+**Create or update fixture files based on needs:**
+
+**A) Authentication Fixtures** (`tests/fixtures/auth.ts`):
+
+```typescript
+import { test as base } from '@playwright/test';
+
+export const test = base.extend({
+  authenticatedUser: async ({ page }, use) => {
+    // Login logic
+    await page.goto('/login');
+    await page.fill('[name="email"]', 'test@example.com');
+    await page.fill('[name="password"]', 'password');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/dashboard');
+
+    await use(page);
+  },
+
+  authToken: async ({ request }, use) => {
+    // Get auth token for API tests
+    const response = await request.post('/api/auth/login', {
+      data: { email: 'test@example.com', password: 'password' },
+    });
+    const { token } = await response.json();
+
+    await use(token);
+  },
+});
+```
+
+**B) Data Factories** (`tests/fixtures/data-factories.ts`):
+
+```typescript
+import { faker } from '@faker-js/faker';
+
+export const createUserData = (overrides = {}) => ({
+  name: faker.person.fullName(),
+  email: faker.internet.email(),
+  ...overrides,
+});
+
+export const createProductData = (overrides = {}) => ({
+  name: faker.commerce.productName(),
+  price: faker.number.int({ min: 10, max: 1000 }),
+  ...overrides,
+});
+```
+
+**C) Network Mocks** (`tests/fixtures/network-mocks.ts`):
+
+```typescript
+import { Page } from '@playwright/test';
+
+export const mockPaymentSuccess = async (page: Page) => {
+  await page.route('/api/payment/**', (route) => {
+    route.fulfill({
+      status: 200,
+      body: JSON.stringify({ success: true, transactionId: '12345' }),
+    });
+  });
+};
+```
+
+**D) Helper Utilities** (`tests/fixtures/helpers.ts`):
+
+```typescript
+import { Page } from '@playwright/test';
+import { interceptNetworkCall } from '@seontechnologies/playwright-utils/intercept-network-call';
+
+export const observeApiCall = (page: Page, urlPattern: string, method: string = 'GET') => {
+  return interceptNetworkCall({
+    page,
+    method,
+    url: urlPattern,
+  });
+};
+```
+
+---
+
+### 5. Calculate Summary Statistics
+
+**Aggregate test counts (based on `{detected_stack}`):**
+
+```javascript
+const e2eCount = e2eTestsOutput ? e2eTestsOutput.test_count : 0;
+const backendCount = backendTestsOutput ? (backendTestsOutput.coverageSummary?.totalTests ?? 0) : 0;
+
+const resolvedMode = subagentContext?.execution?.resolvedMode;
+const subagentExecutionLabel =
+  resolvedMode === 'sequential'
+    ? 'SEQUENTIAL (API then dependent workers)'
+    : resolvedMode === 'agent-team'
+      ? 'AGENT-TEAM (parallel worker squad)'
+      : resolvedMode === 'subagent'
+        ? 'SUBAGENT (parallel subagents)'
+        : `PARALLEL (based on ${detected_stack})`;
+const performanceGainLabel =
+  resolvedMode === 'sequential'
+    ? 'baseline (no parallel speedup)'
+    : resolvedMode === 'agent-team' || resolvedMode === 'subagent'
+      ? '~40-70% faster than sequential'
+      : 'mode-dependent';
+
+const summary = {
+  detected_stack: '{detected_stack}',
+  total_tests: apiTestsOutput.test_count + e2eCount + backendCount,
+  api_tests: apiTestsOutput.test_count,
+  e2e_tests: e2eCount,
+  backend_tests: backendCount,
+  fixtures_created: uniqueFixtures.length,
+  api_test_files: apiTestsOutput.tests.length,
+  e2e_test_files: e2eTestsOutput ? e2eTestsOutput.tests.length : 0,
+  backend_test_files: backendTestsOutput ? backendTestsOutput.testsGenerated.length : 0,
+  priority_coverage: {
+    P0:
+      (apiTestsOutput.priority_coverage?.P0 ?? 0) +
+      (e2eTestsOutput?.priority_coverage?.P0 ?? 0) +
+      (backendTestsOutput?.testsGenerated?.reduce((sum, t) => sum + (t.priority_coverage?.P0 ?? 0), 0) ?? 0),
+    P1:
+      (apiTestsOutput.priority_coverage?.P1 ?? 0) +
+      (e2eTestsOutput?.priority_coverage?.P1 ?? 0) +
+      (backendTestsOutput?.testsGenerated?.reduce((sum, t) => sum + (t.priority_coverage?.P1 ?? 0), 0) ?? 0),
+    P2:
+      (apiTestsOutput.priority_coverage?.P2 ?? 0) +
+      (e2eTestsOutput?.priority_coverage?.P2 ?? 0) +
+      (backendTestsOutput?.testsGenerated?.reduce((sum, t) => sum + (t.priority_coverage?.P2 ?? 0), 0) ?? 0),
+    P3:
+      (apiTestsOutput.priority_coverage?.P3 ?? 0) +
+      (e2eTestsOutput?.priority_coverage?.P3 ?? 0) +
+      (backendTestsOutput?.testsGenerated?.reduce((sum, t) => sum + (t.priority_coverage?.P3 ?? 0), 0) ?? 0),
+  },
+  knowledge_fragments_used: [
+    ...apiTestsOutput.knowledge_fragments_used,
+    ...(e2eTestsOutput ? e2eTestsOutput.knowledge_fragments_used : []),
+    ...(backendTestsOutput ? backendTestsOutput.knowledge_fragments_used || [] : []),
+  ],
+  subagent_execution: subagentExecutionLabel,
+  performance_gain: performanceGainLabel,
+};
+```
+
+**Store summary for Step 4:**
+Save summary to temp file for validation step:
+
+```javascript
+fs.writeFileSync('/tmp/tea-automate-summary-{{timestamp}}.json', JSON.stringify(summary, null, 2), 'utf8');
+```
+
+---
+
+### 6. Optional Cleanup
+
+**Clean up subagent temp files** (optional - can keep for debugging):
+
+```javascript
+fs.unlinkSync(apiTestsPath);
+if (e2eTestsOutput) fs.unlinkSync('/tmp/tea-automate-e2e-tests-{{timestamp}}.json');
+if (backendTestsOutput) fs.unlinkSync('/tmp/tea-automate-backend-tests-{{timestamp}}.json');
+console.log('✅ Subagent temp files cleaned up');
+```
+
+---
+
+## OUTPUT SUMMARY
+
+Display to user:
+
+```
+✅ Test Generation Complete ({subagent_execution})
+
+📊 Summary:
+- Stack Type: {detected_stack}
+- Total Tests: {total_tests}
+  - API Tests: {api_tests} ({api_test_files} files)
+  - E2E Tests: {e2e_tests} ({e2e_test_files} files)         [if frontend/fullstack]
+  - Backend Tests: {backend_tests} ({backend_test_files} files)  [if backend/fullstack]
+- Fixtures Created: {fixtures_created}
+- Priority Coverage:
+  - P0 (Critical): {P0} tests
+  - P1 (High): {P1} tests
+  - P2 (Medium): {P2} tests
+  - P3 (Low): {P3} tests
+
+🚀 Performance: {performance_gain}
+
+📂 Generated Files:
+- tests/api/[feature].spec.ts                                [always]
+- tests/e2e/[feature].spec.ts                                [if frontend/fullstack]
+- tests/unit/[feature].test.*                                 [if backend/fullstack]
+- tests/integration/[feature].test.*                          [if backend/fullstack]
+- tests/fixtures/ or tests/support/                           [shared infrastructure]
+
+✅ Ready for validation (Step 4)
+```
+
+---
+
+## EXIT CONDITION
+
+Proceed to Step 4 when:
+
+- ✅ All test files written to disk (API + E2E and/or Backend, based on `{detected_stack}`)
+- ✅ All fixtures and helpers created
+- ✅ Summary statistics calculated and saved
+- ✅ Output displayed to user
+
+---
+
+### 7. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-03c-aggregate']
+  lastStep: 'step-03c-aggregate'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-03c-aggregate'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-03c-aggregate'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+Load next step: ``
+
+---
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- All launched subagents succeeded (based on `{detected_stack}`)
+- All test files written to disk
+- Fixtures generated based on subagent needs
+- Summary complete and accurate
+
+### ❌ SYSTEM FAILURE:
+
+- One or more subagents failed
+- Test files not written to disk
+- Fixtures missing or incomplete
+- Summary missing or inaccurate
+
+**Master Rule:** Do NOT proceed to Step 4 if aggregation incomplete.
+
+<!-- STEP: step-04-validate-and-summarize -->
+# Step 4: Validate & Summarize
+
+## STEP GOAL
+
+Validate generated outputs and produce a concise automation summary.
+
+## MANDATORY EXECUTION RULES
+
+- 📖 Read the entire step file before acting
+- ✅ Speak in `{communication_language}`
+- ✅ Validate against the checklist before completion
+
+---
+
+## EXECUTION PROTOCOLS:
+
+- 🎯 Follow the MANDATORY SEQUENCE exactly
+- 💾 Record outputs before proceeding
+- 📖 Load the next step only when instructed
+
+## CONTEXT BOUNDARIES:
+
+- Available context: config, loaded artifacts, and knowledge fragments
+- Focus: this step's goal only
+- Limits: do not execute future steps
+- Dependencies: prior steps' outputs (if any)
+
+## MANDATORY SEQUENCE
+
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+
+## 1. Validate
+
+Use `checklist.md` to validate:
+
+- Framework readiness
+- Coverage mapping
+- Test quality and structure
+- Fixtures, factories, helpers
+- [ ] CLI sessions cleaned up (no orphaned browsers)
+- [ ] Temp artifacts stored in `{test_artifacts}/` not random locations
+
+Fix gaps before proceeding.
+
+---
+
+## 2. Polish Output
+
+Before finalizing, review the complete output document for quality:
+
+1. **Remove duplication**: Progressive-append workflow may have created repeated sections — consolidate
+2. **Verify consistency**: Ensure terminology, risk scores, and references are consistent throughout
+3. **Check completeness**: All template sections should be populated or explicitly marked N/A
+4. **Format cleanup**: Ensure markdown formatting is clean (tables aligned, headers consistent, no orphaned references)
+
+---
+
+## 3. Summary Output
+
+Write `{outputFile}` including:
+
+- Coverage plan by test level and priority
+- Files created/updated
+- Key assumptions and risks
+- Next recommended workflow (e.g., `test-review` or `trace`)
+
+---
+
+## 4. Save Progress
+
+**Save this step's accumulated work to `{outputFile}`.**
+
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+
+  ```yaml
+  ---
+  stepsCompleted: ['step-04-validate-and-summarize']
+  lastStep: 'step-04-validate-and-summarize'
+  lastSaved: '{date}'
+  ---
+  ```
+
+  Then write this step's output below the frontmatter.
+
+- **If `{outputFile}` already exists**, update:
+  - Add `'step-04-validate-and-summarize'` to `stepsCompleted` array (only if not already present)
+  - Set `lastStep: 'step-04-validate-and-summarize'`
+  - Set `lastSaved: '{date}'`
+  - Append this step's output to the appropriate section.
+
+## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
+
+### ✅ SUCCESS:
+
+- Step completed in full with required outputs
+
+### ❌ SYSTEM FAILURE:
+
+- Skipped sequence steps or missing outputs
+  **Master Rule:** Skipping steps is FORBIDDEN.
+
+## On Complete
+
+Run: `python3 _bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow.on_complete`
+
+If the resolver succeeds and returns a non-empty `workflow.on_complete`, execute that value as the final terminal instruction before exiting.
+
+If the resolver fails, returns no output, or resolves an empty value, skip the hook and exit normally.
 
 ]]></instructions>
 <output-template></output-template>
