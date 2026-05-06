@@ -231,12 +231,30 @@ patterns:
 
         return PatternLibrary.load([spec_file, code_dir])
 
-    def test_get_patterns_without_language_filter(self, library_with_mixed_patterns: PatternLibrary) -> None:
-        """Test that all patterns returned when no language filter."""
-        patterns = library_with_mixed_patterns.get_patterns()
-        assert len(patterns) == 6  # 2 spec + 2 Go + 2 Python
+    def test_get_patterns_without_language_filter(
+        self, library_with_mixed_patterns: PatternLibrary
+    ) -> None:
+        """get_patterns() with no language hint returns spec-only.
 
-    def test_get_patterns_with_go_language(self, library_with_mixed_patterns: PatternLibrary) -> None:
+        Language-tagged code patterns are intentionally excluded so that
+        callers without a language hint don't accidentally trip cross-
+        language patterns (e.g. a Go-idiom pattern firing on Python code).
+        Callers that genuinely want the entire library must use
+        get_all_patterns().
+        """
+        patterns = library_with_mixed_patterns.get_patterns()
+        # Only the 2 spec patterns (CC-001, SEC-001) remain — the 4 code
+        # patterns are excluded because no language was supplied.
+        assert len(patterns) == 2
+        assert all(p.language is None for p in patterns)
+
+        # Escape hatch: the full library is still reachable.
+        all_patterns = library_with_mixed_patterns.get_all_patterns()
+        assert len(all_patterns) == 6  # 2 spec + 2 Go + 2 Python
+
+    def test_get_patterns_with_go_language(
+        self, library_with_mixed_patterns: PatternLibrary
+    ) -> None:
         """Test filtering patterns by Go language."""
         patterns = library_with_mixed_patterns.get_patterns(language="go")
         # Should return spec patterns (None) + Go patterns
@@ -250,7 +268,9 @@ patterns:
         # Verify Python patterns are excluded
         assert "CC-001-CODE-PY" not in ids
 
-    def test_get_patterns_with_python_language(self, library_with_mixed_patterns: PatternLibrary) -> None:
+    def test_get_patterns_with_python_language(
+        self, library_with_mixed_patterns: PatternLibrary
+    ) -> None:
         """Test filtering patterns by Python language."""
         patterns = library_with_mixed_patterns.get_patterns(language="python")
         # Should return spec patterns (None) + Python patterns
@@ -261,11 +281,12 @@ patterns:
         assert "CQ-001-CODE-PY" in ids
         assert "CC-001-CODE-GO" not in ids
 
-    def test_get_patterns_with_domain_and_language(self, library_with_mixed_patterns: PatternLibrary) -> None:
+    def test_get_patterns_with_domain_and_language(
+        self, library_with_mixed_patterns: PatternLibrary
+    ) -> None:
         """Test filtering by both domain and language."""
         patterns = library_with_mixed_patterns.get_patterns(
-            domains=[ArtifactDomain.CONCURRENCY],
-            language="go"
+            domains=[ArtifactDomain.CONCURRENCY], language="go"
         )
         # Should return spec concurrency + Go concurrency
         assert len(patterns) == 2
@@ -274,7 +295,9 @@ patterns:
         assert "CC-001" in ids
         assert "CC-001-CODE-GO" in ids
 
-    def test_get_patterns_case_insensitive_language(self, library_with_mixed_patterns: PatternLibrary) -> None:
+    def test_get_patterns_case_insensitive_language(
+        self, library_with_mixed_patterns: PatternLibrary
+    ) -> None:
         """Test that language matching is case-insensitive."""
         # Test various case variations
         for lang in ["go", "Go", "GO", "gO"]:
@@ -293,6 +316,7 @@ patterns:
     ) -> None:
         """Test that unknown language logs warning and returns spec patterns only."""
         import logging
+
         with caplog.at_level(logging.WARNING):
             patterns = library_with_mixed_patterns.get_patterns(language="rust")
 
@@ -329,7 +353,9 @@ class TestGoConcurrencyPatterns:
             return PatternLibrary.load([code_dir / "concurrency.yaml"])
         return PatternLibrary()
 
-    def test_detect_goroutine_without_waitgroup(self, go_concurrency_library: PatternLibrary) -> None:
+    def test_detect_goroutine_without_waitgroup(
+        self, go_concurrency_library: PatternLibrary
+    ) -> None:
         """Test detecting goroutine spawn without wait group."""
         code = """
 func main() {
@@ -338,7 +364,7 @@ func main() {
     }()
 }
 """
-        patterns = go_concurrency_library.get_patterns()
+        patterns = go_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -357,7 +383,7 @@ func process() {
     mu.Unlock()
 }
 """
-        patterns = go_concurrency_library.get_patterns()
+        patterns = go_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -372,7 +398,7 @@ func safe() {
     println("safe")
 }
 """
-        patterns = go_concurrency_library.get_patterns()
+        patterns = go_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -409,7 +435,7 @@ func main() {
     _ := anotherThing()
 }
 """
-        patterns = go_quality_library.get_patterns()
+        patterns = go_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -426,7 +452,7 @@ func process() {
     }
 }
 """
-        patterns = go_quality_library.get_patterns()
+        patterns = go_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -444,7 +470,7 @@ func main() {
     }
 }
 """
-        patterns = go_quality_library.get_patterns()
+        patterns = go_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -482,7 +508,7 @@ func query(userID string) {
     db.Query(query)
 }
 """
-        patterns = go_security_library.get_patterns()
+        patterns = go_security_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -493,14 +519,14 @@ func query(userID string) {
     def test_detect_weak_crypto(self, go_security_library: PatternLibrary) -> None:
         """Test detecting weak crypto algorithms."""
         # Test code importing crypto/md5
-        code = '''
+        code = """
 import "crypto/md5"
 
 func hash(data []byte) []byte {
     return md5.Sum(data)
 }
-'''
-        patterns = go_security_library.get_patterns()
+"""
+        patterns = go_security_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -515,7 +541,7 @@ func query(userID string) {
     db.Query("SELECT * FROM users WHERE id = ?", userID)
 }
 """
-        patterns = go_security_library.get_patterns()
+        patterns = go_security_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -560,7 +586,7 @@ def worker():
 t = threading.Thread(target=worker)
 t.start()
 """
-        patterns = py_concurrency_library.get_patterns()
+        patterns = py_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -578,7 +604,7 @@ def worker():
     global counter
     counter += 1
 """
-        patterns = py_concurrency_library.get_patterns()
+        patterns = py_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -597,7 +623,7 @@ t = threading.Thread(target=worker)
 t.start()
 t.join()
 """
-        patterns = py_concurrency_library.get_patterns()
+        patterns = py_concurrency_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -635,7 +661,7 @@ try:
 except:
     pass
 """
-        patterns = py_quality_library.get_patterns()
+        patterns = py_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -645,8 +671,8 @@ except:
     def test_detect_mutable_default(self, py_quality_library: PatternLibrary) -> None:
         """Test detecting mutable default argument."""
         # Test code with mutable default argument - use exact pattern match
-        code = 'def process(items=[]):\n    items.append(1)\n    return items'
-        patterns = py_quality_library.get_patterns()
+        code = "def process(items=[]):\n    items.append(1)\n    return items"
+        patterns = py_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -662,7 +688,7 @@ try:
 except ValueError:
     pass
 """
-        patterns = py_quality_library.get_patterns()
+        patterns = py_quality_library.get_all_patterns()
         matcher = PatternMatcher(patterns)
         results = matcher.match(code)
 
@@ -705,13 +731,16 @@ class TestDefaultPatternLibrary:
         """Test language filtering with default library."""
         library = get_default_pattern_library()
 
-        # Get all patterns
-        all_patterns = library.get_patterns()
+        # Full library (every pattern, including language-tagged code patterns)
+        # uses the explicit get_all_patterns() escape hatch — get_patterns()
+        # with no language hint returns spec-only by design.
+        all_patterns = library.get_all_patterns()
 
         # Get Go patterns
         go_patterns = library.get_patterns(language="go")
 
-        # Go patterns should be subset of all
+        # Go-scoped result is a subset of the full library: it includes the
+        # spec patterns plus Go code patterns, but excludes Python/JS/etc.
         assert len(go_patterns) < len(all_patterns)
 
         # All Go patterns should have either language=None (spec) or language="go"
@@ -798,7 +827,9 @@ class TestPatternSerialization:
     def test_roundtrip_serialization(self) -> None:
         """Test roundtrip serialization of Pattern with language."""
         from bmad_assist.deep_verify.core.types import (
-            Pattern, serialize_pattern, deserialize_pattern
+            Pattern,
+            serialize_pattern,
+            deserialize_pattern,
         )
 
         original = Pattern(

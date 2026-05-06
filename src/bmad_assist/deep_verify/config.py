@@ -276,7 +276,7 @@ class DeepVerifyConfig(BaseModel):
         >>> config = DeepVerifyConfig(
         ...     enabled=True,
         ...     method_153_pattern_match=MethodConfig(enabled=True),
-        ...     reject_threshold=6.0,
+        ...     reject_threshold=12.0,
         ... )
 
     """
@@ -296,8 +296,13 @@ class DeepVerifyConfig(BaseModel):
     )
 
     # Threshold overrides
+    # NOTE: reject_threshold raised from 6.0 → 12.0 (Deep Verify P3) to avoid
+    # tripping REJECT on any 2 CRITICAL findings (4.0 each). With noise
+    # filtering (P2: GEN-*/BOUNDARY-* exclusion) and language-aware pattern
+    # matching (P1) in place, most files have 1–2 legitimate CRITICAL findings;
+    # 12.0 keeps REJECT meaningful while UNCERTAIN catches borderline cases.
     reject_threshold: float = Field(
-        default=6.0,
+        default=12.0,
         description="Score threshold for REJECT verdict",
         ge=-100.0,
         le=100.0,

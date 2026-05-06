@@ -393,10 +393,16 @@ class PatternLibrary:
         """Get patterns filtered by domain and/or language.
 
         Args:
-            domains: Optional list of domains to filter by. If None, returns all domains.
-            language: Optional language code to filter by (e.g., "go", "python").
-                     If None, returns all patterns.
-                     If specified, returns code patterns for that language plus all spec patterns.
+            domains: Optional list of domains to filter by. If None, no
+                domain filter is applied.
+            language: Optional language code (e.g., "go", "python") to scope
+                code patterns. When specified, returns spec patterns
+                (``pattern.language is None``) plus code patterns for that
+                language. When ``None`` (no language hint), returns
+                language-agnostic spec patterns ONLY — language-tagged code
+                patterns are excluded so they don't fire across files of the
+                wrong language. To retrieve every pattern in the library
+                regardless of language, use :meth:`get_all_patterns`.
 
         Returns:
             List of patterns matching the filter criteria.
@@ -424,18 +430,32 @@ class PatternLibrary:
                     "No code patterns found for language '%s', returning spec patterns only",
                     language,
                 )
+        else:
+            # No language hint: return spec-only patterns. This prevents
+            # cross-language false positives (e.g. a Go-tagged "defer inside
+            # loop" pattern matching a Python `for` loop) when callers cannot
+            # supply a language. Callers wanting every pattern should use
+            # get_all_patterns().
+            patterns = [p for p in patterns if p.language is None]
 
         # Sort by pattern ID for deterministic ordering
         return sorted(patterns, key=lambda p: p.id)
 
     def get_all_patterns(self) -> list[Pattern]:
-        """Get all patterns in the library.
+        """Get every pattern in the library, including language-tagged ones.
+
+        Unlike :meth:`get_patterns` with ``language=None`` (which restricts
+        to language-agnostic spec patterns), this returns the full set —
+        spec + every language-specific code pattern. Use this only when you
+        intentionally want to inspect or process the full library; for
+        analysis paths driven by a particular file, prefer
+        ``get_patterns(language=...)``.
 
         Returns:
             List of all patterns, sorted by ID.
 
         """
-        return self.get_patterns(domains=None)
+        return sorted(self._patterns.values(), key=lambda p: p.id)
 
     def get_compiled_regex(self, pattern_id: PatternId, signal_idx: int) -> re.Pattern[str] | None:
         """Get a pre-compiled regex for a signal.

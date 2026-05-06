@@ -1,4 +1,4 @@
-# DO NOT EDIT -- overwritten on every update.
+# DO NOT EDIT -- auto-updated only while unmodified.
 #
 # Workflow customization surface for bmad-dev-story. Mirrors the
 # agent customization shape under the [workflow] namespace.
@@ -18,7 +18,30 @@ activation_steps_prepend = []
 # Overrides append. Use for context-heavy setup that should happen
 # once the user has been acknowledged.
 
-activation_steps_append = []
+activation_steps_append = [
+  # Review-marker override for upstream BMAD inconsistency.
+  # Upstream's bmad-code-review/step-04-present writes findings under
+  # `### Review Findings` (per the canonical reviewer instruction), but
+  # upstream's own bmad-dev-story SKILL.md looks for `## Senior Developer
+  # Review (AI)` instead — an internal contradiction in upstream BMAD.
+  # bmad-assist's custom code-review-synthesizer now writes the upstream-
+  # canonical `### Review Findings` heading. This directive teaches dev_story
+  # to recognize that format as equivalent to the legacy H2 marker, so the
+  # rework loop continues to find and consume reviewer feedback.
+  '''REVIEW MARKER OVERRIDE — bmad-assist format alignment
+
+The bmad-assist code-review-synthesizer writes review summaries under `### Review Findings` headings at the end of the `## Tasks / Subtasks` section. This matches the upstream `bmad-code-review` step-04-present convention. SKILL.md below still references the older `## Senior Developer Review (AI)` H2 format due to an upstream BMAD internal inconsistency.
+
+When SKILL.md instructs you to:
+
+- "Check if 'Senior Developer Review (AI)' section exists" → ALSO check for `### Review Findings` heading(s) under `## Tasks / Subtasks`. Either marker is valid evidence that a code review has occurred.
+
+- "Extract from 'Senior Developer Review (AI)' section" → if `### Review Findings` headings exist, extract from the MOST RECENT one (last in document order). Body fields: **Outcome**, **Issues Found**, **Issues Fixed**, **Action Items Created**, and **Date**.
+
+- "Find matching action item in 'Senior Developer Review (AI) → Action Items' section" → action items live in `## Tasks / Subtasks → #### Review Follow-ups (AI)` regardless of which summary header was used. Match against that subsection.
+
+Treat both formats as equivalent during this transition. Older stories may use the legacy `## Senior Developer Review (AI)` format; current/future synthesis runs use `### Review Findings`. Both must drive the rework loop correctly.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run
 # (standards, compliance constraints, stylistic guardrails).

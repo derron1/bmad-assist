@@ -1,4 +1,4 @@
-# DO NOT EDIT -- overwritten on every update.
+# DO NOT EDIT -- auto-updated only while unmodified.
 #
 # Workflow customization surface for bmad-code-review-synthesis.
 # Mirrors the agent customization shape under the [workflow] namespace.
@@ -9,7 +9,31 @@
 #   scalars: override wins • arrays: append (with replace-by-id semantics where applicable)
 
 activation_steps_prepend = []
-activation_steps_append = []
+activation_steps_append = [
+  # Headless override for synthesis. The synthesizer consolidates parallel
+  # reviewer outputs, deep-verify findings, security findings, and a pre-
+  # calculated Evidence Score — all embedded in <context>. Without this
+  # directive, single-LLM synthesizers (especially Opus) may stop to ask
+  # "which findings should I include?" or "should the reviewers be re-run?",
+  # stalling the synthesis phase indefinitely.
+  '''HEADLESS MULTI-LLM CODE REVIEW SYNTHESIS — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. All inputs are pre-computed and fully embedded in this prompt's <context> section. There is no user to ask; do not request clarification or that any input be re-run.
+
+Embedded inputs (use these directly):
+- Reviewer reports → <file> entries with the per-validator report content (Validator A, Validator B, …)
+- Pre-calculated Evidence Score → <!-- PRE-CALCULATED EVIDENCE SCORE --> block (deterministic — DO NOT recalculate)
+- Deep Verify findings → embedded in context
+- Security findings → embedded in context
+- Story file, code files, architecture → other <file> entries
+
+Skill overrides:
+1. Skip all interactive gates. Ignore: <ask> blocks, "HALT. Ask the user", "[Y] Yes / [N] No" prompts, "Should I", "Before I proceed", "What do you want", numbered selection menus, CHECKPOINT halts requesting human confirmation, "wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+2. The reviewer outputs are final — synthesize directly from them. DO NOT ask for them to be re-run, expanded, or re-scoped.
+3. Use the pre-calculated Evidence Score and verdict from the <!-- PRE-CALCULATED EVIDENCE SCORE --> block directly. DO NOT recalculate; the orchestrator computes these deterministically.
+4. If reviewer output is incomplete, ambiguous, or contradictory, note this in your synthesis (e.g. with verdict UNKNOWN or CONCERNS) but proceed to a final report. Do not stall on missing context.
+5. Do not ask for clarification under any circumstances. Make the most defensible reading and continue.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run.
 # Each entry is a literal sentence, or a `file:` reference (glob-supported).

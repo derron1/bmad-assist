@@ -39,7 +39,7 @@ class TestConstants:
 
     def test_thresholds(self) -> None:
         """Thresholds should match specification."""
-        assert REJECT_THRESHOLD == 6.0
+        assert REJECT_THRESHOLD == 12.0
         assert ACCEPT_THRESHOLD == -3.0
         assert CLEAN_PASS_BONUS == -0.5
 
@@ -261,19 +261,20 @@ class TestDetermineVerdict:
     """Tests for determine_verdict function."""
 
     def test_reject_threshold_boundary(self) -> None:
-        """Score > 6 should give REJECT."""
-        assert determine_verdict(6.1) == VerdictDecision.REJECT
-        assert determine_verdict(10.0) == VerdictDecision.REJECT
+        """Score > 12 should give REJECT."""
+        assert determine_verdict(12.1) == VerdictDecision.REJECT
+        assert determine_verdict(15.0) == VerdictDecision.REJECT
         assert determine_verdict(100.0) == VerdictDecision.REJECT
 
     def test_uncertain_upper_boundary(self) -> None:
-        """Score = 6 should give UNCERTAIN (not REJECT)."""
-        assert determine_verdict(6.0) == VerdictDecision.UNCERTAIN
+        """Score = 12 should give UNCERTAIN (not REJECT)."""
+        assert determine_verdict(12.0) == VerdictDecision.UNCERTAIN
 
     def test_uncertain_middle(self) -> None:
-        """Score between -3 and 6 should give UNCERTAIN."""
+        """Score between -3 and 12 should give UNCERTAIN."""
         assert determine_verdict(0.0) == VerdictDecision.UNCERTAIN
         assert determine_verdict(3.0) == VerdictDecision.UNCERTAIN
+        assert determine_verdict(6.0) == VerdictDecision.UNCERTAIN
         assert determine_verdict(-1.0) == VerdictDecision.UNCERTAIN
 
     def test_uncertain_lower_boundary(self) -> None:
@@ -289,9 +290,13 @@ class TestDetermineVerdict:
     def test_thresholds_are_non_overlapping(self) -> None:
         """Thresholds should be non-overlapping."""
         # Each score should map to exactly one verdict
-        for score in [-10, -5, -3.1, -3, -2, 0, 3, 6, 6.1, 10]:
+        for score in [-10, -5, -3.1, -3, -2, 0, 3, 6, 12, 12.1, 15]:
             verdict = determine_verdict(score)
-            assert verdict in {VerdictDecision.ACCEPT, VerdictDecision.UNCERTAIN, VerdictDecision.REJECT}
+            assert verdict in {
+                VerdictDecision.ACCEPT,
+                VerdictDecision.UNCERTAIN,
+                VerdictDecision.REJECT,
+            }
 
     def test_critical_finding_hard_block(self) -> None:
         """CRITICAL findings should always result in REJECT verdict (hard block)."""
@@ -382,12 +387,14 @@ class TestEvidenceScorer:
 
     def test_calculate_score_with_custom_weights(self) -> None:
         """Should calculate score with custom severity weights."""
-        scorer = EvidenceScorer(severity_weights={
-            Severity.CRITICAL: 5.0,
-            Severity.ERROR: 2.0,
-            Severity.WARNING: 1.0,
-            Severity.INFO: 0.5,
-        })
+        scorer = EvidenceScorer(
+            severity_weights={
+                Severity.CRITICAL: 5.0,
+                Severity.ERROR: 2.0,
+                Severity.WARNING: 1.0,
+                Severity.INFO: 0.5,
+            }
+        )
         finding = Finding(
             id="F1",
             severity=Severity.CRITICAL,
@@ -401,7 +408,7 @@ class TestEvidenceScorer:
     def test_determine_verdict_with_defaults(self) -> None:
         """Should determine verdict with default thresholds."""
         scorer = EvidenceScorer()
-        assert scorer.determine_verdict(8.0) == VerdictDecision.REJECT
+        assert scorer.determine_verdict(15.0) == VerdictDecision.REJECT
         assert scorer.determine_verdict(0.0) == VerdictDecision.UNCERTAIN
         assert scorer.determine_verdict(-4.0) == VerdictDecision.ACCEPT
 
@@ -437,8 +444,8 @@ class TestEvidenceScorerGetVerdictWithConfidence:
         """REJECT confidence should increase with score."""
         scorer = EvidenceScorer()
 
-        verdict, conf_low = scorer.get_verdict_with_confidence(7.0, 1, 1)
-        verdict, conf_high = scorer.get_verdict_with_confidence(15.0, 1, 1)
+        verdict, conf_low = scorer.get_verdict_with_confidence(13.0, 1, 1)
+        verdict, conf_high = scorer.get_verdict_with_confidence(20.0, 1, 1)
 
         assert verdict == VerdictDecision.REJECT
         assert conf_high > conf_low
@@ -447,8 +454,8 @@ class TestEvidenceScorerGetVerdictWithConfidence:
         """REJECT confidence should be boosted by critical findings."""
         scorer = EvidenceScorer()
 
-        verdict, conf_no_critical = scorer.get_verdict_with_confidence(7.0, 5, 0)
-        verdict, conf_with_critical = scorer.get_verdict_with_confidence(7.0, 5, 1)
+        verdict, conf_no_critical = scorer.get_verdict_with_confidence(13.0, 5, 0)
+        verdict, conf_with_critical = scorer.get_verdict_with_confidence(13.0, 5, 1)
 
         assert conf_with_critical > conf_no_critical
 
@@ -475,7 +482,7 @@ class TestEvidenceScorerGetVerdictWithConfidence:
         """UNCERTAIN confidence should be lowest near middle of range."""
         scorer = EvidenceScorer()
 
-        middle = (REJECT_THRESHOLD + ACCEPT_THRESHOLD) / 2  # 1.5
+        middle = (REJECT_THRESHOLD + ACCEPT_THRESHOLD) / 2  # 4.5
         verdict, conf_middle = scorer.get_verdict_with_confidence(middle, 1, 0)
 
         assert verdict == VerdictDecision.UNCERTAIN
@@ -501,26 +508,24 @@ class TestScoringIntegration:
 
     def test_full_workflow_reject(self) -> None:
         """Full workflow should produce REJECT for high-severity findings."""
+        # Four CRITICALs (4.0 each = 16.0) clears the new 12.0 REJECT threshold
+        # via score alone. Two CRITICALs would still REJECT via the
+        # CRITICAL-hard-block rule, but here we exercise the score path
+        # directly by calling determine_verdict without `findings`.
         findings = [
             Finding(
-                id="F1",
+                id=f"F{i}",
                 severity=Severity.CRITICAL,
-                title="Critical issue",
+                title=f"Critical issue {i}",
                 description="Test",
                 method_id=MethodId("#153"),
-            ),
-            Finding(
-                id="F2",
-                severity=Severity.CRITICAL,
-                title="Another critical",
-                description="Test",
-                method_id=MethodId("#201"),
-            ),
+            )
+            for i in range(1, 5)
         ]
         score = calculate_score(findings)
         verdict = determine_verdict(score)
 
-        assert score == 8.0  # 4.0 + 4.0
+        assert score == 16.0  # 4.0 × 4
         assert verdict == VerdictDecision.REJECT
 
     def test_full_workflow_accept(self) -> None:
@@ -599,9 +604,10 @@ class TestScoringIntegration:
         """Test all boundary conditions for verdict thresholds."""
         test_cases = [
             # (score, expected_verdict)
-            (6.1, VerdictDecision.REJECT),
+            (12.1, VerdictDecision.REJECT),
+            (12.0, VerdictDecision.UNCERTAIN),
+            (11.9, VerdictDecision.UNCERTAIN),
             (6.0, VerdictDecision.UNCERTAIN),
-            (5.9, VerdictDecision.UNCERTAIN),
             (0.0, VerdictDecision.UNCERTAIN),
             (-2.9, VerdictDecision.UNCERTAIN),
             (-3.0, VerdictDecision.UNCERTAIN),

@@ -1,4 +1,4 @@
-# DO NOT EDIT -- overwritten on every update.
+# DO NOT EDIT -- auto-updated only while unmodified.
 #
 # Workflow customization surface for bmad-code-review. Mirrors the
 # agent customization shape under the [workflow] namespace.
@@ -18,7 +18,73 @@ activation_steps_prepend = []
 # Overrides append. Use for context-heavy setup that should happen
 # once the user has been acknowledged.
 
-activation_steps_append = []
+activation_steps_append = [
+  # Headless override: bmad-assist runs validators without a human in the loop.
+  # Step files (loaded by the model from disk at runtime) contain interactive
+  # gates (HALT/Ask/Y-N) appropriate for solo-dev use of upstream BMAD but
+  # inappropriate for automated multi-LLM review. This entry pre-resolves the
+  # review target from the embedded context and instructs the model to bypass
+  # those gates when reading step files.
+  '''HEADLESS MULTI-LLM CODE REVIEW — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. The review target is fully embedded in this prompt's <context> section. There is no user to ask; do not request clarification.
+
+Embedded inputs (use these — do not run git or ask):
+- Story / spec → <file label="STORY FILE"> (treat as {spec_file})
+- Git diff → <file label="VIRTUAL CONTENT" path="[git-diff]"> (treat as {diff_output})
+- Architecture, project context → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- {review_mode} = "full"
+- {spec_file} = the embedded STORY FILE
+- {diff_output} = the embedded git-diff
+- {story_key} = the value already in <variables>
+
+Step file overrides (apply when reading any step file from disk):
+1. Skip all interactive gates. Ignore: <ask> blocks, "HALT. Ask the user", "[Y] Yes / [N] No" prompts, "Which scope do you want", "Should I review", "Proceed with the review", "Before I proceed", "What do you want to review", numbered scope-selection menus, CHECKPOINT halts requesting human confirmation, "wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+2. Skip step-01-gather-context.md's entire Tier 1-5 cascade and instruction 2 (the "What do you want to review?" HALT). The review target is already set per the variables above. Proceed directly to step-02.
+3. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.''',
+
+  # Evidence Score output template. The orchestrator's parser
+  # (bmad_assist.validation.evidence_score.parse_evidence_findings) requires a
+  # structured findings table. Without this directive, reviewers produce plain
+  # prose that fails to parse, the validator is excluded from synthesis with
+  # "no findings, clean passes, or score found", and synthesis falls back to
+  # noisier signals (Deep Verify) which can drive spurious rework cycles.
+  '''REQUIRED OUTPUT FORMAT — Evidence Score
+
+Your final report MUST include a structured Evidence Score block before the <!-- CODE_REVIEW_REPORT_END --> end marker. The orchestrator parses this format deterministically; output without it counts as zero evidence and may force a rework cycle.
+
+Canonical format (markdown table — preferred over the bullet variant):
+
+## Evidence Score
+
+| Severity | Description | Source | Score |
+|----------|-------------|--------|-------|
+| 🔴 CRITICAL | <one-line description> | path/to/file.py:42 | +3 |
+| 🟠 IMPORTANT | <one-line description> | path/to/file.py:78 | +1 |
+| 🟡 MINOR | <one-line description> | path/to/file.py:103 | +0.3 |
+
+| 🟢 CLEAN PASS | Count |
+|---|---|
+| Acceptance Criteria coverage | 1 |
+| Architecture alignment | 1 |
+| Test coverage | 1 |
+
+| **Evidence Score** | **<total, one decimal>** |
+
+Severity scores (parser-canonical):
+- 🔴 CRITICAL = +3.0 per finding
+- 🟠 IMPORTANT = +1.0 per finding
+- 🟡 MINOR = +0.3 per finding
+- 🟢 CLEAN PASS = -0.5 per category
+
+Total = sum(finding_scores) + (clean_pass_count × -0.5), rounded to one decimal.
+
+Severity aliases the parser also accepts (prefer canonical labels): HIGH=CRITICAL, MEDIUM=IMPORTANT, LOW=MINOR.
+
+Skip a severity row entirely if no findings at that level. Always include at least one finding row OR a non-zero CLEAN PASS count — otherwise the parser logs "no findings, clean passes, or score found" and excludes the validator from synthesis.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run
 # (standards, compliance constraints, stylistic guardrails).

@@ -98,6 +98,9 @@ class PatternMatchMethod(BaseVerificationMethod):
             artifact_text: The text content to analyze for patterns.
             **kwargs: Additional context including:
                 - domains: Optional list[ArtifactDomain] to filter patterns
+                - language: Optional canonical language code (e.g. "python",
+                  "go") to scope code patterns. Takes precedence over the
+                  language hint extracted from ``context``.
                 - context: Optional VerificationContext with language hint
                 - config: Optional DeepVerifyConfig (not used currently)
 
@@ -115,7 +118,14 @@ class PatternMatchMethod(BaseVerificationMethod):
             # Extract domains and context from kwargs for filtering
             domains: list[ArtifactDomain] | None = kwargs.get("domains")  # type: ignore[assignment]
             context = kwargs.get("context")
-            language = getattr(context, "language", None) if context else None
+            # Direct language kwarg wins over context.language so that callers
+            # without a full VerificationContext (e.g. batch orchestrator) can
+            # still scope patterns to the file's language.
+            language_kwarg = kwargs.get("language")
+            language: str | None = language_kwarg if isinstance(language_kwarg, str) else None
+            if language is None and context is not None:
+                ctx_language = getattr(context, "language", None)
+                language = ctx_language if isinstance(ctx_language, str) else None
 
             # Get patterns - filtered by domain and/or language if specified
             if domains and language:

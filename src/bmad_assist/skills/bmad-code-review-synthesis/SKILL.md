@@ -274,8 +274,8 @@ remaining_high: {N}
   </output-format>
 </step>
 
-<step n="6.5" goal="Append Senior Developer Review section to story file">
-  <critical>This section enables `dev_story` to detect that a code review has occurred and extract action items. APPEND — do NOT replace existing content.</critical>
+<step n="6.5" goal="Append Review Findings section to story file">
+  <critical>This section enables `dev_story` to detect that a code review has occurred and extract action items. APPEND a new `### Review Findings` heading at the end of the `## Tasks / Subtasks` section — do NOT replace existing content. This matches the upstream BMAD `bmad-code-review` step-04-present convention.</critical>
 
   <action>Determine the evidence verdict from your analysis:
     - **REJECT** when remaining Critical or High issues exist.
@@ -287,11 +287,10 @@ remaining_high: {N}
     - REJECT → "Changes Requested"
     - UNCERTAIN → "Approved with Reservations"
   </action>
-  <action>Append the following block to the story file (do not replace the existing "## Senior Developer Review (AI)" section if present — append a new "### Review: {date}" subsection under it):
+  <action>Append the following block to the story file at the end of the `## Tasks / Subtasks` section. Each rework round adds a new `### Review Findings` heading; previous rounds remain in place:
     ```
-    ## Senior Developer Review (AI)
-
-    ### Review: {current_date}
+    ### Review Findings
+    - **Date:** {current_date}
     - **Reviewer:** AI Code Review Synthesis
     - **Outcome:** {Approved|Changes Requested|Approved with Reservations}
     - **Issues Found:** {total_verified_issues}
@@ -327,6 +326,29 @@ Do NOT dismiss `test.fixme()` as "intentional TDD methodology". After `dev_story
     ```
     - {Title} [{file}:{line}] — {one-line reason}
     ```
+  </action>
+</step>
+
+<step n="6.7" goal="Update story status to reflect synthesis outcome">
+  <critical>Match upstream `bmad-code-review/step-04-present.md` (lines 87-105) convention: synthesis outcome MUST propagate to BOTH the story file's `Status:` frontmatter AND `sprint-status.yaml`'s `development_status[{story_key}]`. Without this, story files appear stuck in `review` status indefinitely after the loop has moved on.</critical>
+
+  <action>Determine the new status based on the synthesis resolution from step 6:
+    - **resolved** (all critical/high addressed, no remaining action items) → `{new_status}` = `done`
+    - **rework** (action items remain; dev needs to address them) → `{new_status}` = `in-progress`
+    - **halt** (uncertain evidence or max rework attempts reached) → `{new_status}` = `in-progress`
+  </action>
+
+  <action>Update the story file's `Status:` frontmatter line:
+    - Locate the `Status:` line near the top of the story file (typically line 3, between the title and the first `<!-- -->` comment).
+    - Replace its value with `{new_status}`. Preserve all other frontmatter, comments, and content unchanged.
+    - Save the story file.
+  </action>
+
+  <action>Sync `{sprint_status}` (`{implementation_artifacts}/sprint-status.yaml` or equivalent):
+    - If `{sprint_status}` file does not exist, note that status was updated in the story file only and skip the rest of this action.
+    - If `{story_key}` is not set, skip with a warning that sprint-status sync was unavailable for this run.
+    - Otherwise: load the FULL `{sprint_status}` file. Find the `development_status` entry matching `{story_key}`. Update its value to `{new_status}`. Update `last_updated` to `{current_date}`. Save the file, preserving ALL comments, structure, and STATUS DEFINITIONS comments verbatim.
+    - If `{story_key}` is not found in sprint status, warn that the story file was updated but sprint-status sync failed for that key.
   </action>
 </step>
 

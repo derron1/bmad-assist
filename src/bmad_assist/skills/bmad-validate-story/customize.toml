@@ -1,4 +1,4 @@
-# DO NOT EDIT -- overwritten on every update.
+# DO NOT EDIT -- auto-updated only while unmodified.
 #
 # Workflow customization surface for bmad-validate-story. Mirrors the
 # agent customization shape under the [workflow] namespace.
@@ -18,7 +18,68 @@ activation_steps_prepend = []
 # Overrides append. Use for context-heavy setup that should happen
 # once the user has been acknowledged.
 
-activation_steps_append = []
+activation_steps_append = [
+  # Headless override: bmad-assist runs validators without a human in the loop.
+  # The validation target (story file) is embedded; interactive gates in the
+  # SKILL.md prose ("which story?", "[Y]/[N]", "Should I review", etc.) have
+  # no place in automated multi-LLM validation.
+  '''HEADLESS MULTI-LLM STORY VALIDATION — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. The validation target is fully embedded in this prompt's <context> section. There is no user to ask; do not request clarification.
+
+Embedded inputs (use these — do not ask):
+- Story file → <file label="STORY FILE"> (treat as {story_file})
+- Architecture, project context, standards → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- {story_file} = the embedded STORY FILE
+- {story_key} = the value already in <variables>
+
+Skill overrides:
+1. Skip all interactive gates. Ignore: <ask> blocks, "HALT. Ask the user", "[Y] Yes / [N] No" prompts, "Which story", "Should I review", "Before I proceed", "What do you want", numbered selection menus, CHECKPOINT halts requesting human confirmation, "wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+2. The story file is the validation target — proceed directly to validation. Do not ask which story to validate.
+3. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.''',
+
+  # Evidence Score output template. The orchestrator's parser
+  # (bmad_assist.validation.evidence_score.parse_evidence_findings) is shared
+  # between code-review and validate-story. Without this directive, validators
+  # produce plain prose that fails to parse, the validator is excluded from
+  # synthesis with "no findings, clean passes, or score found", and synthesis
+  # falls back to noisier signals.
+  '''REQUIRED OUTPUT FORMAT — Evidence Score
+
+Your final report MUST include a structured Evidence Score block before the <!-- VALIDATION_REPORT_END --> end marker. The orchestrator parses this format deterministically; output without it counts as zero evidence and may force a rework cycle.
+
+Canonical format (markdown table — preferred over the bullet variant):
+
+## Evidence Score
+
+| Severity | Description | Source | Score |
+|----------|-------------|--------|-------|
+| 🔴 CRITICAL | <one-line description> | <story-section or AC ref> | +3 |
+| 🟠 IMPORTANT | <one-line description> | <story-section or AC ref> | +1 |
+| 🟡 MINOR | <one-line description> | <story-section or AC ref> | +0.3 |
+
+| 🟢 CLEAN PASS | Count |
+|---|---|
+| Acceptance Criteria coverage | 1 |
+| Dev Notes completeness | 1 |
+| Test Strategy clarity | 1 |
+
+| **Evidence Score** | **<total, one decimal>** |
+
+Severity scores (parser-canonical):
+- 🔴 CRITICAL = +3.0 per finding
+- 🟠 IMPORTANT = +1.0 per finding
+- 🟡 MINOR = +0.3 per finding
+- 🟢 CLEAN PASS = -0.5 per category
+
+Total = sum(finding_scores) + (clean_pass_count × -0.5), rounded to one decimal.
+
+Severity aliases the parser also accepts (prefer canonical labels): HIGH=CRITICAL, MEDIUM=IMPORTANT, LOW=MINOR.
+
+Skip a severity row entirely if no findings at that level. Always include at least one finding row OR a non-zero CLEAN PASS count — otherwise the parser logs "no findings, clean passes, or score found" and excludes the validator from synthesis.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run
 # (standards, validator-specific rules). Override appends.

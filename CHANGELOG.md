@@ -2,6 +2,11 @@
 
 All notable changes to bmad-assist are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Deep Verify REJECT threshold raised from 6.0 → 12.0** (P3). The previous 6.0 default tripped REJECT on any 2 CRITICAL findings (4.0 each), which proved over-aggressive once noise filtering (P2: GEN-*/`*-BOUNDARY-*` exclusion) and language-aware pattern matching (P1) landed. Most files have 1–2 legitimate CRITICAL findings; 12.0 keeps REJECT meaningful while letting UNCERTAIN catch borderline cases for human review. CRITICAL hard-block REJECT path is unchanged. ACCEPT threshold (-3.0) is unchanged. (`bmad_assist.deep_verify.core.scoring.REJECT_THRESHOLD`, `DeepVerifyConfig.reject_threshold` default.)
+
 ## [0.6.0] - 2026-04-26
 
 This release completes the BMAD v6.4+ skill-layout refactor. All 18 workflows now compile through the inlined skill-layout compilers under `bmad_assist.compiler.skills`; the legacy compiler tree, the deprecated `--skill-layout` flag, the `config.skill_layout` field, and the legacy workflow-name aliases are gone. Notification labels for v6.4+ users now resolve from the actual `SKILL.md` `description` instead of falling back to the workflow name.

@@ -13,8 +13,8 @@ Where:
     - clean_passes: number of domains with zero findings (-0.5 bonus each)
 
 Verdict thresholds (non-overlapping):
-    - score > 6    → REJECT (too many high-severity findings)
-    - -3 ≤ score ≤ 6 → UNCERTAIN (needs human review)
+    - score > 12   → REJECT (too many high-severity findings)
+    - -3 ≤ score ≤ 12 → UNCERTAIN (needs human review)
     - score < -3   → ACCEPT (clean enough)
 """
 
@@ -46,8 +46,68 @@ SEVERITY_WEIGHTS: dict[Severity, float] = {
 CLEAN_PASS_BONUS: float = -0.5
 
 # Verdict thresholds (non-overlapping)
-REJECT_THRESHOLD: float = 6.0
+# REJECT_THRESHOLD raised from 6.0 → 12.0 (Deep Verify P3): the prior 6.0
+# tripped REJECT on any 2 CRITICAL findings (4.0 each) which proved too
+# aggressive once noise filtering (P2: GEN-*/BOUNDARY-* exclusion) and
+# language-aware pattern matching (P1) landed. Most files have 1–2
+# legitimate CRITICAL findings; 12.0 keeps REJECT meaningful while letting
+# UNCERTAIN catch the borderline cases for human review.
+REJECT_THRESHOLD: float = 12.0
 ACCEPT_THRESHOLD: float = -3.0
+
+# Pattern IDs excluded from verdict scoring (kept in report as informational).
+# These are spec-level checklists rather than code antipatterns:
+#   - GEN-* are generic checklist items (e.g., GEN-002 "null pointer dereference")
+#     pulled from patterns/data/checklists/general.yaml.
+#   - *-BOUNDARY-* are domain boundary checklists (e.g., STORAGE-BOUNDARY-002,
+#     API-BOUNDARY-001) pulled from patterns/data/checklists/<domain>.yaml.
+# They surface as findings during verification so reviewers can see them,
+# but they should NOT drive REJECT/UNCERTAIN/ACCEPT verdicts since they are
+# spec-level concerns dressed up as code findings — they previously dominated
+# noise (~58% of findings on a sample run) and inflated the score.
+_VERDICT_EXCLUDED_PATTERN_PREFIXES: tuple[str, ...] = ("GEN-",)
+_VERDICT_EXCLUDED_PATTERN_INFIXES: tuple[str, ...] = ("-BOUNDARY-",)
+
+
+def _is_excluded_from_verdict(pattern_id: str | None) -> bool:
+    """Return True if a pattern_id should be excluded from verdict scoring.
+
+    Findings with these pattern IDs remain in the report (so reviewers see
+    them) but do not contribute to the score or the auto-REJECT-on-CRITICAL
+    rule. See _VERDICT_EXCLUDED_PATTERN_PREFIXES /
+    _VERDICT_EXCLUDED_PATTERN_INFIXES for the active rules.
+
+    Args:
+        pattern_id: Pattern identifier string (e.g., "GEN-001",
+            "STORAGE-BOUNDARY-002") or None for findings without a pattern.
+
+    Returns:
+        True if this pattern_id is on the exclusion list, False otherwise
+        (including when pattern_id is None).
+
+    """
+    if pattern_id is None:
+        return False
+    if any(pattern_id.startswith(p) for p in _VERDICT_EXCLUDED_PATTERN_PREFIXES):
+        return True
+    if any(infix in pattern_id for infix in _VERDICT_EXCLUDED_PATTERN_INFIXES):
+        return True
+    return False
+
+
+def _filter_for_verdict(findings: list[Finding]) -> list[Finding]:
+    """Filter findings down to those that should affect the verdict score.
+
+    Excludes generic checklist patterns (see _is_excluded_from_verdict).
+
+    Args:
+        findings: All findings produced by verification.
+
+    Returns:
+        Subset of findings to use for scoring and verdict determination.
+
+    """
+    return [f for f in findings if not _is_excluded_from_verdict(f.pattern_id)]
 
 
 # =============================================================================
@@ -88,7 +148,12 @@ def calculate_score(findings: list[Finding], clean_passes: int = 0) -> float:
     """
     findings_score = 0.0
 
-    for finding in findings:
+    # Exclude generic checklist patterns (GEN-*, *-BOUNDARY-*) from scoring;
+    # they remain in the full report for reviewers but should not drive the
+    # numeric verdict score.
+    verdict_findings = _filter_for_verdict(findings)
+
+    for finding in verdict_findings:
         # Get severity weight
         weight = SEVERITY_WEIGHTS[finding.severity]
 
@@ -111,8 +176,8 @@ def determine_verdict(score: float, findings: list[Finding] | None = None) -> Ve
     """Determine verdict from evidence score.
 
     Uses non-overlapping thresholds:
-        - score > 6    → REJECT (too many high-severity findings)
-        - -3 ≤ score ≤ 6 → UNCERTAIN (needs human review)
+        - score > 12   → REJECT (too many high-severity findings)
+        - -3 ≤ score ≤ 12 → UNCERTAIN (needs human review)
         - score < -3   → ACCEPT (clean enough)
 
     CRITICAL findings always result in REJECT verdict (hard block).
@@ -128,13 +193,20 @@ def determine_verdict(score: float, findings: list[Finding] | None = None) -> Ve
         VerdictDecision based on thresholds.
 
     Example:
-        >>> determine_verdict(8.5)   # VerdictDecision.REJECT
+        >>> determine_verdict(15.0)  # VerdictDecision.REJECT
         >>> determine_verdict(2.0)   # VerdictDecision.UNCERTAIN
         >>> determine_verdict(-4.0)  # VerdictDecision.ACCEPT
 
     """
-    # CRITICAL findings are hard blocks - always REJECT
-    if findings and any(f.severity == Severity.CRITICAL for f in findings):
+    # CRITICAL findings are hard blocks - always REJECT.
+    # Excluded checklist patterns (GEN-*, *-BOUNDARY-*) do NOT trigger this
+    # rule even when their severity is CRITICAL: they are spec-level
+    # checklists, not real code antipatterns, and would otherwise force
+    # REJECT regardless of the actual code-level findings.
+    if findings and any(
+        f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
+        for f in findings
+    ):
         return VerdictDecision.REJECT
 
     if score > REJECT_THRESHOLD:
@@ -176,7 +248,7 @@ class EvidenceScorer:
         Args:
             severity_weights: Custom severity weights (defaults to SEVERITY_WEIGHTS).
             clean_pass_bonus: Custom clean pass bonus (defaults to -0.5).
-            reject_threshold: Custom reject threshold (defaults to 6.0).
+            reject_threshold: Custom reject threshold (defaults to 12.0).
             accept_threshold: Custom accept threshold (defaults to -3.0).
 
         Raises:
@@ -211,7 +283,12 @@ class EvidenceScorer:
         """
         findings_score = 0.0
 
-        for finding in findings:
+        # Exclude generic checklist patterns (GEN-*, *-BOUNDARY-*) from scoring;
+        # they remain in the full report for reviewers but should not drive
+        # the numeric verdict score.
+        verdict_findings = _filter_for_verdict(findings)
+
+        for finding in verdict_findings:
             weight = self.severity_weights[finding.severity]
 
             if finding.evidence:
@@ -240,8 +317,16 @@ class EvidenceScorer:
             VerdictDecision based on instance thresholds.
 
         """
-        # CRITICAL findings are hard blocks - always REJECT
-        if findings and any(f.severity == Severity.CRITICAL for f in findings):
+        # CRITICAL findings are hard blocks - always REJECT.
+        # Excluded checklist patterns (GEN-*, *-BOUNDARY-*) do NOT trigger
+        # this rule even when their severity is CRITICAL: they are
+        # spec-level checklists, not real code antipatterns, and would
+        # otherwise force REJECT regardless of the actual code-level
+        # findings.
+        if findings and any(
+            f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
+            for f in findings
+        ):
             return VerdictDecision.REJECT
 
         if score > self.reject_threshold:

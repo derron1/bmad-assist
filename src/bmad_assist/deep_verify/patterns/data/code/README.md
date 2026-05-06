@@ -186,9 +186,39 @@ patterns = library.get_patterns(
 )
 ```
 
+## API Contract: `get_patterns()` vs `get_all_patterns()`
+
+Two distinct accessors with deliberately different defaults:
+
+```python
+library = get_default_pattern_library()
+
+# RECOMMENDED — language-aware: returns spec patterns + code patterns for the
+# target language only. Cross-language patterns (e.g. Go's defer-in-loop) will
+# NOT fire on Python files.
+py_patterns = library.get_patterns(domains=[...], language="python")
+
+# Default with no language hint: returns SPEC-ONLY patterns (language-agnostic).
+# This is the safe default for callers that don't know the target language —
+# they get the universally-applicable spec patterns and nothing more.
+spec_only = library.get_patterns(domains=[...])
+
+# Escape hatch: returns the full unfiltered library (every language).
+# Use only for inspection, library audits, or migration tooling.
+everything = library.get_all_patterns()
+```
+
+The default-to-spec-only behavior of `get_patterns()` (when `language` is
+omitted) was introduced to prevent cross-language false positives — the
+historical default of "return everything" caused Go-tagged patterns to match
+on Python files, JavaScript-tagged patterns to match on Ruby files, etc.
+Callers that legitimately need the full library should call
+`get_all_patterns()` explicitly.
+
 ## Notes
 
 - Spec patterns (in `spec/` directory) apply to all languages (no `language` field)
 - Code patterns are filtered by the `language` parameter in `get_patterns()`
-- Unknown languages log a warning and return only spec patterns
+- `get_patterns()` with no `language` argument returns spec-only patterns; use `get_all_patterns()` for the unfiltered library
+- Unknown languages return spec-only patterns (no error raised — the library treats them as "no language-specific patterns match")
 - Code patterns override spec patterns on ID collision (last loaded wins)

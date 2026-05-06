@@ -52,30 +52,158 @@ _KEYWORD_THRESHOLD = 2
 # Keywords per domain for fast keyword-based detection (subset of engine's keywords)
 _DOMAIN_KEYWORDS: dict[ArtifactDomain, list[str]] = {
     ArtifactDomain.SECURITY: [
-        "auth", "token", "encrypt", "password", "permission",
-        "credential", "secret", "jwt", "oauth", "hash",
+        "auth",
+        "token",
+        "encrypt",
+        "password",
+        "permission",
+        "credential",
+        "secret",
+        "jwt",
+        "oauth",
+        "hash",
     ],
     ArtifactDomain.API: [
-        "endpoint", "request", "response", "http", "api",
-        "rest", "json", "graphql", "grpc", "webhook",
+        "endpoint",
+        "request",
+        "response",
+        "http",
+        "api",
+        "rest",
+        "json",
+        "graphql",
+        "grpc",
+        "webhook",
     ],
     ArtifactDomain.CONCURRENCY: [
-        "async", "thread", "lock", "race", "concurrent",
-        "parallel", "mutex", "semaphore", "goroutine", "worker",
+        "async",
+        "thread",
+        "lock",
+        "race",
+        "concurrent",
+        "parallel",
+        "mutex",
+        "semaphore",
+        "goroutine",
+        "worker",
     ],
     ArtifactDomain.STORAGE: [
-        "database", "db", "cache", "persist", "storage",
-        "sql", "query", "transaction", "repository", "orm",
+        "database",
+        "db",
+        "cache",
+        "persist",
+        "storage",
+        "sql",
+        "query",
+        "transaction",
+        "repository",
+        "orm",
     ],
     ArtifactDomain.MESSAGING: [
-        "queue", "message", "event", "stream", "kafka",
-        "rabbitmq", "pubsub", "consumer", "producer", "topic",
+        "queue",
+        "message",
+        "event",
+        "stream",
+        "kafka",
+        "rabbitmq",
+        "pubsub",
+        "consumer",
+        "producer",
+        "topic",
     ],
     ArtifactDomain.TRANSFORM: [
-        "convert", "transform", "parse", "serialize", "format",
-        "marshal", "unmarshal", "encode", "decode", "csv",
+        "convert",
+        "transform",
+        "parse",
+        "serialize",
+        "format",
+        "marshal",
+        "unmarshal",
+        "encode",
+        "decode",
+        "csv",
     ],
 }
+
+# File extension → language code mapping for pattern-match filtering.
+# Keys MUST include the leading dot. Values are canonical language codes.
+#
+# The 7 languages currently supported by PatternLibrary's data tree
+# (python, go, javascript, typescript, rust, java, ruby — see
+# patterns/library.py LANGUAGE_CODE_MAP) have shipped pattern files
+# under patterns/data/code/<lang>/. The remaining entries below map
+# common production-language extensions whose patterns are not yet
+# shipped: those files receive a language hint that the library will
+# resolve to "spec-only patterns" (since no language-tagged patterns
+# match), which is the correct safe default. When future pattern data
+# is added for any of those languages, no map change is needed — the
+# canonical code already routes correctly.
+_EXTENSION_LANGUAGE_MAP: dict[str, str] = {
+    # Languages with shipped pattern data
+    ".py": "python",
+    ".pyi": "python",
+    ".go": "go",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".rs": "rust",
+    ".java": "java",
+    ".rb": "ruby",
+    # Languages without shipped pattern data (spec-only fallback applies)
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".hxx": "cpp",
+    ".c": "c",
+    ".h": "c",  # Ambiguous (could be C++ header); defaults to C
+    ".cs": "csharp",
+    ".scala": "scala",
+    ".sc": "scala",
+    ".php": "php",
+    ".dart": "dart",
+    ".sh": "shell",
+    ".bash": "shell",
+    ".zsh": "shell",
+    ".sql": "sql",
+    ".groovy": "groovy",
+    ".lua": "lua",
+    ".pl": "perl",
+    ".pm": "perl",
+    ".r": "r",
+    ".hs": "haskell",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".erl": "erlang",
+    ".clj": "clojure",
+    ".cljs": "clojure",
+    ".jl": "julia",
+}
+
+
+def _detect_language_from_path(file_path: Path) -> str | None:
+    """Detect a canonical language code from a file path's extension.
+
+    Args:
+        file_path: Path to the source file.
+
+    Returns:
+        Canonical language code (e.g. "python", "go", "typescript") if the
+        extension is recognized, else None. None signals "no language hint"
+        to the pattern matcher, which will then fall back to spec-only
+        (language-agnostic) patterns rather than running every code-specific
+        pattern across every file.
+
+    """
+    return _EXTENSION_LANGUAGE_MAP.get(file_path.suffix.lower())
+
 
 # Methods that always run regardless of domain
 _ALWAYS_RUN_METHODS = {MethodId("#153"), MethodId("#154"), MethodId("#203")}
@@ -160,9 +288,7 @@ class BatchVerifyOrchestrator:
         self._config = config
         self._project_root = project_root
         self._file_context_budget = config.context.file_context_budget
-        self._model, self._settings = _resolve_provider_config(
-            config, helper_provider_config
-        )
+        self._model, self._settings = _resolve_provider_config(config, helper_provider_config)
         # MethodSelector with llm_client=None for batch mode
         # (sessions handle LLM calls, not individual methods)
         self._method_selector = MethodSelector(config, llm_client=None)
@@ -218,15 +344,16 @@ class BatchVerifyOrchestrator:
 
         # 3. Pattern match (#153) locally for all files
         pattern_findings: dict[Path, list[Finding]] = {}
-        pattern_method = next(
-            (m for m in methods if m.method_id == MethodId("#153")), None
-        )
+        pattern_method = next((m for m in methods if m.method_id == MethodId("#153")), None)
         if pattern_method is not None:
             skipped = 0
             for fp, content in files:
                 try:
                     domains_list: list[ArtifactDomain] = list(file_domains.get(fp, set()))
+                    language = _detect_language_from_path(fp)
                     kwargs: dict[str, object] = {"domains": domains_list}
+                    if language is not None:
+                        kwargs["language"] = language
                     findings = await pattern_method.analyze(content, **kwargs)  # type: ignore[arg-type]
                     if findings:
                         pattern_findings[fp] = findings
@@ -238,7 +365,8 @@ class BatchVerifyOrchestrator:
             if skipped:
                 logger.info(
                     "#153 pattern match: %d/%d files skipped (no patterns for detected domains)",
-                    skipped, len(files),
+                    skipped,
+                    len(files),
                 )
 
         # 4. LLM methods: parallel tasks with stagger
@@ -254,7 +382,10 @@ class BatchVerifyOrchestrator:
 
             task = asyncio.create_task(
                 self._run_method_sessions(
-                    method, files, file_domains, effective_timeout,
+                    method,
+                    files,
+                    file_domains,
+                    effective_timeout,
                     file_hunk_ranges=file_hunk_ranges,
                 ),
                 name=f"batch-{method.method_id}",
@@ -279,9 +410,7 @@ class BatchVerifyOrchestrator:
                 if isinstance(result, dict) and fp in result:
                     file_findings.extend(result[fp])
 
-            verdicts[fp] = self._build_verdict(
-                file_findings, list(domains), all_method_ids
-            )
+            verdicts[fp] = self._build_verdict(file_findings, list(domains), all_method_ids)
 
         logger.info(
             "BatchVerify complete: %d files processed, verdicts=%s",
@@ -323,12 +452,16 @@ class BatchVerifyOrchestrator:
         if len(chunks) > 1:
             logger.info(
                 "Method %s: starting %d LLM sessions for %d files (%d per session)",
-                method.method_id, len(chunks), len(applicable), MAX_FILES_PER_SESSION,
+                method.method_id,
+                len(chunks),
+                len(applicable),
+                MAX_FILES_PER_SESSION,
             )
         else:
             logger.info(
                 "Method %s: starting LLM session for %d files",
-                method.method_id, len(applicable),
+                method.method_id,
+                len(applicable),
             )
 
         results: dict[Path, list[Finding]] = {}
@@ -364,7 +497,9 @@ class BatchVerifyOrchestrator:
                             extracted = None
 
                         result = await session.analyze_file(
-                            fp, content, timeout=per_file_timeout,
+                            fp,
+                            content,
+                            timeout=per_file_timeout,
                             extracted_content=extracted,
                         )
                         results[fp] = result.findings if result.success else []
@@ -372,8 +507,7 @@ class BatchVerifyOrchestrator:
             except (OSError, RuntimeError, ConnectionError) as e:
                 # Session connect/crash — log and skip remaining in this chunk
                 logger.warning(
-                    "Session failed for method %s: %s. "
-                    "Remaining files in chunk skipped.",
+                    "Session failed for method %s: %s. Remaining files in chunk skipped.",
                     method.method_id,
                     e,
                 )
@@ -421,9 +555,7 @@ class BatchVerifyOrchestrator:
 
         # Filter files that have at least one triggering domain
         return [
-            (fp, content)
-            for fp, content in files
-            if file_domains.get(fp, set()) & trigger_domains
+            (fp, content) for fp, content in files if file_domains.get(fp, set()) & trigger_domains
         ]
 
     def _build_verdict(
@@ -448,10 +580,7 @@ class BatchVerifyOrchestrator:
                 decision=VerdictDecision.ACCEPT,
                 score=0.0,
                 findings=[],
-                domains_detected=[
-                    DomainConfidence(domain=d, confidence=0.7)
-                    for d in domains
-                ],
+                domains_detected=[DomainConfidence(domain=d, confidence=0.7) for d in domains],
                 methods_executed=methods_executed,
                 summary="ACCEPT verdict (score: 0.0). 0 findings. Batch mode.",
             )
@@ -461,9 +590,7 @@ class BatchVerifyOrchestrator:
 
         # Assign sequential IDs
         sorted_findings = self._sort_by_severity(findings)
-        reassigned = [
-            replace(f, id=f"F{i}") for i, f in enumerate(sorted_findings, 1)
-        ]
+        reassigned = [replace(f, id=f"F{i}") for i, f in enumerate(sorted_findings, 1)]
 
         # Calculate clean passes
         domain_findings: dict[ArtifactDomain, int] = dict.fromkeys(domains, 0)
@@ -475,9 +602,7 @@ class BatchVerifyOrchestrator:
         score = self._scorer.calculate_score(reassigned, clean_passes)
         decision = self._scorer.determine_verdict(score, reassigned)
 
-        domain_confs = [
-            DomainConfidence(domain=d, confidence=0.7) for d in domains
-        ]
+        domain_confs = [DomainConfidence(domain=d, confidence=0.7) for d in domains]
 
         summary = (
             f"{decision.value} verdict (score: {score:.1f}). "
