@@ -922,7 +922,7 @@ class TestDefaultManifests:
         registry = PatchSetRegistry(default_patchsets_dir)
         names = registry.list()
 
-        expected = ["baseline", "no-patches"]
+        expected = ["agents-team", "baseline", "no-patches"]
         assert sorted(names) == sorted(expected)
 
     def test_all_default_manifests_use_known_workflows(

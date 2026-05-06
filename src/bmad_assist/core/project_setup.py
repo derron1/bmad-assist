@@ -13,6 +13,8 @@ remaining surface is intentionally narrow: bootstrap skills, atomically
 copy files, validate paths.
 """
 
+import hashlib
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -28,12 +30,21 @@ from bmad_assist.git import check_gitignore
 logger = logging.getLogger(__name__)
 
 # Stamp file written into each installed skill directory recording the
-# bmad-assist version that produced the copy. Used by bootstrap to detect
-# stale installs after a release that changes skill content/layout (e.g.
-# the Phase 7 inlining of workflow.md into SKILL.md). Not shipped in the
-# bundle — written post-copy by ``bootstrap_new_layout``.
+# bmad-assist version and bundled customize.toml hash that produced the
+# copy. Used by bootstrap to detect stale installs after a release that
+# changes skill content/layout, and to distinguish unmodified bundled
+# customize.toml files from consumer-edited overrides. Not shipped in
+# the bundle — written post-copy by ``bootstrap_new_layout``.
 _BUNDLE_VERSION_FILE = ".bundle-version"
 _LEGACY_VERSION_LABEL = "legacy"
+
+
+@dataclass(frozen=True)
+class BundleStamp:
+    """Metadata describing the bundled skill content last installed."""
+
+    version: str | None
+    customize_toml_hash: str | None = None
 
 
 class SetupError(BmadAssistError):
@@ -141,23 +152,69 @@ def check_gitignore_warning(
     console.print("     [dim]  suppress_gitignore: true[/dim]\n")
 
 
-def _read_installed_bundle_version(skill_dir: Path) -> str | None:
-    """Read the stamped bundle version from an installed skill dir.
+def _hash_file(path: Path) -> str | None:
+    """Return the SHA-256 hash for ``path``, or ``None`` if unreadable."""
+    try:
+        content = path.read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha256(content).hexdigest()
 
-    Returns ``None`` if the stamp is missing or unreadable, which is
-    treated by the bootstrap as a legacy (pre-stamp) install that needs
-    refreshing.
+
+def _read_installed_bundle_stamp(skill_dir: Path) -> BundleStamp:
+    """Read bundled skill provenance metadata from an installed skill dir.
+
+    New installs write JSON with both the bmad-assist version and the
+    bundled ``customize.toml`` hash. Older installs wrote a single
+    version string; those are treated as version-only legacy stamps.
     """
     stamp = skill_dir / _BUNDLE_VERSION_FILE
     try:
-        return stamp.read_text(encoding="utf-8").strip() or None
+        content = stamp.read_text(encoding="utf-8").strip()
     except (OSError, ValueError):
-        return None
+        return BundleStamp(version=None)
+
+    if not content:
+        return BundleStamp(version=None)
+
+    if content.startswith("{"):
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            logger.warning("Invalid bundle stamp JSON in %s", stamp)
+            return BundleStamp(version=None)
+        if not isinstance(data, dict):
+            logger.warning("Invalid bundle stamp payload in %s", stamp)
+            return BundleStamp(version=None)
+        version = data.get("version")
+        customize_hash = data.get("customize_toml_hash")
+        return BundleStamp(
+            version=version if isinstance(version, str) and version else None,
+            customize_toml_hash=customize_hash
+            if isinstance(customize_hash, str) and customize_hash
+            else None,
+        )
+
+    return BundleStamp(version=content)
 
 
-def _write_bundle_version(skill_dir: Path, version: str) -> None:
-    """Write the bundle version stamp into an installed skill dir."""
-    (skill_dir / _BUNDLE_VERSION_FILE).write_text(f"{version}\n", encoding="utf-8")
+def _read_installed_bundle_version(skill_dir: Path) -> str | None:
+    """Read the stamped bundle version from an installed skill dir."""
+    return _read_installed_bundle_stamp(skill_dir).version
+
+
+def _write_bundle_version(
+    skill_dir: Path,
+    version: str,
+    customize_toml_hash: str | None,
+) -> None:
+    """Write bundled skill provenance metadata into an installed skill dir."""
+    payload = {
+        "version": version,
+        "customize_toml_hash": customize_toml_hash,
+    }
+    content = json.dumps(payload, sort_keys=True) + "\n"
+    (skill_dir / _BUNDLE_VERSION_FILE).write_text(content, encoding="utf-8")
 
 
 def _copy_skill_tree(
@@ -166,6 +223,7 @@ def _copy_skill_tree(
     _is_root: bool = True,
     *,
     preserve_customizations: bool = True,
+    previous_customize_toml_hash: str | None = None,
 ) -> None:
     """Copy a bundled skill directory tree.
 
@@ -177,12 +235,14 @@ def _copy_skill_tree(
         src_dir: Source skill directory (under ``bmad_assist.skills``).
         dst_dir: Destination skill directory.
         _is_root: Internal flag - True for top-level call (enables rollback).
-        preserve_customizations: When True (default), skip copying
-            ``customize.toml`` files when the destination already exists.
-            ``customize.toml`` is the v6.4+ user-override surface; the
-            non-destructive ``--reset-workflows`` flow must not clobber
-            it. Set False for the destructive ``--reset-skills-force``
-            path.
+        preserve_customizations: When True (default), overwrite an
+            existing ``customize.toml`` only when its content hash still
+            matches the previously installed bundled hash. Modified
+            files are preserved. Set False for the destructive
+            ``--reset-skills-force`` path.
+        previous_customize_toml_hash: Hash recorded when this skill was
+            last installed. Used to distinguish unmodified bundled
+            defaults from consumer customizations.
 
     Raises:
         SetupError: If any copy operation fails. Cleans up partial copy.
@@ -211,17 +271,27 @@ def _copy_skill_tree(
                     dst_dir / item.name,
                     _is_root=False,
                     preserve_customizations=preserve_customizations,
+                    previous_customize_toml_hash=previous_customize_toml_hash,
                 )
             else:
                 target = dst_dir / item.name
-                # Preserve user customize.toml overrides on non-destructive
-                # re-copies (Phase 5 --reset-workflows semantics).
                 if preserve_customizations and item.name == "customize.toml" and target.exists():
-                    logger.debug(
-                        "Preserving user customize.toml override at %s",
-                        target,
-                    )
-                    continue
+                    installed_hash = _hash_file(target)
+                    if (
+                        previous_customize_toml_hash is not None
+                        and installed_hash == previous_customize_toml_hash
+                    ):
+                        logger.debug(
+                            "Updating unmodified bundled customize.toml at %s",
+                            target,
+                        )
+                    else:
+                        logger.warning(
+                            "Preserving modified customize.toml at %s; "
+                            "bundled defaults were not overwritten",
+                            target,
+                        )
+                        continue
                 _atomic_copy_file(item, target)
     except (SetupError, OSError) as e:
         if _is_root and created_dst and dst_dir.exists():
@@ -244,19 +314,19 @@ def bootstrap_new_layout(
     ``<project>/.agents/skills/<id>/`` (byte-identical mirrors).
 
     No-clobber semantics: existing destination directories are left
-    untouched unless ``force=True``.
+    untouched while their bundle stamp is current unless ``force=True``.
 
     Args:
         project_path: Project root directory.
         force: If True, re-copy existing skill directories from the
             bundled versions. If False, skip already-present skills.
         console: Rich console for progress output.
-        preserve_customizations: When True (default), per-skill
-            ``customize.toml`` files are preserved during re-copy. The
-            destructive ``--reset-skills-force`` path passes False to
-            also overwrite ``customize.toml``. Only meaningful when
-            ``force=True`` (no-clobber mode never copies over existing
-            files anyway).
+        preserve_customizations: When True (default), existing
+            ``customize.toml`` files are overwritten only when their
+            content hash still matches the previously installed bundled
+            default. Divergent files are preserved as consumer edits.
+            The destructive ``--reset-skills-force`` path passes False
+            to overwrite ``customize.toml`` regardless of provenance.
 
     Returns:
         Tuple of ``(bootstrapped_skill_ids, skipped_skill_ids)``.
@@ -272,7 +342,8 @@ def bootstrap_new_layout(
     console.print(f"\n[bold]Bootstrapping {len(skills)} bundled skills...[/bold]")
     if force and preserve_customizations:
         console.print(
-            "  [dim]Re-copy mode: preserving any existing customize.toml overrides.[/dim]"
+            "  [dim]Re-copy mode: updating unmodified customize.toml files; "
+            "preserving modified overrides.[/dim]"
         )
     elif force and not preserve_customizations:
         console.print(
@@ -288,6 +359,7 @@ def bootstrap_new_layout(
         if src_dir is None:
             console.print(f"  [{i}/{len(skills)}] {skill_id}... [red]NOT FOUND[/red]")
             continue
+        current_customize_hash = _hash_file(src_dir / "customize.toml")
 
         console.print(f"  [{i}/{len(skills)}] {skill_id}...", end=" ")
 
@@ -309,44 +381,61 @@ def bootstrap_new_layout(
                     dst_dir,
                     preserve_customizations=preserve_customizations,
                 )
-                _write_bundle_version(dst_dir, current_version)
+                _write_bundle_version(dst_dir, current_version, current_customize_hash)
                 if skill_status not in ("fresh",):
                     skill_status = "fresh"
                 continue
 
-            installed_version = _read_installed_bundle_version(dst_dir)
+            installed_stamp = _read_installed_bundle_stamp(dst_dir)
 
             if force:
                 # Re-copy in place rather than rmtree → copy. The
-                # _copy_skill_tree call honours preserve_customizations
-                # (which we want to keep customize.toml intact for the
-                # default --reset-workflows UX). For the destructive
-                # --reset-skills-force path, preserve=False allows
-                # customize.toml to be overwritten too.
+                # _copy_skill_tree call updates customize.toml only when
+                # provenance shows the destination still matches the
+                # previous bundled default. For the destructive
+                # --reset-skills-force path, preserve=False overwrites it.
                 _copy_skill_tree(
                     src_dir,
                     dst_dir,
                     preserve_customizations=preserve_customizations,
+                    previous_customize_toml_hash=installed_stamp.customize_toml_hash,
                 )
-                _write_bundle_version(dst_dir, current_version)
+                _write_bundle_version(dst_dir, current_version, current_customize_hash)
                 if skill_status != "fresh":
                     skill_status = "forced"
                 continue
 
-            if installed_version != current_version:
-                # Stale (or unstamped legacy) install — auto-refresh.
-                # customize.toml is preserved; manual edits to other
-                # bundled files are overwritten on version bump.
+            if (
+                installed_stamp.version == current_version
+                and installed_stamp.customize_toml_hash is None
+            ):
+                # Upgrade legacy one-line stamps in place without
+                # changing an otherwise current no-clobber install.
+                _write_bundle_version(dst_dir, current_version, current_customize_hash)
+                if skill_status is None:
+                    skill_status = "skipped"
+                continue
+
+            stamp_is_current = (
+                installed_stamp.version == current_version
+                and installed_stamp.customize_toml_hash == current_customize_hash
+            )
+            if not stamp_is_current:
+                # Stale, unstamped legacy, or bundled customize.toml
+                # changed — auto-refresh. customize.toml is overwritten
+                # only when its content still matches the previously
+                # stamped bundled default; consumer edits are preserved.
                 _copy_skill_tree(
                     src_dir,
                     dst_dir,
                     preserve_customizations=preserve_customizations,
+                    previous_customize_toml_hash=installed_stamp.customize_toml_hash,
                 )
-                _write_bundle_version(dst_dir, current_version)
+                _write_bundle_version(dst_dir, current_version, current_customize_hash)
                 if skill_status not in ("fresh", "forced"):
                     skill_status = "refreshed"
                     if from_version is None:
-                        from_version = installed_version or _LEGACY_VERSION_LABEL
+                        from_version = installed_stamp.version or _LEGACY_VERSION_LABEL
                 continue
 
             # Stamp matches — fully up to date.
@@ -368,7 +457,61 @@ def bootstrap_new_layout(
             console.print("[dim](no-op)[/dim]")
             skipped.append(skill_id)
 
+    # Post-bootstrap chain validation: walk every installed skill's
+    # tri-modal step chains and abort the install if any link is broken.
+    # Guards against silent regressions like the {skill-root} truncation
+    # bug — which shipped for weeks because nothing checked chain
+    # integrity at install time. Run against both mirrors so we catch a
+    # corrupted copy in either tree.
+    _validate_installed_skill_chains(project_path, skills, console)
+
     return bootstrapped, skipped
+
+
+def _validate_installed_skill_chains(
+    project_path: Path,
+    skill_ids: list[str],
+    console: Console,
+) -> None:
+    """Walk every installed skill's step chains; raise on any broken link.
+
+    Aggregates errors across all skills + both mirrors so the user sees
+    every problem at once instead of fixing them one at a time.
+
+    Raises:
+        SetupError: If any chain has a broken ``nextStepFile`` link.
+
+    """
+    # Local import to avoid pulling the compiler graph into module-level
+    # imports of project_setup (which is loaded by the CLI entrypoint).
+    from bmad_assist.skill_layout import (
+        ChainValidationError,
+        validate_skill_chains,
+    )
+
+    all_errors: list[ChainValidationError] = []
+    for skill_id in skill_ids:
+        for mirror_prefix in (".claude/skills", ".agents/skills"):
+            skill_dir = project_path / mirror_prefix / skill_id
+            if not skill_dir.is_dir():
+                continue
+            all_errors.extend(validate_skill_chains(skill_dir))
+
+    if not all_errors:
+        return
+
+    console.print(
+        f"\n[red]Chain validation failed: {len(all_errors)} broken "
+        f"step link(s) detected in installed skills.[/red]"
+    )
+    for err in all_errors:
+        logger.error("broken skill chain: %s", err.format())
+        console.print(f"  [red]•[/red] {err.format()}")
+
+    raise SetupError(
+        f"Bootstrap aborted: {len(all_errors)} broken step chain link(s) "
+        f"detected in installed skills. See ERROR logs for details."
+    )
 
 
 def ensure_project_setup(
@@ -392,9 +535,11 @@ def ensure_project_setup(
         force: If True, re-bootstrap (re-copy installed skills).
         console: Rich console for output (None = no output).
         preserve_customizations: When True (default), the v6.4+
-            re-bootstrap preserves any per-skill ``customize.toml``
-            overrides. The destructive ``--reset-skills-force`` path
-            wires this to False to also overwrite ``customize.toml``.
+            re-bootstrap preserves per-skill ``customize.toml`` only
+            when it has diverged from the previously installed bundled
+            default. The destructive ``--reset-skills-force`` path wires
+            this to False to overwrite ``customize.toml`` regardless of
+            provenance.
         **_legacy_kwargs: Swallows deprecated keyword arguments
             (``skill_layout``) that pre-0.6.0 callers may still pass.
 

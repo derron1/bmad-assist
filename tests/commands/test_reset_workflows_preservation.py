@@ -2,9 +2,9 @@
 
 Phase 5 reshapes the destructive surface of ``bmad-assist init``:
 
-* ``--reset-workflows`` re-copies bundled workflow files but PRESERVES
-  any per-skill ``customize.toml`` overrides (the v6.4+ user-override
-  surface).
+* ``--reset-workflows`` re-copies bundled workflow files, updates
+  unmodified bundled ``customize.toml`` files, and preserves modified
+  per-skill overrides (the v6.4+ user-override surface).
 * ``--reset-skills-force`` is the new opt-in destructive flag — it
   overwrites everything including ``customize.toml``.
 * The legacy path's ``--reset-workflows`` semantics are unchanged
@@ -19,6 +19,8 @@ from pathlib import Path
 from rich.console import Console
 
 from bmad_assist.core.project_setup import (
+    _BUNDLE_VERSION_FILE,
+    _hash_file,
     bootstrap_new_layout,
     ensure_project_setup,
 )
@@ -26,6 +28,18 @@ from bmad_assist.core.project_setup import (
 
 def _quiet() -> Console:
     return Console(quiet=True)
+
+
+def _stamp_skill_with_customize_hash(
+    skill_dir: Path,
+    version: str,
+    customize_hash: str,
+) -> None:
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / _BUNDLE_VERSION_FILE).write_text(
+        (f'{{"customize_toml_hash": "{customize_hash}", "version": "{version}"}}\n'),
+        encoding="utf-8",
+    )
 
 
 # --- new-layout: --reset-workflows preserves customize.toml ------------------
@@ -61,6 +75,32 @@ def test_reset_workflows_preserves_customize_toml(tmp_path: Path) -> None:
     assert customize.read_text(encoding="utf-8") == user_marker
     # SKILL.md was re-copied (no longer the user edit).
     assert "USER EDIT" not in skill_md.read_text(encoding="utf-8")
+
+
+def test_reset_workflows_updates_unmodified_customize_toml(tmp_path: Path) -> None:
+    """An unmodified prior bundled customize.toml is updated on reset."""
+    from bmad_assist.skills import get_bundled_skill_dir
+
+    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
+    skill_dir.mkdir(parents=True)
+    customize = skill_dir / "customize.toml"
+    customize.write_text("# previous bundled default\n", encoding="utf-8")
+    old_hash = _hash_file(customize)
+    assert old_hash is not None
+    _stamp_skill_with_customize_hash(skill_dir, "0.0.0-stale", old_hash)
+
+    bootstrap_new_layout(
+        tmp_path,
+        force=True,
+        console=_quiet(),
+        preserve_customizations=True,
+    )
+
+    src_dir = get_bundled_skill_dir("bmad-create-story")
+    assert src_dir is not None
+    assert customize.read_text(encoding="utf-8") == (src_dir / "customize.toml").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_reset_skills_force_overwrites_customize_toml(tmp_path: Path) -> None:

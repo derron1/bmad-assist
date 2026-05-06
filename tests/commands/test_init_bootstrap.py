@@ -3,7 +3,7 @@
 Covers the branches in :func:`bmad_assist.core.project_setup.ensure_project_setup`:
 
 * Stamped, current install → no-clobber.
-* Stamped, older install → auto-refresh (preserves customize.toml).
+* Stamped, older install → auto-refresh (hash-gates customize.toml).
 * Unstamped (legacy) install → auto-refresh.
 * Fresh project → bootstrap new layout under
   ``.claude/skills/<id>/`` and ``.agents/skills/<id>/``.
@@ -18,6 +18,8 @@ from rich.console import Console
 import bmad_assist
 from bmad_assist.core.project_setup import (
     _BUNDLE_VERSION_FILE,
+    _hash_file,
+    _read_installed_bundle_stamp,
     bootstrap_new_layout,
     ensure_project_setup,
 )
@@ -31,6 +33,19 @@ def _stamp_skill(skill_dir: Path, version: str) -> None:
     """Write a fake bundle-version stamp into an installed skill dir."""
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / _BUNDLE_VERSION_FILE).write_text(f"{version}\n", encoding="utf-8")
+
+
+def _stamp_skill_with_customize_hash(
+    skill_dir: Path,
+    version: str,
+    customize_hash: str,
+) -> None:
+    """Write a structured fake bundle-version stamp."""
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / _BUNDLE_VERSION_FILE).write_text(
+        (f'{{"customize_toml_hash": "{customize_hash}", "version": "{version}"}}\n'),
+        encoding="utf-8",
+    )
 
 
 # --- bootstrap_new_layout ----------------------------------------------------
@@ -76,9 +91,9 @@ def test_bootstrap_auto_refreshes_unstamped_install(tmp_path: Path) -> None:
     assert "bmad-create-story" in bootstrapped
     assert "LEGACY STUB" not in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     # Stamp now records the current version.
-    assert (skill_dir / _BUNDLE_VERSION_FILE).read_text(encoding="utf-8").strip() == (
-        bmad_assist.__version__
-    )
+    stamp = _read_installed_bundle_stamp(skill_dir)
+    assert stamp.version == bmad_assist.__version__
+    assert stamp.customize_toml_hash
 
 
 def test_bootstrap_auto_refreshes_stale_stamp(tmp_path: Path) -> None:
@@ -92,9 +107,9 @@ def test_bootstrap_auto_refreshes_stale_stamp(tmp_path: Path) -> None:
 
     assert "bmad-create-story" in bootstrapped
     assert "OLD CONTENT" not in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    assert (skill_dir / _BUNDLE_VERSION_FILE).read_text(encoding="utf-8").strip() == (
-        bmad_assist.__version__
-    )
+    stamp = _read_installed_bundle_stamp(skill_dir)
+    assert stamp.version == bmad_assist.__version__
+    assert stamp.customize_toml_hash
 
 
 def test_bootstrap_refresh_preserves_customize_toml(tmp_path: Path) -> None:
@@ -110,6 +125,45 @@ def test_bootstrap_refresh_preserves_customize_toml(tmp_path: Path) -> None:
     assert (skill_dir / "customize.toml").read_text(encoding="utf-8") == user_override
 
 
+def test_bootstrap_refresh_overwrites_unmodified_bundled_customize_toml(
+    tmp_path: Path,
+) -> None:
+    """Auto-refresh updates customize.toml when consumer never customized it."""
+    from bmad_assist.skills import get_bundled_skill_dir
+
+    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
+    skill_dir.mkdir(parents=True)
+    old_bundled_customize = "# old bundled default\n"
+    (skill_dir / "customize.toml").write_text(old_bundled_customize, encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("OLD CONTENT\n", encoding="utf-8")
+    old_hash = _hash_file(skill_dir / "customize.toml")
+    assert old_hash is not None
+    _stamp_skill_with_customize_hash(skill_dir, "0.0.0-stale", old_hash)
+
+    bootstrap_new_layout(tmp_path, force=False, console=_quiet())
+
+    src_dir = get_bundled_skill_dir("bmad-create-story")
+    assert src_dir is not None
+    expected = (src_dir / "customize.toml").read_text(encoding="utf-8")
+    assert (skill_dir / "customize.toml").read_text(encoding="utf-8") == expected
+
+
+def test_bootstrap_refresh_preserves_modified_customize_toml_with_structured_stamp(
+    tmp_path: Path,
+) -> None:
+    """Auto-refresh preserves customize.toml when it diverged from prior bundle."""
+    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "customize.toml").write_text("# user override\n", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("OLD CONTENT\n", encoding="utf-8")
+    prior_bundled_hash = "0" * 64
+    _stamp_skill_with_customize_hash(skill_dir, "0.0.0-stale", prior_bundled_hash)
+
+    bootstrap_new_layout(tmp_path, force=False, console=_quiet())
+
+    assert (skill_dir / "customize.toml").read_text(encoding="utf-8") == "# user override\n"
+
+
 def test_bootstrap_writes_stamp_on_fresh_install(tmp_path: Path) -> None:
     """Fresh installs write the version stamp into both mirrors."""
     bootstrap_new_layout(tmp_path, force=False, console=_quiet())
@@ -117,7 +171,9 @@ def test_bootstrap_writes_stamp_on_fresh_install(tmp_path: Path) -> None:
     for mirror in (".claude/skills", ".agents/skills"):
         stamp = tmp_path / mirror / "bmad-create-story" / _BUNDLE_VERSION_FILE
         assert stamp.is_file()
-        assert stamp.read_text(encoding="utf-8").strip() == bmad_assist.__version__
+        metadata = _read_installed_bundle_stamp(stamp.parent)
+        assert metadata.version == bmad_assist.__version__
+        assert metadata.customize_toml_hash
 
 
 def test_bootstrap_does_not_ship_stamp_in_bundle(tmp_path: Path) -> None:
@@ -212,9 +268,9 @@ def test_unstamped_legacy_install_is_auto_refreshed(tmp_path: Path) -> None:
     for mirror in (".claude/skills", ".agents/skills"):
         skill_dir = tmp_path / mirror / "bmad-create-story"
         assert "STALE STUB" not in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        assert (skill_dir / _BUNDLE_VERSION_FILE).read_text(encoding="utf-8").strip() == (
-            bmad_assist.__version__
-        )
+        stamp = _read_installed_bundle_stamp(skill_dir)
+        assert stamp.version == bmad_assist.__version__
+        assert stamp.customize_toml_hash
 
 
 def test_existing_legacy_install_still_bootstraps_new_layout(tmp_path: Path) -> None:

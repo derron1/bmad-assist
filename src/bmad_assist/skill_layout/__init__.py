@@ -10,6 +10,7 @@ v6.4+ skill format:
 * :func:`find_skill` — runtime probe for ``SKILL.md`` files.
 """
 
+from .chain_validator import ChainValidationError, validate_skill_chains
 from .errors import (
     MalformedSkill,
     ManifestError,
@@ -31,6 +32,7 @@ from .types import Layout, ManifestSkill, SkillDocument, SkillFrontmatter
 from .variable_resolver import resolve_skill_variables
 
 __all__ = [
+    "ChainValidationError",
     "Layout",
     "MalformedSkill",
     "ManifestError",
@@ -50,4 +52,5 @@ __all__ = [
     "resolve_central_config",
     "resolve_customization",
     "resolve_skill_variables",
+    "validate_skill_chains",
 ]

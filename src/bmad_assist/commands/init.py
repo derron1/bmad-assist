@@ -33,7 +33,10 @@ def init_command(
     reset_workflows: bool = typer.Option(
         False,
         "--reset-workflows",
-        help=("Re-copy bundled skill files. Per-skill customize.toml overrides are preserved."),
+        help=(
+            "Re-copy bundled skill files. Unmodified customize.toml files are "
+            "updated; modified overrides are preserved."
+        ),
     ),
     reset_skills_force: bool = typer.Option(
         False,
@@ -69,7 +72,7 @@ def init_command(
         bmad-assist init --wizard              # Initialize and configure interactively
         bmad-assist init --dry-run             # Preview changes without applying
         bmad-assist init --reset-workflows     # Re-copy bundled skill files
-                                               # (preserves customize.toml)
+                                               # (updates unmodified customize.toml)
         bmad-assist init --reset-skills-force  # Destructive reset including customize.toml
 
     """
@@ -115,7 +118,8 @@ def init_command(
     elif reset_workflows:
         console.print(
             "[yellow]--reset-workflows will re-copy bundled skill files. "
-            "Per-skill customize.toml overrides are preserved.[/yellow]"
+            "Unmodified customize.toml files are updated; modified overrides "
+            "are preserved.[/yellow]"
         )
         if not Confirm.ask("Continue?", default=False):
             console.print("[dim]Cancelled.[/dim]")
@@ -155,7 +159,8 @@ def init_command(
     # Run the actual setup.
     #
     # --reset-workflows: force=True, preserve_customizations=True
-    #   (re-copy SKILL.md / template.md / etc. but keep user customize.toml)
+    #   (re-copy SKILL.md / template.md / etc.; update unmodified
+    #   customize.toml files and preserve modified overrides)
     # --reset-skills-force: force=True, preserve_customizations=False
     #   (destructive — overwrite customize.toml too)
     # neither: force=False (no-clobber bootstrap only)
