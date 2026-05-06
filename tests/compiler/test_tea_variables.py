@@ -9,6 +9,8 @@ Tests the TEA-specific variable resolution including:
 
 from pathlib import Path
 
+import pytest
+
 
 class TestResolveKnowledgeIndex:
     """Tests for resolve_knowledge_index()."""
@@ -176,6 +178,37 @@ class TestResolveNextStepFile:
         result = resolve_next_step_file("", Path("/some/path.md"))
 
         assert result is None
+
+    def test_resolves_skill_root_token(self, tmp_path: Path) -> None:
+        """Should substitute {skill-root} to nearest ancestor SKILL.md dir."""
+        from bmad_assist.compiler.variables.tea import resolve_next_step_file
+
+        skill_dir = tmp_path / "bmad-fake-skill"
+        steps_dir = skill_dir / "steps-c"
+        steps_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Fake\n")
+        current_step = steps_dir / "step-01.md"
+        current_step.write_text("")
+
+        result = resolve_next_step_file("{skill-root}/steps-c/step-02.md", current_step)
+
+        assert result == str(steps_dir / "step-02.md")
+
+    def test_unresolved_skill_root_raises(self, tmp_path: Path) -> None:
+        """Should raise CompilerError when {skill-root} can't be resolved."""
+        from bmad_assist.compiler.variables.tea import resolve_next_step_file
+        from bmad_assist.core.exceptions import CompilerError
+
+        # No SKILL.md anywhere
+        loose_dir = tmp_path / "loose"
+        loose_dir.mkdir()
+        current_step = loose_dir / "step-01.md"
+        current_step.write_text("")
+
+        with pytest.raises(CompilerError) as exc_info:
+            resolve_next_step_file("{skill-root}/steps-c/step-02.md", current_step)
+
+        assert "unresolved token" in str(exc_info.value).lower()
 
 
 class TestResolveTeaVariables:

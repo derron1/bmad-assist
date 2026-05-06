@@ -177,20 +177,51 @@ def resolve_next_step_file(
 ) -> str | None:
     """Resolve nextStepFile reference to absolute path.
 
+    Substitutes ``{skill-root}`` (the only token bundled BMAD step
+    files use in this field) before joining. Absolute substituted
+    paths are used directly; relative refs join to the current step's
+    directory. Unresolved tokens after substitution raise CompilerError
+    — a leftover ``{...}`` is an unambiguous bug, not a legitimate
+    end-of-chain.
+
     Args:
-        next_step_ref: Relative path from step frontmatter (e.g., './step-02.md').
+        next_step_ref: Path from step frontmatter. May be relative
+            (``./step-02.md``) or token-prefixed
+            (``{skill-root}/steps-c/step-02.md``).
         current_step_path: Absolute path to current step file.
 
     Returns:
         Absolute path to next step file as string, or None if not provided.
 
+    Raises:
+        CompilerError: If the resolved path still contains an unresolved
+            ``{...}`` token (unambiguous resolver failure).
+
     """
     if not next_step_ref:
         return None
 
-    # Resolve relative to current step's directory
-    step_dir = current_step_path.parent
-    next_path = (step_dir / next_step_ref).resolve()
+    # Local import to avoid circular dependency with step_chain.
+    from bmad_assist.compiler.step_chain import _substitute_skill_root
+    from bmad_assist.core.exceptions import CompilerError
+
+    substituted = _substitute_skill_root(next_step_ref, current_step_path)
+
+    if "{" in substituted:
+        raise CompilerError(
+            f"Unresolved token in nextStepFile: '{next_step_ref}'\n"
+            f"  Step file: {current_step_path}\n"
+            f"  After substitution: '{substituted}'\n"
+            f"  Suggestion: ensure the step lives under a skill root "
+            f"with SKILL.md, or use a relative path like './step-02.md'"
+        )
+
+    candidate = Path(substituted)
+    if candidate.is_absolute():
+        next_path = candidate.resolve()
+    else:
+        # Resolve relative to current step's directory
+        next_path = (current_step_path.parent / candidate).resolve()
 
     return str(next_path)
 

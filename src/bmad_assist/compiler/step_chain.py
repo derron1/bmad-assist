@@ -25,6 +25,54 @@ logger = logging.getLogger(__name__)
 MAX_CHAIN_DEPTH = 20
 
 
+def _find_skill_root(step_path: Path) -> Path | None:
+    """Walk up from a step file to find its skill root (nearest SKILL.md).
+
+    BMAD v6.4+ skills bundle a ``SKILL.md`` at the skill root. Step files
+    live in subdirectories (``steps-c/``, ``steps-v/``, ``steps-e/``) and
+    reference siblings via ``{skill-root}/steps-c/...``. The walker needs
+    to know the absolute skill root to substitute that token before
+    joining paths.
+
+    Args:
+        step_path: Absolute path to a step file.
+
+    Returns:
+        Absolute Path of the directory containing ``SKILL.md``, or None
+        if no ancestor contains it (e.g. synthetic test fixtures without
+        a SKILL.md — caller falls back to current_path.parent).
+
+    """
+    for ancestor in step_path.parents:
+        if (ancestor / "SKILL.md").is_file():
+            return ancestor
+    return None
+
+
+def _substitute_skill_root(next_step_ref: str, current_path: Path) -> str:
+    """Substitute ``{skill-root}`` in a nextStepFile reference.
+
+    Returns the input unchanged if the token is absent. When the token
+    is present but no ancestor SKILL.md exists, the token is left in
+    place so the caller's unresolved-token check can raise a clear
+    error (rather than silently substituting a wrong path).
+
+    Args:
+        next_step_ref: Raw nextStepFile string from frontmatter.
+        current_path: Absolute path to the step file holding the ref.
+
+    Returns:
+        String with ``{skill-root}`` substituted (when resolvable).
+
+    """
+    if "{skill-root}" not in next_step_ref:
+        return next_step_ref
+    skill_root = _find_skill_root(current_path)
+    if skill_root is None:
+        return next_step_ref
+    return next_step_ref.replace("{skill-root}", str(skill_root))
+
+
 def parse_step_file(step_path: Path) -> StepIR:
     """Parse a tri-modal step file into StepIR.
 
@@ -162,8 +210,31 @@ def build_step_chain(
         if not step.next_step_file:
             break
 
-        # Resolve next step path relative to current step's directory
-        next_path = (current_path.parent / step.next_step_file).resolve()
+        # Substitute {skill-root} before joining. Bundled TEA steps
+        # reference siblings as '{skill-root}/steps-c/step-NN-foo.md';
+        # the literal token must be resolved here (the parser doesn't
+        # know which skill root applies — only the walker does).
+        substituted = _substitute_skill_root(step.next_step_file, current_path)
+
+        # Unresolved tokens (e.g. '{skill-root}' with no ancestor
+        # SKILL.md, or any other unsubstituted '{...}') are an
+        # unambiguous bug — fail loudly rather than silently truncating.
+        if "{" in substituted:
+            raise CompilerError(
+                f"Unresolved token in nextStepFile: '{step.next_step_file}'\n"
+                f"  Step file: {current_path}\n"
+                f"  After substitution: '{substituted}'\n"
+                f"  Suggestion: ensure the step lives under a skill root "
+                f"with SKILL.md, or use a relative path like './step-02.md'"
+            )
+
+        # Resolve: absolute substituted paths used directly; otherwise
+        # join to current step's directory (preserves './step-02.md').
+        candidate = Path(substituted)
+        if candidate.is_absolute():
+            next_path = candidate.resolve()
+        else:
+            next_path = (current_path.parent / candidate).resolve()
 
         if not next_path.exists():
             logger.warning(

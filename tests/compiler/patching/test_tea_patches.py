@@ -433,7 +433,9 @@ class TestTeaWorkflowPatches:
 
             assert "git_intelligence" in data, f"{patch_name} should have git_intelligence"
             git_intel = data["git_intelligence"]
-            assert git_intel.get("enabled", True), f"{patch_name} git_intelligence should be enabled"
+            assert git_intel.get("enabled", True), (
+                f"{patch_name} git_intelligence should be enabled"
+            )
             assert "commands" in git_intel, f"{patch_name} should have git commands"
 
 
@@ -498,3 +500,134 @@ class TestPostProcessRuleApplication:
         result = post_process_compiled(content, rules)
 
         assert result == "line1\nline2\nline3"
+
+
+class TestHeadlessConfirmationGateRule:
+    """Tests for the headless-mode confirmation gate rule.
+
+    Shipped in ``default_patches/defaults-testarch.yaml``. The rule
+    rewrites prose-level ``## N. Confirm <X>`` sections whose
+    body says "confirm with the user" into an explicit headless-mode
+    no-op. These gates are NOT ``<ask>`` tags — the existing
+    ``<ask>``-stripping rules don't catch them — but in a headless TEA
+    run they would otherwise pause the LLM at "confirm with the user"
+    prose that no human will answer.
+    """
+
+    @staticmethod
+    def _load_rule() -> tuple[str, str, str]:
+        """Locate the gate-strip rule in the bundled defaults-testarch.yaml.
+
+        Returns ``(pattern, replacement, flags)``. Asserts that exactly
+        one matching rule exists so an accidental duplication or
+        deletion fails loudly.
+        """
+        from bmad_assist.compiler.patching.discovery import _PACKAGE_DEFAULTS_DIR
+
+        defaults_path = _PACKAGE_DEFAULTS_DIR / "defaults-testarch.yaml"
+        data = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+        candidates = [
+            rule
+            for rule in data["post_process"]
+            if "Confirm" in rule["pattern"] and "confirm with the user" in rule["pattern"]
+        ]
+        assert len(candidates) == 1, (
+            f"Expected exactly one headless-confirmation-gate rule, got {len(candidates)}"
+        )
+        rule = candidates[0]
+        return rule["pattern"], rule["replacement"], rule.get("flags", "")
+
+    def _apply_via_pipeline(self, content: str) -> str:
+        """Run the rule through the real ``post_process_compiled`` pipeline.
+
+        Exercises the same code path the compiler uses (parsing flags
+        via ``_parse_flags``, applying via :func:`re.compile`+``.sub``)
+        rather than calling :func:`re.sub` directly, so the test would
+        catch flag-parsing or escaping regressions.
+        """
+        from bmad_assist.compiler.patching.transforms import post_process_compiled
+        from bmad_assist.compiler.patching.types import PostProcessRule
+
+        pattern, replacement, flags = self._load_rule()
+        rules = [PostProcessRule(pattern=pattern, replacement=replacement, flags=flags)]
+        return post_process_compiled(content, rules)
+
+    def test_strips_atdd_confirm_inputs_section(self) -> None:
+        """The atdd-style ``## 6. Confirm Inputs`` prose gate is replaced."""
+        content = (
+            "## 6. Confirm Inputs\n"
+            "\n"
+            "Summarize loaded inputs and confirm with the user. Then proceed.\n"
+            "\n"
+            "---\n"
+            "\n"
+            "## 7. Save Progress\n"
+        )
+
+        result = self._apply_via_pipeline(content)
+
+        assert "confirm with the user" not in result
+        assert "headless mode" in result
+        assert "without asking for user confirmation" in result
+        assert "## 6. Confirm Inputs" in result
+        # Surrounding structure intact.
+        assert "---" in result
+        assert "## 7. Save Progress" in result
+
+    def test_strips_test_design_confirm_loaded_inputs_section(self) -> None:
+        """The test-design ``## 5. Confirm Loaded Inputs`` variant is replaced."""
+        content = (
+            "## 5. Confirm Loaded Inputs\n"
+            "\n"
+            "Summarize what was loaded and confirm with the user "
+            "if anything is missing.\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### 6. Save Progress\n"
+        )
+
+        result = self._apply_via_pipeline(content)
+
+        assert "confirm with the user" not in result
+        assert "## 5. Confirm Loaded Inputs" in result
+        assert "headless mode" in result
+
+    def test_does_not_touch_summary_only_confirm_section(self) -> None:
+        """Sections without "confirm with the user" must survive.
+
+        ``## 3. Confirm Mode`` is a summary (not a gate) — it must not
+        be rewritten.
+        """
+        content = "## 3. Confirm Mode\n\nState the chosen mode and why. Then proceed.\n\n---\n"
+
+        result = self._apply_via_pipeline(content)
+
+        # post_process_compiled collapses 3+ blank lines to 2, but our
+        # input has none of those, so output should equal input verbatim.
+        assert result == content
+
+    def test_replaces_multiple_gates_in_one_pass(self) -> None:
+        """Multiple gate sections in a single chain are all replaced."""
+        content = (
+            "## 5. Confirm Loaded Inputs\n"
+            "\n"
+            "Summarize what was loaded and confirm with the user.\n"
+            "\n"
+            "---\n"
+            "\n"
+            "<!-- STEP: step-02 -->\n"
+            "\n"
+            "## 6. Confirm Inputs\n"
+            "\n"
+            "Summarize loaded inputs and confirm with the user. Then proceed.\n"
+            "\n"
+            "---\n"
+        )
+
+        result = self._apply_via_pipeline(content)
+
+        assert "confirm with the user" not in result
+        assert "## 5. Confirm Loaded Inputs" in result
+        assert "## 6. Confirm Inputs" in result
+        assert result.count("headless mode") == 2

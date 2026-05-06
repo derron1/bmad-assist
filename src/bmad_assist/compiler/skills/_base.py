@@ -477,10 +477,14 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             body, patch, context, transform_mode
         )
 
-        if patch_path is not None:
-            patched = self._apply_patch_post_process(body_after_llm, patch_path)
-        else:
-            patched = body_after_llm
+        # Always run the post-process pipeline so the bundled defaults
+        # (default_patches/defaults.yaml + defaults-testarch.yaml for
+        # TEA workflows) apply universally — even when no per-workflow
+        # `.patch.yaml` exists. Prior to this, the `else` branch
+        # silently skipped post-process when patch_path was None,
+        # which meant consumer projects without local patches never
+        # saw the framework defaults applied.
+        patched = self._apply_patch_post_process(body_after_llm, patch_path)
 
         if transforms_ran:
             validate_workflow_xml(patched, skill_id=self.skill_id)
@@ -717,28 +721,52 @@ class SkillLayoutCompilerBase(WorkflowCompiler):
             return fallback
         return apply_fn
 
-    def _apply_patch_post_process(self, body: str, patch_path: Path) -> str:
-        """Apply the regex ``post_process`` rules from the patch.
+    def _apply_patch_post_process(self, body: str, patch_path: Path | None) -> str:
+        """Apply the regex ``post_process`` rules from the patch + defaults.
 
         Combines the patch's own ``post_process`` rules with the shared
-        defaults — matching what :func:`compile_patch` does on the
-        legacy path. Without the defaults the SCOPE-style injection
-        would fire but the broader sprint-status cleanup wouldn't.
-        """
-        try:
-            patch = load_patch(patch_path)
-        except Exception as exc:
-            logger.warning(
-                "Could not load patch %s for skill-layout post-process: %s",
-                patch_path.name,
-                exc,
-            )
-            return body
-        rules = list(patch.post_process or [])
-        try:
-            from bmad_assist.compiler.patching.discovery import load_defaults
+        defaults (``default_patches/defaults.yaml`` and, for TEA
+        workflows, ``default_patches/defaults-testarch.yaml``).
 
-            rules.extend(load_defaults(patch_path, self.legacy_workflow_name))
+        When ``patch_path`` is ``None`` (no per-workflow patch on
+        disk), still applies the bundled defaults by anchoring the
+        defaults search at the package's ``default_patches/``
+        directory. This is the universal-defaults path: every skill
+        compile gets the framework defaults, regardless of whether the
+        consumer project ships a per-workflow ``.patch.yaml``. Without
+        this, the bundled ``defaults.yaml`` and ``defaults-testarch.yaml``
+        would never fire in pip-installed consumer projects (since
+        ``.bmad-assist/patches/`` is dev-time-only and not packaged).
+        """
+        rules: list[Any] = []
+        if patch_path is not None:
+            try:
+                patch = load_patch(patch_path)
+            except Exception as exc:
+                logger.warning(
+                    "Could not load patch %s for skill-layout post-process: %s",
+                    patch_path.name,
+                    exc,
+                )
+                # Fall through — still apply defaults below.
+            else:
+                rules.extend(patch.post_process or [])
+
+        try:
+            from bmad_assist.compiler.patching.discovery import (
+                _PACKAGE_DEFAULTS_DIR,
+                load_defaults,
+            )
+
+            # When patch_path is None, anchor at the package
+            # default_patches/ directory so load_defaults() finds the
+            # bundled rules via its sibling-then-fallback search.
+            anchor = (
+                patch_path
+                if patch_path is not None
+                else _PACKAGE_DEFAULTS_DIR / "_anchor.patch.yaml"
+            )
+            rules.extend(load_defaults(anchor, self.legacy_workflow_name))
         except Exception as exc:
             logger.debug("Could not load patch defaults: %s", exc)
         if not rules:

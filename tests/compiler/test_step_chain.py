@@ -144,9 +144,10 @@ nextStepFile: '/etc/passwd'
         with pytest.raises(CompilerError) as exc_info:
             parse_step_file(step_file)
 
-        assert "path traversal" in str(exc_info.value).lower() or "absolute" in str(
-            exc_info.value
-        ).lower()
+        assert (
+            "path traversal" in str(exc_info.value).lower()
+            or "absolute" in str(exc_info.value).lower()
+        )
 
     def test_parse_step_invalid_yaml(self, tmp_path: Path) -> None:
         """Handle invalid YAML in frontmatter gracefully."""
@@ -224,7 +225,7 @@ name: 'step-03'
         """Raise error when chain exceeds maximum depth (20)."""
         # Create 25 steps in a chain
         for i in range(1, 26):
-            next_file = f"./step-{i+1:02d}.md" if i < 25 else None
+            next_file = f"./step-{i + 1:02d}.md" if i < 25 else None
             content = f"---\nname: 'step-{i:02d}'\n"
             if next_file:
                 content += f"nextStepFile: '{next_file}'\n"
@@ -296,6 +297,137 @@ nextStepFile: './step-03-nonexistent.md'
         assert any("not found" in record.message.lower() for record in caplog.records)
 
 
+class TestSkillRootSubstitution:
+    """Test {skill-root} substitution in nextStepFile (framework-wide bug fix).
+
+    Bundled BMAD TEA step files reference siblings via
+    ``{skill-root}/steps-c/step-NN-foo.md``. The walker must substitute
+    that token before joining paths, otherwise the chain silently
+    truncates after step-01.
+    """
+
+    def _make_skill_tree(self, root: Path) -> Path:
+        """Build a synthetic skill tree and return the path to step-01.
+
+        Layout:
+            root/bmad-fake-skill/SKILL.md
+            root/bmad-fake-skill/steps-c/step-01.md
+                (next: {skill-root}/steps-c/step-02.md)
+            root/bmad-fake-skill/steps-c/step-02.md  (no next)
+        """
+        skill_dir = root / "bmad-fake-skill"
+        steps_dir = skill_dir / "steps-c"
+        steps_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Fake Skill\n")
+        (steps_dir / "step-01.md").write_text(
+            """---
+name: 'step-01'
+nextStepFile: '{skill-root}/steps-c/step-02.md'
+---
+# Step 1
+"""
+        )
+        (steps_dir / "step-02.md").write_text(
+            """---
+name: 'step-02'
+---
+# Step 2 (final)
+"""
+        )
+        return steps_dir / "step-01.md"
+
+    def test_skill_root_token_resolves(self, tmp_path: Path) -> None:
+        """Chain with '{skill-root}/...' nextStepFile should resolve fully."""
+        first_step = self._make_skill_tree(tmp_path)
+        chain = build_step_chain(first_step)
+
+        assert len(chain) == 2
+        assert chain[0].name == "step-01"
+        assert chain[1].name == "step-02"
+
+    def test_relative_path_still_works(self, tmp_path: Path) -> None:
+        """Relative './step-02.md' should still resolve (don't break existing behaviour)."""
+        skill_dir = tmp_path / "bmad-fake-skill"
+        steps_dir = skill_dir / "steps-c"
+        steps_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Fake Skill\n")
+        (steps_dir / "step-01.md").write_text(
+            """---
+name: 'step-01'
+nextStepFile: './step-02.md'
+---
+# Step 1
+"""
+        )
+        (steps_dir / "step-02.md").write_text(
+            """---
+name: 'step-02'
+---
+# Step 2
+"""
+        )
+
+        chain = build_step_chain(steps_dir / "step-01.md")
+
+        assert len(chain) == 2
+        assert chain[0].name == "step-01"
+        assert chain[1].name == "step-02"
+
+    def test_unresolved_token_raises_compiler_error(self, tmp_path: Path) -> None:
+        """If '{skill-root}' can't be resolved (no ancestor SKILL.md), raise."""
+        # No SKILL.md anywhere in the ancestor chain
+        steps_dir = tmp_path / "loose-steps"
+        steps_dir.mkdir()
+        (steps_dir / "step-01.md").write_text(
+            """---
+name: 'step-01'
+nextStepFile: '{skill-root}/steps-c/step-02.md'
+---
+# Step 1
+"""
+        )
+
+        with pytest.raises(CompilerError) as exc_info:
+            build_step_chain(steps_dir / "step-01.md")
+
+        msg = str(exc_info.value).lower()
+        assert "unresolved token" in msg
+        assert "skill-root" in msg
+
+    def test_skill_root_chain_full_walk(self, tmp_path: Path) -> None:
+        """Verify a 3-step chain using {skill-root} resolves end-to-end."""
+        skill_dir = tmp_path / "bmad-fake-skill"
+        steps_dir = skill_dir / "steps-c"
+        steps_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Fake Skill\n")
+        (steps_dir / "step-01.md").write_text(
+            """---
+name: 'step-01'
+nextStepFile: '{skill-root}/steps-c/step-02.md'
+---
+# Step 1
+"""
+        )
+        (steps_dir / "step-02.md").write_text(
+            """---
+name: 'step-02'
+nextStepFile: '{skill-root}/steps-c/step-03.md'
+---
+# Step 2
+"""
+        )
+        (steps_dir / "step-03.md").write_text(
+            """---
+name: 'step-03'
+---
+# Step 3
+"""
+        )
+
+        chain = build_step_chain(steps_dir / "step-01.md")
+        assert [s.name for s in chain] == ["step-01", "step-02", "step-03"]
+
+
 class TestConcatenateStepChain:
     """Test concatenate_step_chain function (AC5)."""
 
@@ -365,9 +497,7 @@ Only one step.
 class TestCompileStepChainKnowledgeInjection:
     """Test compile_step_chain knowledge injection (AC7)."""
 
-    def test_compile_with_workflow_id_loads_knowledge(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_with_workflow_id_loads_knowledge(self, tmp_path: Path) -> None:
         """Should load and inject knowledge fragments for TEA workflow."""
         from bmad_assist.compiler.step_chain import compile_step_chain
         from bmad_assist.testarch.knowledge.loader import clear_all_loaders
@@ -420,9 +550,7 @@ Some instructions here.
         # Clean up
         clear_all_loaders()
 
-    def test_compile_without_workflow_id_skips_knowledge(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_without_workflow_id_skips_knowledge(self, tmp_path: Path) -> None:
         """Should not inject knowledge when workflow_id is None."""
         from bmad_assist.compiler.step_chain import compile_step_chain
 
@@ -445,9 +573,7 @@ name: 'step-01'
 
         assert "<!-- KNOWLEDGE BASE -->" not in compiled
 
-    def test_compile_non_tea_workflow_skips_knowledge(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_non_tea_workflow_skips_knowledge(self, tmp_path: Path) -> None:
         """Should not inject knowledge for non-TEA workflows."""
         from bmad_assist.compiler.step_chain import compile_step_chain
 
@@ -470,9 +596,7 @@ name: 'step-01'
 
         assert "<!-- KNOWLEDGE BASE -->" not in compiled
 
-    def test_compile_resolves_knowledge_index_for_tea_workflow(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_resolves_knowledge_index_for_tea_workflow(self, tmp_path: Path) -> None:
         """Phase 4: TEA workflows always resolve a knowledge index.
 
         Previously the test asserted a missing-index warning was logged
@@ -504,9 +628,7 @@ name: 'step-01'
         assert "knowledgeIndex" in resolved_vars
         assert resolved_vars["knowledgeIndex"].endswith("tea-index.csv")
 
-    def test_compile_respects_tea_flags(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_respects_tea_flags(self, tmp_path: Path) -> None:
         """Should pass TEA flags for tag exclusion."""
         from bmad_assist.compiler.step_chain import compile_step_chain
 

@@ -628,7 +628,10 @@ def find_project_context_file(context: CompilerContext) -> Path | None:
 
     # Priority 4: docs/ fallback (brownfield projects)
     docs_fallback = context.project_root / "docs"
-    if context.project_knowledge is None or context.project_knowledge.resolve() != docs_fallback.resolve():
+    if (
+        context.project_knowledge is None
+        or context.project_knowledge.resolve() != docs_fallback.resolve()
+    ):
         candidates.extend(
             [
                 docs_fallback / "project-context.md",
@@ -895,11 +898,15 @@ def context_snapshot(context: CompilerContext) -> Generator[CompilerContext, Non
 
 
 def apply_post_process(xml: str, context: CompilerContext) -> str:
-    """Apply post_process rules from patch file to compiled XML.
+    """Apply post_process rules from patch file + bundled defaults.
 
-    Loads patch from context.patch_path if set, applies post_process
-    rules if present, and returns modified XML. Returns original XML
-    if no patch, patch not found, or rules empty.
+    Always merges the bundled defaults (``default_patches/defaults.yaml``
+    and, for TEA workflows, ``default_patches/defaults-testarch.yaml``)
+    so the framework defaults apply universally — even when the
+    consumer project has no per-workflow ``.patch.yaml`` (the per-workflow
+    patches under ``.bmad-assist/patches/`` are dev-time-only and not
+    shipped). When ``context.patch_path`` is set, its own ``post_process``
+    rules are appended after defaults.
 
     Also inserts project-tree critical instruction if project-tree is present.
 
@@ -908,25 +915,65 @@ def apply_post_process(xml: str, context: CompilerContext) -> str:
         context: Compiler context with optional patch_path.
 
     Returns:
-        XML content with post_process rules applied, or original if none.
+        XML content with post_process rules applied, or original if no
+        rules apply.
 
     """
+    from bmad_assist.compiler.patching.discovery import (
+        _PACKAGE_DEFAULTS_DIR,
+        load_defaults,
+    )
+
     result = xml
 
-    # Apply patch post_process rules if available
+    # Derive the workflow name (used for TEA-defaults selection in
+    # load_defaults). Prefer the workflow_ir name; the synthetic IR
+    # built by SkillLayoutCompilerBase stamps the bmad-prefixed skill
+    # id (e.g. "bmad-testarch-atdd") which load_defaults strips down
+    # to the legacy form for its testarch- prefix check.
+    workflow_name: str | None = None
+    if context.workflow_ir is not None:
+        ir_name = context.workflow_ir.name or ""
+        # Normalise both "bmad-testarch-atdd" and "testarch-atdd" to
+        # the form load_defaults() recognises (testarch-*).
+        workflow_name = ir_name.removeprefix("bmad-") if ir_name else None
+
+    # Load patch-specific rules first (if any).
+    patch_rules: list[Any] = []
+    patch_name_for_log: str | None = None
     if context.patch_path is not None and context.patch_path.exists():
         try:
             patch = load_patch(context.patch_path)
             if patch.post_process:
-                result = post_process_compiled(xml, patch.post_process)
-                logger.debug(
-                    "Applied %d post_process rules from %s",
-                    len(patch.post_process),
-                    context.patch_path.name,
-                )
+                patch_rules = list(patch.post_process)
+                patch_name_for_log = context.patch_path.name
         except Exception as e:
             logger.warning("Failed to load/apply patch %s: %s", context.patch_path.name, e)
-            result = xml
+
+    # Always load bundled defaults — anchored at the package
+    # default_patches/ when no per-workflow patch is present, so the
+    # framework defaults apply universally to every skill compile.
+    default_rules: list[Any] = []
+    try:
+        anchor = (
+            context.patch_path
+            if context.patch_path is not None
+            else _PACKAGE_DEFAULTS_DIR / "_anchor.patch.yaml"
+        )
+        default_rules = list(load_defaults(anchor, workflow_name))
+    except Exception as e:
+        logger.debug("Failed to load bundled defaults: %s", e)
+
+    rules = default_rules + patch_rules
+    if rules:
+        result = post_process_compiled(xml, rules)
+        logger.debug(
+            "Applied %d post_process rules (%d defaults + %d from %s)",
+            len(rules),
+            len(default_rules),
+            len(patch_rules),
+            patch_name_for_log or "<no patch>",
+        )
 
     # Insert project-tree critical instruction if project-tree is present
     if "<project-tree>" in result:
@@ -992,11 +1039,7 @@ def _prioritize_findings(
         avg_conf = avg_domain_conf.get(domain, 0.0)
         fp = f.get("file_path") or ""
         max_ev_conf = max(
-            (
-                e.get("confidence", 0.0)
-                for e in f.get("evidence", [])
-                if isinstance(e, dict)
-            ),
+            (e.get("confidence", 0.0) for e in f.get("evidence", []) if isinstance(e, dict)),
             default=0.0,
         )
         return (sev, -avg_conf, fp, -max_ev_conf)
@@ -1082,9 +1125,7 @@ def _render_flat_findings(
         "",
         f"**Verdict:** {dv_findings.get('verdict', 'UNKNOWN')}",
         f"**Score:** {dv_findings.get('score', 0):.1f}",
-        f"**Findings:** {findings_count} "
-        f"({critical_count} critical, "
-        f"{error_count} error)",
+        f"**Findings:** {findings_count} ({critical_count} critical, {error_count} error)",
         "",
         "## Domains Detected",
         "",
@@ -1288,11 +1329,13 @@ def _render_grouped_findings(
     # Omitted footer
     if omitted_count > 0:
         breakdown = ", ".join(f"{c} {s}" for s, c in sorted(omitted_by_sev.items()))
-        lines.extend([
-            "",
-            "---",
-            f"⚠️ {omitted_count} lower-priority findings omitted ({breakdown})",
-        ])
+        lines.extend(
+            [
+                "",
+                "---",
+                f"⚠️ {omitted_count} lower-priority findings omitted ({breakdown})",
+            ]
+        )
 
     return "\n".join(lines)
 
@@ -1320,10 +1363,7 @@ def format_dv_findings_for_prompt(dv_findings: dict[str, Any]) -> str:
 
     findings = dv_findings.get("findings", [])
 
-    has_file_paths = any(
-        isinstance(f, dict) and f.get("file_path")
-        for f in findings
-    )
+    has_file_paths = any(isinstance(f, dict) and f.get("file_path") for f in findings)
 
     if has_file_paths:
         prioritized, omitted, omitted_by_sev = _prioritize_findings(findings)
