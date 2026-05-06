@@ -195,6 +195,14 @@ class EvidenceFinding:
         source: Source reference (file:line or quote).
         validator_id: Validator identifier (e.g., "Validator A").
         normalized_description: Lowercased, stripped description for deduplication.
+        review_action: BMAD `[Review][...]` marker class when the finding was
+            parsed from a synthesis Review-Follow-ups bullet. ``"Patch"``,
+            ``"Defer"``, or ``"Decision"`` mirrors the SKILL.md taxonomy:
+            ``Patch`` is actionable in this story; ``Defer`` is pre-existing
+            / out-of-scope (filtered from the verdict score by D.3); ``Decision``
+            needs human judgment. ``None`` for legacy table/bullet findings
+            without a marker — those keep their pre-D.3 behavior (counted in
+            the score).
 
     """
 
@@ -204,6 +212,7 @@ class EvidenceFinding:
     source: str
     validator_id: str
     normalized_description: str = ""
+    review_action: Literal["Patch", "Defer", "Decision"] | None = None
 
     def __post_init__(self) -> None:
         """Compute normalized_description if not provided."""
@@ -271,6 +280,50 @@ class EvidenceScoreAggregate:
 # =============================================================================
 
 
+def _is_excluded_from_verdict(finding: EvidenceFinding) -> bool:
+    """Return True if a finding should be excluded from verdict scoring.
+
+    Currently excludes findings tagged ``[Review][Defer]`` — pre-existing /
+    out-of-scope items the synthesis explicitly marked as not addressable by
+    ``dev_story`` in the current story. They remain in the rendered report
+    for traceability but must not drive REJECT/MAJOR_REWORK verdicts (which
+    would burn rework cycles trying to fix architecturally unfixable items).
+
+    Mirrors the shape of ``deep_verify.core.scoring._is_excluded_from_verdict``
+    for codebase consistency, but keys on ``review_action`` rather than
+    ``pattern_id`` (the two scorers run on different data shapes).
+
+    Args:
+        finding: EvidenceFinding to test.
+
+    Returns:
+        True if this finding should be filtered before score summation.
+
+    """
+    return finding.review_action == "Defer"
+
+
+def _filter_for_verdict(
+    findings: list[EvidenceFinding] | tuple[EvidenceFinding, ...],
+) -> list[EvidenceFinding]:
+    """Filter findings down to those that should affect the verdict score.
+
+    Drops ``[Review][Defer]``-tagged findings (see _is_excluded_from_verdict).
+    The full list is preserved on ``EvidenceScoreReport.findings`` and
+    ``EvidenceScoreAggregate.consensus_findings`` / ``unique_findings`` so the
+    rendered report still shows them — only ``calculate_evidence_score`` sees
+    the filtered list.
+
+    Args:
+        findings: All findings, including any ``[Review][Defer]`` items.
+
+    Returns:
+        Subset of findings to use for scoring and verdict determination.
+
+    """
+    return [f for f in findings if not _is_excluded_from_verdict(f)]
+
+
 def calculate_evidence_score(
     findings: list[EvidenceFinding] | tuple[EvidenceFinding, ...],
     clean_passes: int,
@@ -278,6 +331,11 @@ def calculate_evidence_score(
     """Calculate Evidence Score from findings and clean passes.
 
     Formula: sum(finding.score for each finding) + (clean_passes * -0.5)
+
+    Findings tagged ``[Review][Defer]`` are excluded from the sum (D.3) — they
+    remain in the surrounding report for traceability but must not drive the
+    verdict. ``[Review][Patch]`` and ``[Review][Decision]`` keep contributing,
+    as do legacy findings without a ``review_action`` marker.
 
     Args:
         findings: List of EvidenceFinding objects.
@@ -287,7 +345,8 @@ def calculate_evidence_score(
         Calculated score rounded to 1 decimal place.
 
     """
-    findings_score = sum(f.score for f in findings)
+    verdict_findings = _filter_for_verdict(findings)
+    findings_score = sum(f.score for f in verdict_findings)
     clean_pass_score = clean_passes * SEVERITY_SCORES["CLEAN_PASS"]
     total = findings_score + clean_pass_score
     return round(total, 1)
@@ -325,9 +384,12 @@ def determine_verdict(score: float) -> Verdict:
 
 # Severity alias mapping: alternative labels → canonical severity
 _SEVERITY_ALIASES: dict[str, str] = {
-    "CRITICAL": "CRITICAL", "HIGH": "CRITICAL",
-    "IMPORTANT": "IMPORTANT", "MEDIUM": "IMPORTANT",
-    "MINOR": "MINOR", "LOW": "MINOR",
+    "CRITICAL": "CRITICAL",
+    "HIGH": "CRITICAL",
+    "IMPORTANT": "IMPORTANT",
+    "MEDIUM": "IMPORTANT",
+    "MINOR": "MINOR",
+    "LOW": "MINOR",
 }
 _ALL_SEVERITY_LABELS = "|".join(_SEVERITY_ALIASES.keys())
 
@@ -358,6 +420,47 @@ _SECTION_HEADER_PATTERN = re.compile(
     rf"^#{{2,5}}\s+(?:ISSUE-\d+\s+)?(?:\[({_ALL_SEVERITY_LABELS})\]|({_ALL_SEVERITY_LABELS})\s*(?:Severity|\(|:|$))",
     re.IGNORECASE | re.MULTILINE,
 )
+
+# Pattern for BMAD `[Review][Marker]` follow-up bullets emitted by the
+# code-review-synthesis skill (`Review Follow-ups (AI)` subsection).
+# Examples:
+#   - [ ] [Review][Patch] Activate ATDD tests [tests/foo.spec.ts] — HIGH: convert ...
+#   - [x] [Review][Defer] Permutation FST methodology [src/fst.py:42] — deferred ...
+#   - [ ] [Review][Decision] API surface choice — MEDIUM: pick one of ...
+# Captures: marker (Patch|Defer|Decision), title-and-location (raw), source
+# (file:line, optional), and the post-em-dash detail (which may begin with
+# SEVERITY: when present).
+_REVIEW_MARKER_BULLET_PATTERN = re.compile(
+    r"^[-*]\s*\[[ xX]\]\s*"
+    r"\[Review\]\[(Patch|Defer|Decision)\]\s+"
+    r"([^\n]+?)"  # title + optional [file:line] block
+    r"(?:\s+[—–-]+\s+([^\n]+))?"  # optional em-dash detail
+    r"\s*$",
+    re.MULTILINE,
+)
+
+# Sub-pattern to lift `[file:line]` (or any `[..]` source ref) out of the title.
+_REVIEW_SOURCE_PATTERN = re.compile(r"\[([^\]]+)\]\s*$")
+
+# Sub-pattern to find an explicit severity prefix in the detail text:
+# "HIGH: ...", "CRITICAL: ...", "MEDIUM: ...", etc.
+_REVIEW_DETAIL_SEVERITY_PATTERN = re.compile(
+    rf"^\s*({_ALL_SEVERITY_LABELS})\s*[:\-]",
+    re.IGNORECASE,
+)
+
+# Default severities by marker class when the bullet does not include an
+# explicit severity prefix. Patch defaults to IMPORTANT (synthesis SKILL.md
+# reserves Patch for CRITICAL/HIGH but the prompt asks for inline SEVERITY:
+# we under-estimate rather than over-state when missing). Defer defaults to
+# MINOR (per SKILL.md: "LOW / pre-existing"). Decision defaults to IMPORTANT.
+# Defer findings are filtered before scoring regardless, so a wrong default
+# there only affects display counts, not the verdict.
+_REVIEW_DEFAULT_SEVERITY: dict[str, Severity] = {
+    "Patch": Severity.IMPORTANT,
+    "Defer": Severity.MINOR,
+    "Decision": Severity.IMPORTANT,
+}
 
 # Pattern for CLEAN PASS count
 # | 🟢 CLEAN PASS | 5 |
@@ -498,6 +601,52 @@ def parse_evidence_findings(
                     )
             except (ValueError, KeyError) as e:
                 parse_warnings.append(f"Failed to parse section-header finding: {e}")
+
+    # Additively parse BMAD `[Review][...]` follow-up bullets (synthesis
+    # output). These can co-exist with a table/bullet/section-header block,
+    # so they always run regardless of earlier parses. `[Review][Defer]`
+    # findings are filtered from the verdict score downstream
+    # (_filter_for_verdict) but still appear in findings_by_severity counts.
+    for match in _REVIEW_MARKER_BULLET_PATTERN.finditer(content):
+        marker = match.group(1)  # Patch | Defer | Decision
+        title_blob = match.group(2).strip()
+        detail = (match.group(3) or "").strip()
+
+        # Lift any trailing [file:line] out of the title into source.
+        source = ""
+        source_match = _REVIEW_SOURCE_PATTERN.search(title_blob)
+        if source_match:
+            source = source_match.group(1).strip()
+            title_blob = _REVIEW_SOURCE_PATTERN.sub("", title_blob).strip()
+
+        # Look for an explicit severity prefix in the detail; fall back to
+        # the marker-class default if absent.
+        sev_match = _REVIEW_DETAIL_SEVERITY_PATTERN.match(detail) if detail else None
+        if sev_match:
+            try:
+                severity = _resolve_severity(sev_match.group(1))
+            except ValueError:
+                severity = _REVIEW_DEFAULT_SEVERITY[marker]
+        else:
+            severity = _REVIEW_DEFAULT_SEVERITY[marker]
+
+        # Compose a description that preserves the marker context for
+        # deduplication and downstream display.
+        if detail:
+            description = f"[Review][{marker}] {title_blob} — {detail}"
+        else:
+            description = f"[Review][{marker}] {title_blob}"
+
+        findings.append(
+            EvidenceFinding(
+                severity=severity,
+                score=SEVERITY_SCORES[severity.value],
+                description=description,
+                source=source,
+                validator_id=validator_id,
+                review_action=marker,  # type: ignore[arg-type]
+            )
+        )
 
     # Parse CLEAN PASS count
     clean_pass_match = _CLEAN_PASS_TABLE_PATTERN.search(content)

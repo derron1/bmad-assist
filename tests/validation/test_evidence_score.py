@@ -29,7 +29,6 @@ from bmad_assist.validation.evidence_score import (
     parse_evidence_findings,
 )
 
-
 # =============================================================================
 # Enum Tests
 # =============================================================================
@@ -152,6 +151,189 @@ class TestCalculateEvidenceScore:
         # 0 findings + 10 clean passes = 10 * -0.5 = -5.0
         score = calculate_evidence_score([], 10)
         assert score == -5.0
+
+
+class TestVerdictFilterForReviewDefer:
+    """Tests for D.3: `[Review][Defer]` findings are excluded from verdict score.
+
+    Defer-tagged findings remain in the surrounding report for traceability
+    but must not drive REJECT/MAJOR_REWORK verdicts (they describe issues that
+    are explicitly not fixable by ``dev_story`` in the current story, e.g.
+    research-blocked methodology defects). See
+    ``src/bmad_assist/validation/evidence_score.py::_filter_for_verdict``.
+    """
+
+    def test_single_defer_critical_excluded(self) -> None:
+        """Single `[Review][Defer]` CRITICAL contributes 0 to the score."""
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Architecturally unfixable defect",
+                source="fst.py:42",
+                validator_id="Validator A",
+                review_action="Defer",
+            )
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 0.0
+        assert determine_verdict(score) == Verdict.PASS
+
+    def test_single_patch_critical_still_counts(self) -> None:
+        """Single `[Review][Patch]` CRITICAL drives MAJOR_REWORK threshold via raw weight.
+
+        +3 lands in the PASS band (< 4.0); the test pins behavior parity with
+        legacy untagged CRITICALs (unchanged by D.3).
+        """
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Real defect dev_story can fix",
+                source="auth.py:10",
+                validator_id="Validator A",
+                review_action="Patch",
+            )
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 3.0
+        # +3 alone is still below the 4.0 MAJOR_REWORK threshold (PASS band).
+        assert determine_verdict(score) == Verdict.PASS
+
+    def test_mixed_defer_and_patch(self) -> None:
+        """Mix of 1 Defer CRITICAL + 1 Patch IMPORTANT scores only the Patch."""
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Deferred research-blocked defect",
+                source="fst.py:42",
+                validator_id="Validator A",
+                review_action="Defer",
+            ),
+            EvidenceFinding(
+                severity=Severity.IMPORTANT,
+                score=1.0,
+                description="Real fixable issue",
+                source="api.py:5",
+                validator_id="Validator A",
+                review_action="Patch",
+            ),
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 1.0
+        assert determine_verdict(score) == Verdict.PASS
+
+    def test_three_defers_zero_patches_pass(self) -> None:
+        """Three Defer CRITICALs and zero Patches drive a PASS verdict."""
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description=f"Deferred issue {i}",
+                source=f"f.py:{i}",
+                validator_id="Validator A",
+                review_action="Defer",
+            )
+            for i in range(3)
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 0.0
+        assert determine_verdict(score) == Verdict.PASS
+
+    def test_empty_findings_unchanged(self) -> None:
+        """Empty findings list still produces score 0.0 and PASS verdict."""
+        score = calculate_evidence_score([], 0)
+        assert score == 0.0
+        assert determine_verdict(score) == Verdict.PASS
+
+    def test_decision_marker_not_filtered(self) -> None:
+        """`[Review][Decision]` findings keep contributing to the verdict.
+
+        Only Defer is filtered. Decision means "needs human call" — it is in
+        scope and must surface in the verdict.
+        """
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Decision needed on API shape",
+                source="api.py:1",
+                validator_id="Validator A",
+                review_action="Decision",
+            )
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 3.0
+
+    def test_legacy_untagged_finding_not_filtered(self) -> None:
+        """Findings without ``review_action`` (legacy parser path) keep counting.
+
+        ``review_action`` defaults to ``None``; the filter must treat ``None``
+        as "not a Defer" so the existing table/bullet/section-header parser
+        outputs are unaffected by D.3.
+        """
+        findings = [
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Legacy finding from validator table",
+                source="auth.py:10",
+                validator_id="Validator A",
+            )
+        ]
+        score = calculate_evidence_score(findings, 0)
+        assert score == 3.0
+        # review_action defaults to None
+        assert findings[0].review_action is None
+
+    def test_algo_story_44_round1_regression(self) -> None:
+        """Regression: algo Story 4.4 round 1 — 1 Defer CRITICAL + 4 Patch IMPORTANT.
+
+        Without D.3 filter: score = 3 + 4*1 = 7 -> REJECT (drove 5 rework cycles
+        with no fix possible because the CRITICAL was research-blocked).
+
+        With D.3 filter: score = 4*1 = 4 -> MAJOR_REWORK (still has work, but
+        not REJECT). Documents the per-cycle behavior of D.3 in isolation.
+        """
+        findings = [
+            # Permutation-FST research-blocked defect — pre-existing, not fixable
+            # by dev_story in this story.
+            EvidenceFinding(
+                severity=Severity.CRITICAL,
+                score=3.0,
+                description="Permutation-FST methodology defect (research-blocked)",
+                source="src/fst.py:42",
+                validator_id="Reviewer A",
+                review_action="Defer",
+            ),
+            # 4 Patch IMPORTANT findings dev_story can fix.
+            *[
+                EvidenceFinding(
+                    severity=Severity.IMPORTANT,
+                    score=1.0,
+                    description=f"Real fixable issue {i}",
+                    source=f"src/foo.py:{i}",
+                    validator_id="Reviewer A",
+                    review_action="Patch",
+                )
+                for i in range(1, 5)
+            ],
+        ]
+
+        # Sanity: raw sum (the pre-D.3 buggy behavior) lands in REJECT.
+        raw_sum = sum(f.score for f in findings)
+        assert raw_sum == 7.0
+        assert determine_verdict(raw_sum) == Verdict.REJECT
+
+        # D.3: filtered score lands in MAJOR_REWORK, NOT REJECT.
+        filtered_score = calculate_evidence_score(findings, 0)
+        assert filtered_score == 4.0
+        verdict = determine_verdict(filtered_score)
+        assert verdict == Verdict.MAJOR_REWORK
+        assert verdict != Verdict.REJECT, (
+            "D.3 must drop the verdict below REJECT once Defer findings are excluded"
+        )
 
 
 class TestDetermineVerdict:
@@ -299,6 +481,97 @@ Evidence Score: -4.0
         # Score: 3.0 + 3.0 + 0.3 = 6.3
         assert report.total_score == 6.3
         assert report.verdict == Verdict.REJECT
+
+    def test_parse_review_defer_marker_captures_review_action(self) -> None:
+        """Synthesis bullet `- [x] [Review][Defer] ...` parses with review_action='Defer'."""
+        content = """
+## Review Follow-ups (AI)
+
+- [x] [Review][Defer] Permutation FST methodology [src/fst.py:42] — deferred from AI review (research-blocked)
+"""
+        report = parse_evidence_findings(content, "Synth")
+        assert report is not None
+        assert len(report.findings) == 1
+        f = report.findings[0]
+        assert f.review_action == "Defer"
+        assert f.source == "src/fst.py:42"
+        # Defer is filtered from score → 0.0
+        assert report.total_score == 0.0
+        assert report.verdict == Verdict.PASS
+
+    def test_parse_review_patch_marker_captures_review_action(self) -> None:
+        """Synthesis bullet `- [ ] [Review][Patch] ...` parses with review_action='Patch'."""
+        content = """
+## Review Follow-ups (AI)
+
+- [ ] [Review][Patch] Activate ATDD tests [tests/foo.spec.ts] — HIGH: convert all test.fixme()
+"""
+        report = parse_evidence_findings(content, "Synth")
+        assert report is not None
+        assert len(report.findings) == 1
+        f = report.findings[0]
+        assert f.review_action == "Patch"
+        assert f.severity == Severity.CRITICAL  # HIGH alias → CRITICAL
+        assert f.source == "tests/foo.spec.ts"
+        # Patch is NOT filtered → +3 in PASS band (< 4.0)
+        assert report.total_score == 3.0
+
+    def test_parse_review_decision_marker_captures_review_action(self) -> None:
+        """Synthesis bullet `- [ ] [Review][Decision] ...` parses with review_action='Decision'."""
+        content = """
+## Review Follow-ups (AI)
+
+- [ ] [Review][Decision] API surface choice — MEDIUM: pick one of two viable shapes
+"""
+        report = parse_evidence_findings(content, "Synth")
+        assert report is not None
+        assert len(report.findings) == 1
+        f = report.findings[0]
+        assert f.review_action == "Decision"
+        assert f.severity == Severity.IMPORTANT  # MEDIUM alias → IMPORTANT
+
+    def test_parse_review_markers_mixed_filters_only_defer(self) -> None:
+        """Mixed Patch + Defer + Decision in synthesis output: Defer alone is filtered."""
+        content = """
+## Review Follow-ups (AI)
+
+- [ ] [Review][Patch] Real defect [src/a.py:1] — HIGH: missing null guard
+- [x] [Review][Defer] Pre-existing methodology issue [src/b.py:2] — CRITICAL: deferred from AI review (out of scope)
+- [ ] [Review][Decision] API choice — MEDIUM: pick A or B
+"""
+        report = parse_evidence_findings(content, "Synth")
+        assert report is not None
+        assert len(report.findings) == 3
+        actions = sorted(f.review_action for f in report.findings if f.review_action)
+        assert actions == ["Decision", "Defer", "Patch"]
+        # Patch HIGH (CRITICAL +3) + Decision MEDIUM (IMPORTANT +1) = 4.0
+        # Defer CRITICAL filtered.
+        assert report.total_score == 4.0
+        assert report.verdict == Verdict.MAJOR_REWORK
+
+    def test_parse_review_markers_coexist_with_evidence_table(self) -> None:
+        """A synthesis report that also has a table-format Evidence Score parses both."""
+        content = """
+## Findings
+
+| Severity | Description | Source | Score |
+|----------|-------------|--------|-------|
+| 🟠 IMPORTANT | Tabled finding | api.py:1 | +1 |
+
+## Review Follow-ups (AI)
+
+- [x] [Review][Defer] Out-of-scope item [src/x.py:9] — CRITICAL: deferred from AI review (research-blocked)
+"""
+        report = parse_evidence_findings(content, "Synth")
+        assert report is not None
+        # Table finding (no review_action) + Defer marker (filtered)
+        assert len(report.findings) == 2
+        legacy = [f for f in report.findings if f.review_action is None]
+        defer = [f for f in report.findings if f.review_action == "Defer"]
+        assert len(legacy) == 1
+        assert len(defer) == 1
+        # Only the IMPORTANT table finding scores; Defer CRITICAL excluded.
+        assert report.total_score == 1.0
 
     def test_parse_section_header_with_description(self) -> None:
         """Test section headers with descriptions/issue IDs."""
