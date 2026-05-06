@@ -253,20 +253,28 @@ Activation is complete. Begin the workflow below.
 ## Resolution
 [Machine-readable resolution block — MUST appear BEFORE CODE_REVIEW_SYNTHESIS_END.
  Counts derived from your synthesis above:
- - verified_critical / verified_high — Critical / High issues VERIFIED (not dismissed) across reviewers.
- - fixed_critical / fixed_high       — Critical / High issues you APPLIED FIXES for in this round.
- - remaining_critical / remaining_high — verified minus fixed (≥ 0).
+ - verified_critical / verified_high     — Critical / High issues VERIFIED (not dismissed) across reviewers.
+ - fixed_critical / fixed_high           — Critical / High issues you APPLIED FIXES for in this round.
+ - deferred_critical / deferred_high     — Critical / High issues classified as `[Review][Defer]`
+                                           (research-blocked, out-of-scope, or pre-existing —
+                                           per the marker-selection rules in step 6.5 below).
+                                           A deferred item is verified but NOT remediable in this
+                                           story; it must NOT count as remaining.
+ - remaining_critical / remaining_high   — verified minus fixed minus deferred (≥ 0).
  - resolution:
      "resolved" when remaining_critical == 0 AND remaining_high == 0
      "rework" when remaining_critical > 0 OR remaining_high > 0
      "halt" when you cannot reliably determine counts
- Do NOT omit any field.]
+ Do NOT omit any field. If you have no deferred items, emit `deferred_critical: 0` and
+ `deferred_high: 0` explicitly — do not skip the lines.]
 &lt;!-- SYNTHESIS_RESOLUTION_START --&gt;
 resolution: {resolved|rework|halt}
 verified_critical: {N}
 verified_high: {N}
 fixed_critical: {N}
 fixed_high: {N}
+deferred_critical: {N}
+deferred_high: {N}
 remaining_critical: {N}
 remaining_high: {N}
 &lt;!-- SYNTHESIS_RESOLUTION_END --&gt;

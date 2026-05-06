@@ -1692,6 +1692,72 @@ class TestContractBlockKeyValidation:
         assert result is None
 
 
+class TestDeferredFieldsBackwardCompat:
+    """Backward-compat for `deferred_critical` / `deferred_high` (Step 3, 2026-05).
+
+    Pre-2026-05 synthesis outputs omitted the deferred_* fields entirely. The
+    parser must continue to accept those blocks (treating deferred as absent),
+    while new-format blocks must round-trip the integer values.
+    """
+
+    def test_old_format_without_deferred_fields_still_parses(self) -> None:
+        """Pre-2026-05 resolution block (no deferred_*) parses unchanged."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "resolution: resolved\n"
+            "verified_critical: 0\n"
+            "verified_high: 0\n"
+            "fixed_critical: 0\n"
+            "fixed_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 0\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is not None
+        assert result["resolution"] == "resolved"
+        # deferred_* keys must NOT be invented when absent from input
+        assert "deferred_critical" not in result
+        assert "deferred_high" not in result
+
+    def test_new_format_with_deferred_fields_parses_as_ints(self) -> None:
+        """New-format block populates deferred_* as ints; cross-validation
+        respects remaining_* (which is what the LLM emits)."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "resolution: resolved\n"
+            "verified_critical: 1\n"
+            "verified_high: 0\n"
+            "fixed_critical: 0\n"
+            "fixed_high: 0\n"
+            "deferred_critical: 1\n"
+            "deferred_high: 0\n"
+            "remaining_critical: 0\n"  # = verified - fixed - deferred
+            "remaining_high: 0\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is not None
+        assert result["resolution"] == "resolved"
+        assert result["deferred_critical"] == 1
+        assert result["deferred_high"] == 0
+        assert result["remaining_critical"] == 0
+        assert result["remaining_high"] == 0
+
+    def test_negative_deferred_value_fails(self) -> None:
+        """Negative deferred counts are rejected like other count fields."""
+        from bmad_assist.core.loop.synthesis_contract import parse_resolution_block
+
+        block = (
+            "resolution: resolved\n"
+            "verified_critical: 0\n"
+            "deferred_critical: -1\n"
+            "remaining_critical: 0\n"
+        )
+        result = parse_resolution_block(block)
+        assert result is None
+
+
 # Type hints for fixtures
 if TYPE_CHECKING:
     from bmad_assist.benchmarking import StoryInfo, WorkflowInfo

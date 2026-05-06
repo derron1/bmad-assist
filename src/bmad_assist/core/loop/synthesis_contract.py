@@ -111,7 +111,12 @@ class SynthesisDecision:
 # Valid resolution values (shared by code_review_synthesis and validate_story_synthesis)
 VALID_RESOLUTIONS = frozenset({"resolved", "rework", "halt"})
 
-# Integer count fields in the resolution block
+# Integer count fields in the resolution block.
+# `deferred_*` was added in 2026-05 to support [Review][Defer] classification:
+# verified-but-not-remediable findings (research-blocked / out-of-scope / pre-existing)
+# are subtracted from `remaining_*` so they don't force a rework loop. Old synthesis
+# outputs that pre-date this change simply omit the fields; parse_resolution_block
+# tolerates absent keys, so backward-compat is preserved.
 RESOLUTION_COUNT_FIELDS = (
     "verified_critical",
     "verified_high",
@@ -119,6 +124,8 @@ RESOLUTION_COUNT_FIELDS = (
     "fixed_high",
     "dismissed_critical",
     "dismissed_high",
+    "deferred_critical",
+    "deferred_high",
     "remaining_critical",
     "remaining_high",
 )
