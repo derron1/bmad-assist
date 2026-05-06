@@ -10,6 +10,24 @@
 # See defaults.yaml for base rules that apply to all workflows.
 
 post_process:
+  # === Headless-mode confirmation gates ===
+  # Upstream BMAD step files include numbered prose sections like
+  # "## 6. Confirm Inputs" / "## 5. Confirm Loaded Inputs" whose body
+  # explicitly says "confirm with the user". These are NOT <ask> tags,
+  # so the regular <ask>-stripping rules do not catch them — but in a
+  # headless TEA run they cause the LLM to pause for human
+  # confirmation that never comes. Rewrite any "## N. Confirm <X>"
+  # section whose body contains "confirm with the user" into an
+  # explicit no-op, preserving the surrounding numbered structure.
+  # Summary-only sections like "## 3. Confirm Mode" (whose body says
+  # "State the chosen mode and why. Then proceed.") are left untouched.
+  # Survey: matches step-01-preflight-and-context.md and
+  # step-02-load-context.md across bmad-testarch-atdd and
+  # bmad-testarch-test-design.
+  - pattern: '^(## \d+\. Confirm[^\n]*)\n\n[^\n]*confirm with the user[^\n]*\n'
+    replacement: "\\1 (headless mode — no confirmation needed)\n\nInputs are loaded; proceed to the next section without asking for user confirmation.\n"
+    flags: "MULTILINE"
+
   # === TEA-specific path cleanup ===
   # NOTE: {installed_path} references are cleaned up at the END of this file
   # via specific patterns (instructions, template, validation) + catch-all.
