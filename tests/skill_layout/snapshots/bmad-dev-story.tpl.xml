@@ -15,7 +15,6 @@ Implement all tasks and subtasks following TDD methodology.
 
 Minimal context.
 
-
 ]]></file>
 <file id="9b1fbad5" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
 
@@ -24,7 +23,6 @@ Minimal context.
 ## Story 10.1: Initial Setup
 
 Content.
-
 
 ]]></file>
 <file id="5c62d978" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -47,7 +45,6 @@ ready-for-dev
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
@@ -58,16 +55,16 @@ Minimal notes.
 <var name="epic_num">10</var>
 <var name="name">bmad-dev-story</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-<var name="sprint_status">docs/sprint-artifacts/sprint-status.yaml</var>
+
 <var name="story_file" file_id="5c62d978">embedded in prompt, file id: 5c62d978</var>
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-<var name="template">.claude/skills/bmad-dev-story/template.md</var>
+
 <var name="timestamp">20260115_1200</var>
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-dev-story/checklist.md</var>
+
 </variables>
 <instructions><![CDATA[
 
@@ -134,14 +131,26 @@ Greet `{user_name}`, speaking in `English`.
 
 ### Step 6: Execute Append Steps
 
-Execute each entry in `` in order.
+Execute each entry in `- REVIEW MARKER OVERRIDE — bmad-assist format alignment
+
+The bmad-assist code-review-synthesizer writes review summaries under `### Review Findings` headings at the end of the `## Tasks / Subtasks` section. This matches the upstream `bmad-code-review` step-04-present convention. SKILL.md below still references the older `## Senior Developer Review (AI)` H2 format due to an upstream BMAD internal inconsistency.
+
+When SKILL.md instructs you to:
+
+- "Check if 'Senior Developer Review (AI)' section exists" → ALSO check for `### Review Findings` heading(s) under `## Tasks / Subtasks`. Either marker is valid evidence that a code review has occurred.
+
+- "Extract from 'Senior Developer Review (AI)' section" → if `### Review Findings` headings exist, extract from the MOST RECENT one (last in document order). Body fields: **Outcome**, **Issues Found**, **Issues Fixed**, **Action Items Created**, and **Date**.
+
+- "Find matching action item in 'Senior Developer Review (AI) → Action Items' section" → action items live in `## Tasks / Subtasks → #### Review Follow-ups (AI)` regardless of which summary header was used. Match against that subsection.
+
+Treat both formats as equivalent during this transition. Older stories may use the legacy `## Senior Developer Review (AI)` format; current/future synthesis runs use `### Review Findings`. Both must drive the rework loop correctly.` in order.
 
 Activation is complete. Begin the workflow below.
 
 ## Paths
 
 - `story_file` = `` (explicit story path; auto-discovered if empty)
-- `sprint_status` = `{implementation_artifacts}/sprint-status.yaml`
+- `sprint_status` = `{implementation_artifacts}/`
 
 ## Execution
 
@@ -157,127 +166,7 @@ Activation is complete. Begin the workflow below.
   <critical>Do NOT schedule a "next session" or request review pauses unless a HALT condition applies. Only Step 9 decides completion.</critical>
   <critical>User skill level (expert) affects conversation style ONLY, not code updates.</critical>
 
-  <step n="1" goal="Find next ready story and load it" tag="sprint-status">
-    <check if="{{story_path}} is provided">
-      <action>Use {{story_path}} directly</action>
-      <action>Read COMPLETE story file</action>
-      <action>Extract story_key from filename or metadata</action>
-      <goto anchor="task_check" />
-    </check>
-
-    <!-- Sprint-based story discovery -->
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file exists">
-      <critical>MUST read COMPLETE sprint-status.yaml file from start to end to preserve order</critical>
-      <action>Load the FULL file: /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
-      <action>Read ALL lines from beginning to end - do not skip any content</action>
-      <action>Parse the development_status section completely to understand story order</action>
-
-      <action>Find the FIRST story (by reading in order from top to bottom) where:
-        - Key matches pattern: number-number-name (e.g., "1-2-user-auth")
-        - NOT an epic key (epic-X) or retrospective (epic-X-retrospective)
-        - Status value equals "ready-for-dev"
-      </action>
-
-      <check if="no ready-for-dev or in-progress story found">
-        <output>📋 No ready-for-dev stories found in sprint-status.yaml
-
-          **Current Sprint Status:** {{sprint_status_summary}}
-
-          **What would you like to do?**
-          1. Run `create-story` to create next story from epics with comprehensive context
-          2. Run `*validate-create-story` to improve existing stories before development (recommended quality check)
-          3. Specify a particular story file to develop (provide full path)
-          4. Check /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file to see current sprint status
-
-          💡 **Tip:** Stories in `ready-for-dev` may not have been validated. Consider running `validate-create-story` first for a quality
-          check.
-        </output>
-        <ask>Choose option [1], [2], [3], or [4], or specify story file path:</ask>
-
-        <check if="user chooses '1'">
-          <action>HALT - Run create-story to create next story</action>
-        </check>
-
-        <check if="user chooses '2'">
-          <action>HALT - Run validate-create-story to improve existing stories</action>
-        </check>
-
-        <check if="user chooses '3'">
-          <ask>Provide the story file path to develop:</ask>
-          <action>Store user-provided story path as {{story_path}}</action>
-          <goto anchor="task_check" />
-        </check>
-
-        <check if="user chooses '4'">
-          <output>Loading /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml for detailed status review...</output>
-          <action>Display detailed sprint status analysis</action>
-          <action>HALT - User can review sprint status and provide story path</action>
-        </check>
-
-        <check if="user provides story file path">
-          <action>Store user-provided story path as {{story_path}}</action>
-          <goto anchor="task_check" />
-        </check>
-      </check>
-    </check>
-
-    <!-- Non-sprint story discovery -->
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file does NOT exist">
-      <action>Search {implementation_artifacts} for stories directly</action>
-      <action>Find stories with "ready-for-dev" status in files</action>
-      <action>Look for story files matching pattern: *-*-*.md</action>
-      <action>Read each candidate story file to check Status section</action>
-
-      <check if="no ready-for-dev stories found in story files">
-        <output>📋 No ready-for-dev stories found
-
-          **Available Options:**
-          1. Run `create-story` to create next story from epics with comprehensive context
-          2. Run `*validate-create-story` to improve existing stories
-          3. Specify which story to develop
-        </output>
-        <ask>What would you like to do? Choose option [1], [2], or [3]:</ask>
-
-        <check if="user chooses '1'">
-          <action>HALT - Run create-story to create next story</action>
-        </check>
-
-        <check if="user chooses '2'">
-          <action>HALT - Run validate-create-story to improve existing stories</action>
-        </check>
-
-        <check if="user chooses '3'">
-          <ask>It's unclear what story you want developed. Please provide the full path to the story file:</ask>
-          <action>Store user-provided story path as {{story_path}}</action>
-          <action>Continue with provided story file</action>
-        </check>
-      </check>
-
-      <check if="ready-for-dev story found in files">
-        <action>Use discovered story file and extract story_key</action>
-      </check>
-    </check>
-
-    <action>Store the found story_key (e.g., "1-2-user-authentication") for later status updates</action>
-    <action>Find matching story file in {implementation_artifacts} using story_key pattern: 10-1-initial-setup.md</action>
-    <action>Read COMPLETE story file from discovered path</action>
-
-    <anchor id="task_check" />
-
-    <action>Parse sections: Story, Acceptance Criteria, Tasks/Subtasks, Dev Notes, Dev Agent Record, File List, Change Log, Status</action>
-
-    <action>Load comprehensive context from story file's Dev Notes section</action>
-    <action>Extract developer guidance from Dev Notes: architecture requirements, previous learnings, technical specifications</action>
-    <action>Use enhanced story context to inform implementation decisions and approaches</action>
-
-    <action>Identify first incomplete task (unchecked [ ]) in Tasks/Subtasks</action>
-
-    <action if="no incomplete tasks">
-      <goto step="9">Completion sequence</goto>
-    </action>
-    <action if="story file inaccessible">HALT: "Cannot develop story without access to story file"</action>
-    <action if="incomplete task or subtask requirements ambiguous">ASK user to clarify or HALT</action>
-  </step>
+  <!-- step removed: sprint-status managed by loop handler -->
 
   <step n="2" goal="Load project context and story information">
     <critical>Load all available context to inform implementation</critical>
@@ -332,40 +221,7 @@ Activation is complete. Begin the workflow below.
     </check>
   </step>
 
-  <step n="4" goal="Mark story in-progress" tag="sprint-status">
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file exists">
-      <action>Load the FULL file: /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
-      <action>Read all development_status entries to find 10-1-initial-setup</action>
-      <action>Get current status value for development_status[10-1-initial-setup]</action>
-
-      <check if="current status == 'ready-for-dev' OR review_continuation == true">
-        <action>Update the story in the sprint status report to = "in-progress"</action>
-        <action>Update last_updated field to current date</action>
-        <output>🚀 Starting work on story 10-1-initial-setup
-          Status updated: ready-for-dev → in-progress
-        </output>
-      </check>
-
-      <check if="current status == 'in-progress'">
-        <output>⏯️ Resuming work on story 10-1-initial-setup
-          Story is already marked in-progress
-        </output>
-      </check>
-
-      <check if="current status is neither ready-for-dev nor in-progress">
-        <output>⚠️ Unexpected story status: {{current_status}}
-          Expected ready-for-dev or in-progress. Continuing anyway...
-        </output>
-      </check>
-
-      <action>Store {{current_sprint_status}} for later use</action>
-    </check>
-
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file does NOT exist">
-      <output>ℹ️ No sprint status file exists - story progress will be tracked in story file only</output>
-      <action>Set {{current_sprint_status}} = "no-sprint-tracking"</action>
-    </check>
-  </step>
+  <!-- step removed: sprint-status managed by loop handler -->
 
   <step n="5" goal="Implement task following red-green-refactor cycle">
     <critical>FOLLOW THE STORY FILE TASKS/SUBTASKS SEQUENCE EXACTLY AS WRITTEN - NO DEVIATION</critical>
@@ -466,56 +322,7 @@ Activation is complete. Begin the workflow below.
     </action>
   </step>
 
-  <step n="9" goal="Story completion and mark for review" tag="sprint-status">
-    <action>Verify ALL tasks and subtasks are marked [x] (re-scan the story document now)</action>
-    <action>Run the full regression suite (do not skip)</action>
-    <action>Confirm File List includes every changed file</action>
-    <action>Execute enhanced definition-of-done validation</action>
-    <action>Update the story Status to: "review"</action>
-
-    <!-- Enhanced Definition of Done Validation -->
-    <action>Validate definition-of-done checklist with essential requirements:
-      - All tasks/subtasks marked complete with [x]
-      - Implementation satisfies every Acceptance Criterion
-      - Unit tests for core functionality added/updated
-      - Integration tests for component interactions added when required
-      - End-to-end tests for critical flows added when story demands them
-      - All tests pass (no regressions, new tests successful)
-      - Code quality checks pass (linting, static analysis if configured)
-      - File List includes every new/modified/deleted file (relative paths)
-      - Dev Agent Record contains implementation notes
-      - Change Log includes summary of changes
-      - Only permitted story sections were modified
-    </action>
-
-    <!-- Mark story ready for review - sprint status conditional -->
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file exists AND {{current_sprint_status}} != 'no-sprint-tracking'">
-      <action>Load the FULL file: /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml</action>
-      <action>Find development_status key matching 10-1-initial-setup</action>
-      <action>Verify current status is "in-progress" (expected previous state)</action>
-      <action>Update development_status[10-1-initial-setup] = "review"</action>
-      <action>Update last_updated field to current date</action>
-      <action>Save file, preserving ALL comments and structure including STATUS DEFINITIONS</action>
-      <output>✅ Story status updated to "review" in sprint-status.yaml</output>
-    </check>
-
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file does NOT exist OR {{current_sprint_status}} == 'no-sprint-tracking'">
-      <output>ℹ️ Story status updated to "review" in story file (no sprint tracking configured)</output>
-    </check>
-
-    <check if="story key not found in sprint status">
-      <output>⚠️ Story file updated, but sprint-status update failed: 10-1-initial-setup not found
-
-        Story status is set to "review" in file, but sprint-status.yaml may be out of sync.
-      </output>
-    </check>
-
-    <!-- Final validation gates -->
-    <action if="any task is incomplete">HALT - Complete remaining tasks before marking ready for review</action>
-    <action if="regression failures exist">HALT - Fix regression issues before completing</action>
-    <action if="File List is incomplete">HALT - Update File List with all changed files</action>
-    <action if="definition-of-done validation fails">HALT - Address DoD failures before completing</action>
-  </step>
+  <!-- step removed: sprint-status managed by loop handler -->
 
   <step n="10" goal="Completion communication and user support">
     <action>Execute the enhanced definition-of-done checklist using the validation framework</action>
@@ -548,15 +355,11 @@ Activation is complete. Begin the workflow below.
     </action>
 
     <output>💡 **Tip:** For best results, run `code-review` using a **different** LLM than the one that implemented this story.</output>
-    <check if="/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml file exists">
-      <action>Suggest checking /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/docs/sprint-artifacts/sprint-status.yaml to see project progress</action>
-    </check>
-    <action>Remain flexible - allow user to choose their own path or ask for other assistance</action>
+<action>Remain flexible - allow user to choose their own path or ask for other assistance</action>
   <action>Run: `python3 /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/_bmad/scripts/resolve_customization.py --skill /private/var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-dev-story/proj/.claude/skills/bmad-dev-story --key workflow.on_complete` — if the resolved value is non-empty, follow it as the final terminal instruction before exiting.</action>
   </step>
 
 </workflow>
-
 
 ]]></instructions>
 <output-template></output-template>

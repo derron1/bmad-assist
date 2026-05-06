@@ -27,14 +27,12 @@ Focus on STORY QUALITY, not code implementation.
 
 Minimal context.
 
-
 ]]></file>
 <file id="42fa2838" path="docs/architecture.md" label="ARCHITECTURE"><![CDATA[
 
 # Architecture
 
 Layered.
-
 
 ]]></file>
 <file id="6af8060c" path="docs/epics/epic-10-test.md" label="EPIC"><![CDATA[
@@ -44,7 +42,6 @@ Layered.
 ## Story 10.1: Initial Setup
 
 Content.
-
 
 ]]></file>
 <file id="5a01e3a9" path="docs/sprint-artifacts/10-1-initial-setup.md" label="STORY FILE"><![CDATA[
@@ -67,7 +64,6 @@ ready-for-validation
 
 Minimal notes.
 
-
 ]]></file>
 </context>
 <variables>
@@ -80,16 +76,16 @@ Minimal notes.
 <var name="model">validator</var>
 <var name="name">bmad-validate-story</var>
 <var name="project_context">{project-root}/docs/project-context.md</var>
-<var name="sprint_status">docs/sprint-artifacts/sprint-status.yaml</var>
+
 <var name="story_file" file_id="5a01e3a9">embedded in prompt, file id: 5a01e3a9</var>
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-<var name="template">.claude/skills/bmad-validate-story/template.md</var>
+
 <var name="timestamp">20260115_120000</var>
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-validate-story/checklist.md</var>
+
 <var name="validation_focus">story_quality</var>
 </variables>
 <instructions><![CDATA[
@@ -154,7 +150,55 @@ Greet `{user_name}`, speaking in `English`.
 
 ### Step 6: Execute Append Steps
 
-Execute each entry in `` in order.
+Execute each entry in `- HEADLESS MULTI-LLM STORY VALIDATION — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. The validation target is fully embedded in this prompt's <context> section. There is no user to ask; do not request clarification.
+
+Embedded inputs (use these — do not ask):
+- Story file → <file label="STORY FILE"> (treat as /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/docs/sprint-artifacts/10-1-initial-setup.md)
+- Architecture, project context, standards → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- /var/folders/c8/4hyhkyxn3xz219khx9yp4l100000gp/T/bmad-assist-snapshot-projects/bmad-validate-story/proj/docs/sprint-artifacts/10-1-initial-setup.md = the embedded STORY FILE
+- 10-1-initial-setup = the value already in <variables>
+
+Skill overrides:
+1. Skip all interactive gates. Ignore: <ask> blocks, "HALT. Ask the user", "[Y] Yes / [N] No" prompts, "Which story", "Should I review", "Before I proceed", "What do you want", numbered selection menus, CHECKPOINT halts requesting human confirmation, "wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+2. The story file is the validation target — proceed directly to validation. Do not ask which story to validate.
+3. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.
+- REQUIRED OUTPUT FORMAT — Evidence Score
+
+Your final report MUST include a structured Evidence Score block before the <!-- VALIDATION_REPORT_END --> end marker. The orchestrator parses this format deterministically; output without it counts as zero evidence and may force a rework cycle.
+
+Canonical format (markdown table — preferred over the bullet variant):
+
+## Evidence Score
+
+| Severity | Description | Source | Score |
+|----------|-------------|--------|-------|
+| 🔴 CRITICAL | <one-line description> | <story-section or AC ref> | +3 |
+| 🟠 IMPORTANT | <one-line description> | <story-section or AC ref> | +1 |
+| 🟡 MINOR | <one-line description> | <story-section or AC ref> | +0.3 |
+
+| 🟢 CLEAN PASS | Count |
+|---|---|
+| Acceptance Criteria coverage | 1 |
+| Dev Notes completeness | 1 |
+| Test Strategy clarity | 1 |
+
+| **Evidence Score** | **<total, one decimal>** |
+
+Severity scores (parser-canonical):
+- 🔴 CRITICAL = +3.0 per finding
+- 🟠 IMPORTANT = +1.0 per finding
+- 🟡 MINOR = +0.3 per finding
+- 🟢 CLEAN PASS = -0.5 per category
+
+Total = sum(finding_scores) + (clean_pass_count × -0.5), rounded to one decimal.
+
+Severity aliases the parser also accepts (prefer canonical labels): HIGH=CRITICAL, MEDIUM=IMPORTANT, LOW=MINOR.
+
+Skip a severity row entirely if no findings at that level. Always include at least one finding row OR a non-zero CLEAN PASS count — otherwise the parser logs "no findings, clean passes, or score found" and excludes the validator from synthesis.` in order.
 
 Activation is complete. Begin the workflow below.
 
@@ -292,7 +336,6 @@ Activation is complete. Begin the workflow below.
 </step>
 
 </workflow>
-
 
 ]]></instructions>
 <output-template><![CDATA[
@@ -584,7 +627,6 @@ No changes were applied to the story file. This report serves as documentation o
 
 **Report Generated:** {{date}}
 **Validation Engine:** BMAD Method Quality Competition v1.0
-
 
 ]]></output-template>
 </compiled-workflow>

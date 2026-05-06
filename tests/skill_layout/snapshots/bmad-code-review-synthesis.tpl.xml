@@ -61,7 +61,6 @@ remaining_high: [N]
 
 Minimal context.
 
-
 ]]></file>
 <file id="b06648f4" path="[Reviewer A]" label="CODE REVIEW OUTPUT"><![CDATA[
 
@@ -89,7 +88,6 @@ ready-for-review
 
 - src/example.py
 
-
 ]]></file>
 </context>
 <variables>
@@ -102,16 +100,16 @@ ready-for-review
 <var name="project_context">{project-root}/docs/project-context.md</var>
 <var name="reviewer_count">2</var>
 <var name="session_id">test-session</var>
-<var name="sprint_status">none</var>
+
 <var name="story_file" file_id="c62d2968">embedded in prompt, file id: c62d2968</var>
 <var name="story_id">10.1</var>
 <var name="story_key">10-1-initial-setup</var>
 <var name="story_num">1</var>
 <var name="story_title">initial-setup</var>
-<var name="template">.claude/skills/bmad-code-review-synthesis/template.md</var>
+
 <var name="timestamp">20260115_1200</var>
 <var name="user_skill_level">expert</var>
-<var name="validation">.claude/skills/bmad-code-review-synthesis/checklist.md</var>
+
 </variables>
 <instructions><![CDATA[
 
@@ -174,7 +172,23 @@ Greet `{user_name}`, speaking in `English`.
 
 ### Step 6: Execute Append Steps
 
-Execute each entry in `` in order.
+Execute each entry in `- HEADLESS MULTI-LLM CODE REVIEW SYNTHESIS — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. All inputs are pre-computed and fully embedded in this prompt's <context> section. There is no user to ask; do not request clarification or that any input be re-run.
+
+Embedded inputs (use these directly):
+- Reviewer reports → <file> entries with the per-validator report content (Validator A, Validator B, …)
+- Pre-calculated Evidence Score → <!-- PRE-CALCULATED EVIDENCE SCORE --> block (deterministic — DO NOT recalculate)
+- Deep Verify findings → embedded in context
+- Security findings → embedded in context
+- Story file, code files, architecture → other <file> entries
+
+Skill overrides:
+1. Skip all interactive gates. Ignore: <ask> blocks, "HALT. Ask the user", "[Y] Yes / [N] No" prompts, "Should I", "Before I proceed", "What do you want", numbered selection menus, CHECKPOINT halts requesting human confirmation, "wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+2. The reviewer outputs are final — synthesize directly from them. DO NOT ask for them to be re-run, expanded, or re-scoped.
+3. Use the pre-calculated Evidence Score and verdict from the <!-- PRE-CALCULATED EVIDENCE SCORE --> block directly. DO NOT recalculate; the orchestrator computes these deterministically.
+4. If reviewer output is incomplete, ambiguous, or contradictory, note this in your synthesis (e.g. with verdict UNKNOWN or CONCERNS) but proceed to a final report. Do not stall on missing context.
+5. Do not ask for clarification under any circumstances. Make the most defensible reading and continue.` in order.
 
 Activation is complete. Begin the workflow below.
 
@@ -391,8 +405,8 @@ remaining_high: {N}
   </output-format>
 </step>
 
-<step n="6.5" goal="Append Senior Developer Review section to story file">
-  <critical>This section enables `dev_story` to detect that a code review has occurred and extract action items. APPEND — do NOT replace existing content.</critical>
+<step n="6.5" goal="Append Review Findings section to story file">
+  <critical>This section enables `dev_story` to detect that a code review has occurred and extract action items. APPEND a new `### Review Findings` heading at the end of the `## Tasks / Subtasks` section — do NOT replace existing content. This matches the upstream BMAD `bmad-code-review` step-04-present convention.</critical>
 
   <action>Determine the evidence verdict from your analysis:
     - **REJECT** when remaining Critical or High issues exist.
@@ -404,11 +418,10 @@ remaining_high: {N}
     - REJECT → "Changes Requested"
     - UNCERTAIN → "Approved with Reservations"
   </action>
-  <action>Append the following block to the story file (do not replace the existing "## Senior Developer Review (AI)" section if present — append a new "### Review: 2026-01-15" subsection under it):
+  <action>Append the following block to the story file at the end of the `## Tasks / Subtasks` section. Each rework round adds a new `### Review Findings` heading; previous rounds remain in place:
     ```
-    ## Senior Developer Review (AI)
-
-    ### Review: {current_date}
+    ### Review Findings
+    - **Date:** {current_date}
     - **Reviewer:** AI Code Review Synthesis
     - **Outcome:** {Approved|Changes Requested|Approved with Reservations}
     - **Issues Found:** {total_verified_issues}
@@ -447,8 +460,25 @@ Do NOT dismiss `test.fixme()` as "intentional TDD methodology". After `dev_story
   </action>
 </step>
 
-</workflow>
+<step n="6.7" goal="Update story status to reflect synthesis outcome">
+  <critical>Match upstream `bmad-code-review/step-04-present.md` (lines 87-105) convention: synthesis outcome MUST propagate to BOTH the story file's `Status:` frontmatter AND ``'s `development_status[10-1-initial-setup]`. Without this, story files appear stuck in `review` status indefinitely after the loop has moved on.</critical>
 
+  <action>Determine the new status based on the synthesis resolution from step 6:
+    - **resolved** (all critical/high addressed, no remaining action items) → `{new_status}` = `done`
+    - **rework** (action items remain; dev needs to address them) → `{new_status}` = `in-progress`
+    - **halt** (uncertain evidence or max rework attempts reached) → `{new_status}` = `in-progress`
+  </action>
+
+  <action>Update the story file's `Status:` frontmatter line:
+    - Locate the `Status:` line near the top of the story file (typically line 3, between the title and the first `<!-- -->` comment).
+    - Replace its value with `{new_status}`. Preserve all other frontmatter, comments, and content unchanged.
+    - Save the story file.
+  </action>
+
+  <!-- managed programmatically by bmad-assist -->
+</step>
+
+</workflow>
 
 ]]></instructions>
 <output-template></output-template>
