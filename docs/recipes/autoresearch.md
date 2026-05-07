@@ -11,7 +11,7 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch). T
 - A hard pass rule: the candidate must clear specific numeric thresholds; nothing else counts.
 - An iteration loop driven by any LLM-capable tool (codex `/goal`, `/bmad-quick-dev`, claude-code interactive, manual). The harness is tool-agnostic.
 
-This is a **manual recipe today**. When the deferred-research handler lands as part of bmad-assist's loop (Step 4 in the rework-resilience roadmap), it may scaffold a harness from this template automatically — but iteration will remain operator-driven for the foreseeable future, because the 74% of code that's domain-specific cannot be templated away.
+**Scaffolding is automatic when running under bmad-assist:** the deferred-research handler (Step 4 of the rework-resilience trilogy) detects `[Review][Defer]` empirical findings in synthesis output and copies this template into your project's `_bmad-output/planning-artifacts/research/{slug}_autoresearch/` directory. Iteration remains operator-driven — the handler scaffolds the starting point, you fill in the candidate methods and run the loop with whichever LLM-capable tool fits. The 74% of code that's domain-specific cannot be templated away. To run the recipe outside a bmad-assist invocation, copy the template manually as described in the "Using the template" section below.
 
 ## When to use this (and when not to)
 
@@ -108,12 +108,12 @@ The final research-authority note (which is what eventually authorizes a product
 
 ## Using the template (binary-classification flavor)
 
-The template at [./autoresearch/template/](./autoresearch/template/) is *one instance* of the pattern — a minimal binary-classification harness, the proven shape from the canonical Permutation-FST case. The pattern itself (one editable surface, fixed pass rule, scorecard, iteration loop) is universal across domains; the binary-classification flavor is what fits "does this method correctly flag X / not flag Y?" research. For non-classification problems see the next section.
+The template at [../../src/bmad_assist/templates/autoresearch/template/](../../src/bmad_assist/templates/autoresearch/template/) is *one instance* of the pattern — a minimal binary-classification harness, the proven shape from the canonical Permutation-FST case. The pattern itself (one editable surface, fixed pass rule, scorecard, iteration loop) is universal across domains; the binary-classification flavor is what fits "does this method correctly flag X / not flag Y?" research. For non-classification problems see the next section.
 
 Copy and adapt:
 
 ```
-cp -r <bmad-assist-repo>/docs/recipes/autoresearch/template/ \
+cp -r <bmad-assist-repo>/src/bmad_assist/templates/autoresearch/template/ \
       <consumer-project>/_bmad-output/planning-artifacts/research/<topic>_autoresearch/
 cd <consumer-project>/_bmad-output/planning-artifacts/research/<topic>_autoresearch/
 # Edit program.md: state your research question, list candidate methods, set pass rule
@@ -190,14 +190,14 @@ These can use the same template structure; the diffs are localized to the Case s
 
 **Scope creep.** The harness is for *one* research question. Don't try to make `experiment.py` solve three different research-authority CRITICALs simultaneously. Spawn separate harness directories for separate questions.
 
-## Integration with the bmad-assist loop (future Step 4)
+## Integration with the bmad-assist loop (Step 4)
 
-The bmad-assist rework-resilience roadmap is:
+The bmad-assist rework-resilience roadmap:
 
-- **Step 1** — synthesis prompt classifies findings with correct `[Review][...]` markers (committed: `12d5410`)
-- **Step 2** — score-side filter excludes Defer findings from verdict (committed: `9358d38`)
-- **Step 3** — LLM-emitted resolution honors Defer in `remaining_*` count (committed: `3c272e3`)
-- **Step 4** — deferred-research handler (this section's subject; not yet implemented)
+- **Step 1** — synthesis prompt classifies findings with correct `[Review][...]` markers (`12d5410`)
+- **Step 2** — score-side filter excludes Defer findings from verdict (`9358d38`)
+- **Step 3** — LLM-emitted resolution honors Defer in `remaining_*` count (`3c272e3`)
+- **Step 4** — deferred-research handler (this section's subject; **landed in this commit**)
 
 After Step 3, synthesis emits `resolution: resolved` even when deferred CRITICALs remain — the loop advances correctly, but those deferred items just accumulate in `deferred-work.md` with no follow-up action. Step 4 closes that gap.
 
@@ -213,7 +213,7 @@ Runs as the last step of synthesis (or as a separate post-synthesis phase) when 
    - architectural             → design decision; handoff to PM/architect
    - out-of-scope-no-research  → log only, no follow-up artifact
 3. For each empirical item:
-   - cp -r <bmad-assist>/docs/recipes/autoresearch/template/ \
+   - cp -r <bmad-assist>/src/bmad_assist/templates/autoresearch/template/ \
           {project-root}/_bmad-output/planning-artifacts/research/{topic}_autoresearch/
    - Append a follow-up entry to deferred-work.md with:
        - harness path
@@ -231,17 +231,17 @@ Runs as the last step of synthesis (or as a separate post-synthesis phase) when 
 ### What the handler does NOT do
 
 - **Does not drive iteration.** Scaffolding the harness is the handler's job; running the loop is the operator's. The recipe's "Iteration tools" section explains why — autonomous iteration would have missed the label-audit pivot that actually solved Permutation-FST. Human-in-the-loop is the feature, not a bug.
-- **Does not bundle new skills.** Step 4 is a handler addition + scaffold logic; the recipe's template stays in the bmad-assist repo's `docs/recipes/` (this directory) and gets `cp -r`'d into consumer projects on demand.
+- **Does not bundle new skills.** Step 4 is a handler addition + scaffold logic; the recipe's template ships with the bmad-assist package at `src/bmad_assist/templates/autoresearch/` and gets `cp -r`'d (or copied via `shutil.copytree`) into consumer projects on demand.
 - **Does not block story progress.** Synthesis already correctly emits `resolution: resolved`; Step 4 just adds follow-up artifacts. If Step 4 fails or is disabled, the loop still works — the deferred items just don't get auto-scaffolded.
 
-### Why the template lives in `docs/recipes/` (not bundled-skill territory)
+### Why the template lives in `src/bmad_assist/templates/autoresearch/` (not bundled-skill territory)
 
-The template is documentation that gets `cp -r`'d into a consumer project on demand. It's deliberately NOT a bundled skill (`src/bmad_assist/skills/...`) for two reasons:
+The template ships with the package and gets copied into a consumer project on demand. It's deliberately NOT a bundled skill (`src/bmad_assist/skills/...`) for two reasons:
 
 1. **Bundled skills are LLM prompts** with a `SKILL.md` activation contract. Autoresearch harness files are *executable code* the consumer runs; they don't activate via the skill resolver.
-2. **The 74% domain-specific code** (per the pre-bundling investigation) means each consumer copy diverges immediately. Bundling implies "auto-sync from source-of-truth"; here we want frozen-at-copy semantics so iteration changes don't get clobbered by the next bootstrap.
+2. **The 74% domain-specific code** (per the pre-bundling investigation) means each consumer copy diverges immediately. Bundling-as-a-skill implies "auto-sync from source-of-truth"; here we want frozen-at-copy semantics so iteration changes don't get clobbered by the next bootstrap.
 
-The template's location at [./autoresearch/template/](./autoresearch/template/) is a deliberate choice — it lives where documentation lives, gets cross-referenced from CLAUDE.md, and is a one-shot scaffold not subject to bootstrap re-sync.
+The template's location at [../../src/bmad_assist/templates/autoresearch/template/](../../src/bmad_assist/templates/autoresearch/template/) is a deliberate choice — it ships with the package via `[tool.setuptools.package-data]` so the deferred-research handler can resolve it through `importlib.resources` in pip-installed consumer projects, and it remains a one-shot scaffold not subject to bootstrap re-sync.
 
 ## See also
 

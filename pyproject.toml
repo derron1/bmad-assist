@@ -48,7 +48,7 @@ bmad-assist = "bmad_assist.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-bmad_assist = ["skills/**/*", "skills/cache/*.tpl.xml", "skills/cache/*.meta.yaml", "default_patches/*.yaml", "testarch/knowledge_base/**/*", "deep_verify/knowledge/data/*.yaml"]
+bmad_assist = ["skills/**/*", "skills/cache/*.tpl.xml", "skills/cache/*.meta.yaml", "default_patches/*.yaml", "testarch/knowledge_base/**/*", "deep_verify/knowledge/data/*.yaml", "templates/**/*"]
 
 [tool.mypy]
 python_version = "3.11"

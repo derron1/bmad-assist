@@ -325,6 +325,143 @@ class TestCodeReviewSynthesisHandler:
             assert "response" in result.outputs
             assert "Synthesis Summary" in result.outputs["response"]
 
+    def test_scaffold_called_when_deferred_critical_gt_zero(
+        self,
+        synthesis_config: Config,
+        project_with_story: Path,
+        state_for_synthesis: State,
+        cached_reviews: str,
+    ) -> None:
+        """Step 4: scaffold_deferred_research is invoked when deferred counts > 0."""
+        from bmad_assist.core.loop.deferred_research import ScaffoldSummary
+        from bmad_assist.core.loop.handlers.code_review_synthesis import (
+            CodeReviewSynthesisHandler,
+        )
+
+        # Build synthesis output containing a resolution block with
+        # deferred_critical=1 — the trigger for scaffold invocation.
+        synthesis_output_with_defer = (
+            _MOCK_SYNTHESIS_OUTPUT + "\n<!-- SYNTHESIS_RESOLUTION_START -->\n"
+            "resolution: resolved\n"
+            "verified_critical: 1\n"
+            "verified_high: 0\n"
+            "fixed_critical: 0\n"
+            "fixed_high: 0\n"
+            "dismissed_critical: 0\n"
+            "dismissed_high: 0\n"
+            "deferred_critical: 1\n"
+            "deferred_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 0\n"
+            "<!-- SYNTHESIS_RESOLUTION_END -->\n"
+        )
+
+        # Build a config with an explicit LoopConfig so the scaffold flag is
+        # the deterministic default-True rather than relying on tolerant
+        # fallback for `loop=None`.
+        from bmad_assist.core.config.models.loop import LoopConfig
+
+        enabled_loop = LoopConfig(
+            story=["create_story", "code_review", "code_review_synthesis"],
+            deferred_research_scaffold=True,
+        )
+        config_enabled = synthesis_config.model_copy(update={"loop": enabled_loop})
+        handler = CodeReviewSynthesisHandler(config_enabled, project_with_story)
+        assert handler.config.loop.deferred_research_scaffold is True
+
+        with (
+            patch.object(handler, "render_prompt") as mock_render,
+            patch.object(handler, "invoke_provider") as mock_invoke,
+            patch("bmad_assist.core.debug_logger.save_prompt"),
+            patch(
+                "bmad_assist.core.loop.handlers.code_review_synthesis.scaffold_deferred_research"
+            ) as mock_scaffold,
+        ):
+            mock_render.return_value = "<compiled>prompt</compiled>"
+            mock_invoke.return_value = ProviderResult(
+                stdout=synthesis_output_with_defer,
+                stderr="",
+                exit_code=0,
+                duration_ms=5000,
+                model="opus-4",
+                command=("claude", "--print"),
+            )
+            mock_scaffold.return_value = ScaffoldSummary()
+
+            result = handler.execute(state_for_synthesis)
+
+            assert result.success
+            assert mock_scaffold.called, "scaffold should run when deferred_critical > 0"
+            kwargs = mock_scaffold.call_args.kwargs
+            assert kwargs["deferred_critical"] == 1
+            assert kwargs["deferred_high"] == 0
+            assert "scaffold_summary" in result.outputs
+
+    def test_scaffold_skipped_when_config_disabled(
+        self,
+        synthesis_config: Config,
+        project_with_story: Path,
+        state_for_synthesis: State,
+        cached_reviews: str,
+    ) -> None:
+        """Step 4: scaffold is skipped when loop.deferred_research_scaffold = False."""
+        from bmad_assist.core.config.models.loop import LoopConfig
+        from bmad_assist.core.loop.handlers.code_review_synthesis import (
+            CodeReviewSynthesisHandler,
+        )
+
+        # Build a config where deferred_research_scaffold is explicitly False.
+        disabled_loop = LoopConfig(
+            story=["create_story", "code_review", "code_review_synthesis"],
+            deferred_research_scaffold=False,
+        )
+        config_disabled = synthesis_config.model_copy(update={"loop": disabled_loop})
+
+        synthesis_output_with_defer = (
+            _MOCK_SYNTHESIS_OUTPUT + "\n<!-- SYNTHESIS_RESOLUTION_START -->\n"
+            "resolution: resolved\n"
+            "verified_critical: 1\n"
+            "verified_high: 0\n"
+            "fixed_critical: 0\n"
+            "fixed_high: 0\n"
+            "dismissed_critical: 0\n"
+            "dismissed_high: 0\n"
+            "deferred_critical: 1\n"
+            "deferred_high: 0\n"
+            "remaining_critical: 0\n"
+            "remaining_high: 0\n"
+            "<!-- SYNTHESIS_RESOLUTION_END -->\n"
+        )
+
+        handler = CodeReviewSynthesisHandler(config_disabled, project_with_story)
+        assert handler.config.loop.deferred_research_scaffold is False
+
+        with (
+            patch.object(handler, "render_prompt") as mock_render,
+            patch.object(handler, "invoke_provider") as mock_invoke,
+            patch("bmad_assist.core.debug_logger.save_prompt"),
+            patch(
+                "bmad_assist.core.loop.handlers.code_review_synthesis.scaffold_deferred_research"
+            ) as mock_scaffold,
+        ):
+            mock_render.return_value = "<compiled>prompt</compiled>"
+            mock_invoke.return_value = ProviderResult(
+                stdout=synthesis_output_with_defer,
+                stderr="",
+                exit_code=0,
+                duration_ms=5000,
+                model="opus-4",
+                command=("claude", "--print"),
+            )
+
+            result = handler.execute(state_for_synthesis)
+
+            assert result.success
+            assert not mock_scaffold.called, (
+                "scaffold should NOT run when deferred_research_scaffold = False"
+            )
+            assert result.outputs.get("scaffold_summary") is None
+
     def test_execute_fails_when_no_session_found(
         self,
         synthesis_config: Config,

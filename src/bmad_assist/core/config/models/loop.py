@@ -75,6 +75,15 @@ class LoopConfig(BaseModel):
         default=False,
         description="Loop back to dev_story when code review synthesis verdict is REJECT or MAJOR_REWORK",
     )
+    deferred_research_scaffold: bool = Field(
+        default=True,
+        description=(
+            "When code-review-synthesis emits deferred_critical or deferred_high > 0, "
+            "scaffold an autoresearch harness for each empirical [Review][Defer] finding "
+            "into {project}/_bmad-output/planning-artifacts/research/. "
+            "See docs/recipes/autoresearch.md."
+        ),
+    )
     max_rework_attempts: int = Field(
         default=2,
         ge=1,

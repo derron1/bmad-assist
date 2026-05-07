@@ -19,6 +19,7 @@ has write permission to modify the story file.
 import json
 import logging
 import re
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,10 @@ from bmad_assist.core.paths import get_paths
 from bmad_assist.core.state import State
 from bmad_assist.core.types import EpicId
 from bmad_assist.security.integration import load_security_findings_from_cache
+from bmad_assist.core.loop.deferred_research import (
+    ScaffoldSummary,
+    scaffold_deferred_research,
+)
 from bmad_assist.core.loop.synthesis_contract import (
     ExtractionQuality,
     RESOLUTION_COUNT_FIELDS,
@@ -563,9 +568,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
         from bmad_assist.providers.registry import get_provider
 
         synthesis_config = self.config.compiler.synthesis
-        budget_limits = resolve_synthesis_budget_limits(
-            self.config, "code_review_synthesis"
-        )
+        budget_limits = resolve_synthesis_budget_limits(self.config, "code_review_synthesis")
         base_tokens = estimate_base_context_tokens(
             self.project_path, self.config, "code_review_synthesis"
         )
@@ -819,9 +822,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
             start_time = datetime.now(UTC)
 
             # Invoke Master LLM with restricted tools (file manipulation only)
-            result = self.invoke_provider(
-                prompt, allowed_tools=["Read", "Edit", "Write", "Bash"]
-            )
+            result = self.invoke_provider(prompt, allowed_tools=["Read", "Edit", "Write", "Bash"])
 
             # Record end time for benchmarking
             end_time = datetime.now(UTC)
@@ -833,8 +834,7 @@ class CodeReviewSynthesisHandler(BaseHandler):
                 from bmad_assist.core.loop.synthesis_contract import FailureClass
 
                 is_guard_termination = bool(
-                    result.termination_reason
-                    and result.termination_reason.startswith("guard:")
+                    result.termination_reason and result.termination_reason.startswith("guard:")
                 )
                 if is_guard_termination:
                     logger.warning(
@@ -976,6 +976,49 @@ class CodeReviewSynthesisHandler(BaseHandler):
                     },
                 )
 
+                # Step 4: scaffold autoresearch harnesses for empirical
+                # [Review][Defer] findings. Non-blocking: failures here must
+                # never fail the synthesis phase. See
+                # docs/recipes/autoresearch.md for the iteration contract.
+                scaffold_summary: ScaffoldSummary | None = None
+                # Loop config may be a LoopConfig, the literal "default", or
+                # None. Resolve to a flag value tolerantly: any non-LoopConfig
+                # value falls back to the field default (True).
+                _loop_cfg = self.config.loop
+                _scaffold_enabled = (
+                    _loop_cfg.deferred_research_scaffold
+                    if hasattr(_loop_cfg, "deferred_research_scaffold")
+                    else True
+                )
+                if (
+                    _scaffold_enabled
+                    and resolution_data is not None
+                    and (
+                        int(resolution_data.get("deferred_critical", 0)) > 0
+                        or int(resolution_data.get("deferred_high", 0)) > 0
+                    )
+                ):
+                    try:
+                        scaffold_summary = scaffold_deferred_research(
+                            project_path=self.project_path,
+                            synthesis_report_path=synthesis_report_path,
+                            epic_num=epic_num,
+                            story_num=story_num,
+                            deferred_critical=int(resolution_data.get("deferred_critical", 0)),
+                            deferred_high=int(resolution_data.get("deferred_high", 0)),
+                        )
+                        logger.info(
+                            "Deferred-research scaffold: empirical=%d narrative=%d "
+                            "architectural=%d out_of_scope=%d errors=%d",
+                            len(scaffold_summary.empirical),
+                            len(scaffold_summary.narrative),
+                            len(scaffold_summary.architectural),
+                            len(scaffold_summary.out_of_scope),
+                            len(scaffold_summary.errors),
+                        )
+                    except Exception as e:  # never block synthesis
+                        logger.warning("Deferred-research scaffold failed (non-blocking): %s", e)
+
                 phase_result = PhaseResult.ok(
                     {
                         "response": result.stdout,
@@ -989,6 +1032,9 @@ class CodeReviewSynthesisHandler(BaseHandler):
                         ),
                         "resolution_data": resolution_data,
                         "synthesis_report_path": str(synthesis_report_path),
+                        "scaffold_summary": (
+                            asdict(scaffold_summary) if scaffold_summary else None
+                        ),
                         **self._timing_outputs(),
                     }
                 )
