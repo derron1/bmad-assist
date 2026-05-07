@@ -61,6 +61,7 @@ Patches and customize.toml are not alternatives. The experiment harness exposes 
 - "Where do synthesis verdicts come from?" → [core/loop/synthesis_contract.py](src/bmad_assist/core/loop/synthesis_contract.py) + `validation/synthesis_parser.py`
 - "How are interactive BMAD steps stripped?" → `compiler/patching/` + `default_patches/`
 - "Where is the skill resolver entry?" → [skill_layout/resolver.py](src/bmad_assist/skill_layout/resolver.py)
+- "How do I handle a research-blocked `[Review][Defer]` CRITICAL needing empirical validation?" → [docs/recipes/autoresearch.md](docs/recipes/autoresearch.md) — manual recipe + template at [docs/recipes/autoresearch/template/](docs/recipes/autoresearch/template/); pairs with bmad-technical-research for narrative research. Canonical worked example is the algo project's Permutation-FST harness.
 
 ## Conventions
 
