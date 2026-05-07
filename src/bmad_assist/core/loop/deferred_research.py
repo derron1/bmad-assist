@@ -135,36 +135,100 @@ def _classify(finding: FindingRef) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Synthesis-report parser
+# deferred-work.md parser
 # ---------------------------------------------------------------------------
 
 
 # Matches lines like:
-#   - [ ] [Review][Defer] Permutation-FST degenerate [src/algo.py:42] — research-methodology defect
-#   - [x] [Review][Defer] Some title — out-of-scope: pre-existing
-# The em-dash separator (—, U+2014) matches the synthesis SKILL.md emit format
-# (line 331 of bmad-code-review-synthesis/SKILL.md). file:line is optional.
-_DEFER_LINE_RE = re.compile(
-    r"^- \[[ x]\] \[Review\]\[Defer\]\s+"
-    r"(?P<title>[^\[\n]+?)\s*"
-    r"(?:\[(?P<file>[^:\]]+)(?::(?P<line>\d+))?\])?\s*"
-    r"—\s*"  # em-dash
-    r"(?P<reason>.+?)$",
-    re.MULTILINE,
+#   - Permutation-FST methodology defect (round 9) [app/x.py, app/y.py:201-207] — CRITICAL, ...
+#   - Manual verification logs missing — process-only gap
+# Bracketed file/line is OPTIONAL — some bullets carry no [...] block at all.
+# The em-dash separator (—, U+2014) matches the format step 6.6 of the
+# bmad-code-review-synthesis SKILL emits to deferred-work.md.
+_DEFERRED_BULLET_RE = re.compile(
+    r"^- (?P<title>.+?)\s*(?:\[(?P<files>[^\]]+)\]\s*)?—\s*(?P<reason>.+)$"
 )
 
 
-def _parse_defer_findings(report_text: str) -> list[FindingRef]:
-    """Extract every ``[Review][Defer]`` finding from a synthesis-report markdown."""
+# Matches the per-review section heading. We capture epic.story so we can pick
+# only the bullets that belong to the story being synthesised. Append-only file
+# semantics mean the LAST matching heading is the most recent.
+def _section_heading_re(epic_num: int | str, story_num: int | str) -> re.Pattern[str]:
+    return re.compile(
+        rf"^## Deferred from: code review of story-{re.escape(str(epic_num))}\."
+        rf"{re.escape(str(story_num))}\b.*$",
+        re.MULTILINE,
+    )
+
+
+# Match ANY ## section heading — used to find where the chosen story's section ends.
+_ANY_SECTION_HEADING_RE = re.compile(r"^## ", re.MULTILINE)
+
+
+def _extract_first_file_and_line(files_blob: str) -> tuple[str | None, int | None]:
+    """From a comma-separated bracketed files string, take the first file.
+
+    Splits on ``,`` and trims whitespace. The first entry is then split on
+    ``:`` to extract an optional line number; ranges like ``201-207`` collapse
+    to the leading integer.
+    """
+    first = files_blob.split(",", 1)[0].strip()
+    if not first:
+        return None, None
+    if ":" in first:
+        raw_path, _, line_part = first.partition(":")
+        path: str | None = raw_path.strip() or None
+        line_part = line_part.strip()
+        # Range like "201-207" → first integer.
+        line_token = line_part.split("-", 1)[0].strip()
+        try:
+            line_num = int(line_token) if line_token else None
+        except ValueError:
+            line_num = None
+        return path, line_num
+    return first, None
+
+
+def _parse_deferred_work(text: str, epic_num: int | str, story_num: int | str) -> list[FindingRef]:
+    """Parse the latest ``## Deferred from: code review of story-{e}.{s}`` section.
+
+    Returns every ``- ...`` bullet inside the section parsed into
+    ``FindingRef``s. Returns an empty list if no matching section exists. The
+    file is append-only, so the LAST occurrence of the heading is the most
+    recent round.
+    """
+    section_re = _section_heading_re(epic_num, story_num)
+    matches = list(section_re.finditer(text))
+    if not matches:
+        return []
+
+    # Use the last (most recent) section.
+    last = matches[-1]
+    section_start = last.end()  # after the heading line
+    # Find the next ## heading after this one (or EOF).
+    next_heading = _ANY_SECTION_HEADING_RE.search(text, pos=section_start)
+    section_end = next_heading.start() if next_heading else len(text)
+    body = text[section_start:section_end]
+
     findings: list[FindingRef] = []
-    for match in _DEFER_LINE_RE.finditer(report_text):
-        line_str = match.group("line")
+    for raw_line in body.splitlines():
+        line = raw_line.rstrip()
+        if not line.startswith("- "):
+            continue
+        m = _DEFERRED_BULLET_RE.match(line)
+        if not m:
+            continue
+        files_blob = m.group("files")
+        if files_blob is not None:
+            file_path, line_num = _extract_first_file_and_line(files_blob)
+        else:
+            file_path, line_num = None, None
         findings.append(
             FindingRef(
-                title=match.group("title").strip(),
-                file=(match.group("file") or "").strip() or None,
-                line=int(line_str) if line_str else None,
-                reason=match.group("reason").strip(),
+                title=m.group("title").strip(),
+                file=file_path,
+                line=line_num,
+                reason=m.group("reason").strip(),
             )
         )
     return findings
@@ -256,20 +320,26 @@ def _append_logonly_followup(
 def scaffold_deferred_research(
     *,
     project_path: Path,
-    synthesis_report_path: Path,
     epic_num: int | str,
     story_num: int | str,
     deferred_critical: int,
     deferred_high: int,
 ) -> ScaffoldSummary:
-    """Classify ``[Review][Defer]`` findings and scaffold empirical harnesses.
+    """Classify deferred-work.md findings and scaffold empirical harnesses.
+
+    Reads ``{project}/_bmad-output/implementation-artifacts/deferred-work.md``
+    (the canonical structured ledger of deferrals — see step 6.6 of
+    ``bmad-code-review-synthesis/SKILL.md``). Locates the LATEST section
+    heading ``## Deferred from: code review of story-{epic}.{story}`` and
+    parses every bullet underneath it.
 
     Args:
         project_path: Consumer project root. Harnesses land under
             ``{project_path}/_bmad-output/planning-artifacts/research/``.
-        synthesis_report_path: Path to the synthesis report markdown to parse.
-        epic_num: Originating epic — recorded in the follow-up block.
-        story_num: Originating story — recorded in the follow-up block.
+        epic_num: Originating epic — used to locate the section and recorded
+            in the follow-up block.
+        story_num: Originating story — used to locate the section and recorded
+            in the follow-up block.
         deferred_critical: Count from the synthesis resolution_data block;
             included in the args for symmetry with the call-site contract,
             but not used for branching here (the caller already gated).
@@ -290,20 +360,41 @@ def scaffold_deferred_research(
     """
     summary = ScaffoldSummary()
 
-    # Read the synthesis report (best-effort; missing file → empty summary).
-    try:
-        report_text = synthesis_report_path.read_text(encoding="utf-8")
-    except OSError as e:
-        summary.errors.append(f"Could not read synthesis report: {e}")
+    deferred_work_path = (
+        project_path / "_bmad-output" / "implementation-artifacts" / "deferred-work.md"
+    )
+
+    # Missing deferred-work.md → benign empty summary. The synthesis prompt's
+    # step 6.6 may legitimately not have written one yet (e.g., no deferrals
+    # were emitted in this round despite resolution_data carrying counts from
+    # a prior round). Logged at info, not flagged as error.
+    if not deferred_work_path.exists():
+        logger.info(
+            "deferred-work.md not found at %s; nothing to scaffold "
+            "(deferred_critical=%d deferred_high=%d)",
+            deferred_work_path,
+            deferred_critical,
+            deferred_high,
+        )
         return summary
 
-    findings = _parse_defer_findings(report_text)
+    try:
+        text = deferred_work_path.read_text(encoding="utf-8")
+    except OSError as e:
+        summary.errors.append(f"Could not read deferred-work.md: {e}")
+        return summary
+
+    findings = _parse_deferred_work(text, epic_num, story_num)
     if not findings:
-        # Synthesis claimed deferred items exist but the report doesn't have
-        # parseable [Review][Defer] lines. Record and return.
-        summary.errors.append(
-            f"No [Review][Defer] lines parsed from {synthesis_report_path.name} "
-            f"despite deferred_critical={deferred_critical} deferred_high={deferred_high}"
+        # No matching ## heading for this story (or the heading exists but
+        # carried no parseable bullets). Benign — info-log and return empty.
+        logger.info(
+            "No deferred-work.md section found for story-%s.%s "
+            "(deferred_critical=%d deferred_high=%d)",
+            epic_num,
+            story_num,
+            deferred_critical,
+            deferred_high,
         )
         return summary
 
@@ -316,9 +407,6 @@ def scaffold_deferred_research(
         template_dir = None
 
     research_root = project_path / "_bmad-output" / "planning-artifacts" / "research"
-    deferred_work_path = (
-        project_path / "_bmad-output" / "implementation-artifacts" / "deferred-work.md"
-    )
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     used_slugs: set[str] = set()
 

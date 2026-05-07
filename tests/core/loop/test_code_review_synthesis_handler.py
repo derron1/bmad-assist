@@ -395,6 +395,11 @@ class TestCodeReviewSynthesisHandler:
             kwargs = mock_scaffold.call_args.kwargs
             assert kwargs["deferred_critical"] == 1
             assert kwargs["deferred_high"] == 0
+            # Step 4 fix: deferred-work.md is the source of truth, the
+            # synthesis report path is no longer passed.
+            assert "synthesis_report_path" not in kwargs
+            assert kwargs["project_path"] == project_with_story
+            assert kwargs["epic_num"] == 14
             assert "scaffold_summary" in result.outputs
 
     def test_scaffold_skipped_when_config_disabled(

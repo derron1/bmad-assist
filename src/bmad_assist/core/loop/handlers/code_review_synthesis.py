@@ -1001,7 +1001,6 @@ class CodeReviewSynthesisHandler(BaseHandler):
                     try:
                         scaffold_summary = scaffold_deferred_research(
                             project_path=self.project_path,
-                            synthesis_report_path=synthesis_report_path,
                             epic_num=epic_num,
                             story_num=story_num,
                             deferred_critical=int(resolution_data.get("deferred_critical", 0)),
