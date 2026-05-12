@@ -27,6 +27,7 @@ from bmad_assist.core.config.models.paths import (
     PowerPromptConfig,
     ProjectPathsConfig,
 )
+from bmad_assist.core.config.models.prompt_budget import PromptBudgetConfig
 from bmad_assist.core.config.models.providers import (
     ALL_KNOWN_PHASES,
     MULTI_LLM_PHASES,
@@ -38,7 +39,7 @@ from bmad_assist.core.config.models.providers import (
     ProviderConfig,
     get_phase_provider_config,
 )
-from bmad_assist.core.config.models.prompt_budget import PromptBudgetConfig
+from bmad_assist.core.config.models.quality_gate import QualityGateConfig
 from bmad_assist.core.config.models.source_context import (
     SourceContextBudgetsConfig,
     SourceContextConfig,
@@ -100,6 +101,8 @@ __all__ = [
     "TEA_FULL_LOOP_CONFIG",
     # prompt_budget.py
     "PromptBudgetConfig",
+    # quality_gate.py
+    "QualityGateConfig",
     # main.py
     "Config",
 ]

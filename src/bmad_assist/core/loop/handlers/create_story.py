@@ -134,7 +134,7 @@ def _check_slug_consistency(state: State) -> str | None:
     if not current_keys:
         return None
     current_key = current_keys[0]
-    current_slug = current_key[len(prefix):]
+    current_slug = current_key[len(prefix) :]
 
     if current_slug == expected_slug:
         return None  # consistent
@@ -297,7 +297,7 @@ def _extract_story_content(output: str) -> tuple[str | None, str | None]:
         return None, None
 
     title = match.group(1).strip()
-    content = text[match.start():]
+    content = text[match.start() :]
 
     # Trim trailing LLM commentary
     for end_pattern in _STORY_END_PATTERNS:
@@ -467,6 +467,13 @@ class CreateStoryHandler(BaseHandler):
                     content, title = _extract_story_content(result.stdout or "")
                     if content and _validate_story_content(content):
                         rescued_path = _write_rescued_story(state, content, title)
+                        # D.7: gate phase success on pre-commit hooks before
+                        # we return ok. Skip timing save if the gate fails so
+                        # we don't pollute benchmarks with a "successful"
+                        # record for a hard-failed phase.
+                        gate_failure = self._run_quality_gate_check()
+                        if gate_failure is not None:
+                            return gate_failure
                         outputs: dict[str, Any] = {
                             "response": result.stdout,
                             "model": result.model,
@@ -517,6 +524,10 @@ class CreateStoryHandler(BaseHandler):
                     return PhaseResult(success=False, error=error_msg, outputs=fail_outputs)
 
                 if _find_fresh_story_file(state, pre_existing_mtime) is not None:
+                    # D.7: gate phase success on pre-commit hooks.
+                    gate_failure = self._run_quality_gate_check()
+                    if gate_failure is not None:
+                        return gate_failure
                     outputs: dict[str, Any] = {
                         "response": result.stdout,
                         "model": result.model,
@@ -534,6 +545,10 @@ class CreateStoryHandler(BaseHandler):
                 content, title = _extract_story_content(result.stdout or "")
                 if content and _validate_story_content(content):
                     rescued_path = _write_rescued_story(state, content, title)
+                    # D.7: gate phase success on pre-commit hooks.
+                    gate_failure = self._run_quality_gate_check()
+                    if gate_failure is not None:
+                        return gate_failure
                     outputs = {
                         "response": result.stdout,
                         "model": result.model,
@@ -557,9 +572,7 @@ class CreateStoryHandler(BaseHandler):
                         MAX_RETRIES + 1,
                     )
                     next_attempt = attempt + 2  # 1-indexed for display
-                    prompt = prompt + _no_file_recovery_suffix(
-                        next_attempt, MAX_RETRIES + 1, state
-                    )
+                    prompt = prompt + _no_file_recovery_suffix(next_attempt, MAX_RETRIES + 1, state)
                     save_prompt(
                         self.project_path,
                         epic,

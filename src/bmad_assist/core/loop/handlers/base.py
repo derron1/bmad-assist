@@ -32,7 +32,13 @@ from uuid import uuid4
 import yaml
 from jinja2 import Template
 
-from bmad_assist.core.config import Config, get_config, get_phase_retries, get_phase_timeout
+from bmad_assist.core.config import (
+    Config,
+    get_config,
+    get_phase_retries,
+    get_phase_timeout,
+    get_quality_gate_config,
+)
 from bmad_assist.core.config.models.providers import (
     MasterProviderConfig,
     MultiProviderConfig,
@@ -144,7 +150,7 @@ class BaseHandler(ABC):
         self.project_path = project_path
         self._handler_config: HandlerConfig | None = None
         self._compile_ms: int | None = None  # Set by render_prompt(); cleared by execute()
-        self._invoke_ms: int | None = None   # Set by invoke_provider(); cleared by execute()
+        self._invoke_ms: int | None = None  # Set by invoke_provider(); cleared by execute()
         self._trace_enabled: bool = self._resolve_trace_enabled()
 
     @property
@@ -779,9 +785,8 @@ class BaseHandler(ABC):
                 )
 
                 # Check for guard-triggered termination
-                if (
-                    result.termination_reason
-                    and result.termination_reason.startswith(GUARD_TERMINATION_PREFIX)
+                if result.termination_reason and result.termination_reason.startswith(
+                    GUARD_TERMINATION_PREFIX
                 ):
                     stats = guard.get_stats()
                     # Capture reason BEFORE reset clears it
@@ -831,22 +836,17 @@ class BaseHandler(ABC):
                         allowed_tools=allowed_tools,
                     )
 
-                    if (
-                        result.termination_reason
-                        and result.termination_reason.startswith(
-                            GUARD_TERMINATION_PREFIX
-                        )
+                    if result.termination_reason and result.termination_reason.startswith(
+                        GUARD_TERMINATION_PREFIX
                     ):
                         stats = guard.get_stats()
                         logger.error(
-                            "ToolCallGuard: retry also terminated — "
-                            "failing phase (first: %s)",
+                            "ToolCallGuard: retry also terminated — failing phase (first: %s)",
                             first_attempt_reason,
                         )
                     else:
                         logger.info(
-                            "ToolCallGuard: retry succeeded "
-                            "(first attempt was terminated: %s)",
+                            "ToolCallGuard: retry succeeded (first attempt was terminated: %s)",
                             first_attempt_reason,
                         )
 
@@ -883,6 +883,124 @@ class BaseHandler(ABC):
             raise last_error
         # Should never reach here, but satisfy type checker
         raise RuntimeError("Unexpected state: no error captured but loop exited")
+
+    def _get_changed_files_for_gate(self) -> list[Path]:
+        """Return absolute paths of changed files for the quality gate.
+
+        Runs ``git diff --name-only HEAD`` from ``self.project_path`` and
+        filters to files that still exist on disk (deletions are skipped —
+        ``pre-commit run --files`` errors on non-existent paths, and a
+        deleted file has nothing to lint anyway). Returns absolute paths
+        so the gate runner does not need to resolve them again.
+
+        Failure modes are silent: not a git repo, ``git`` missing on PATH,
+        non-zero exit — all return an empty list. The gate runner skips
+        invocation when no files are passed, so an empty list cleanly
+        no-ops the gate without surfacing spurious failures.
+
+        Returns:
+            List of absolute Paths to existing changed files. Empty when
+            the project is not a git repo or git invocation fails.
+
+        """
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD"],
+                cwd=self.project_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError) as exc:
+            logger.debug("Quality gate: git diff failed (%s); skipping gate", exc)
+            return []
+
+        if proc.returncode != 0:
+            logger.debug(
+                "Quality gate: git diff returned %d; skipping gate. stderr: %s",
+                proc.returncode,
+                proc.stderr[:200] if proc.stderr else "",
+            )
+            return []
+
+        paths: list[Path] = []
+        for line in proc.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            absolute = (self.project_path / stripped).resolve()
+            # Skip deletions (file no longer exists) — pre-commit errors on
+            # non-existent paths and they have nothing to lint anyway.
+            if absolute.exists():
+                paths.append(absolute)
+        return paths
+
+    def _run_quality_gate_check(self) -> PhaseResult | None:
+        """Run the quality gate for this phase, if enabled.
+
+        Intended to be called by ``execute()`` AFTER successful provider
+        invocation but BEFORE returning ``PhaseResult.ok``. Returns:
+
+        - ``None`` when the gate is disabled for this phase, was skipped,
+          or passed — the caller should continue with its success path.
+        - ``PhaseResult.fail(...)`` when the gate ran and any hook failed
+          — the caller should return this directly to fail the phase.
+
+        Logging is handled here so callers don't need to repeat it.
+
+        Returns:
+            None on success / skip / gate-disabled; PhaseResult.fail on
+            hook failure.
+
+        """
+        qg_config = get_quality_gate_config(self.config)
+        if not qg_config.is_enabled_for_phase(self.phase_name):
+            return None
+
+        # Imported lazily so unrelated handlers don't pull the runner in.
+        from bmad_assist.quality_gate import run_quality_gate
+
+        changed_files = self._get_changed_files_for_gate()
+        gate_result = run_quality_gate(
+            changed_files=changed_files,
+            project_root=self.project_path,
+            hook_command=qg_config.hook_command,
+            skip_if_no_config=qg_config.skip_if_no_config,
+            timeout_seconds=qg_config.timeout_seconds,
+        )
+
+        if gate_result.skipped:
+            logger.info(
+                "Quality gate skipped for %s: %s (duration=%dms)",
+                self.phase_name,
+                gate_result.skip_reason,
+                gate_result.duration_ms,
+            )
+            return None
+
+        if not gate_result.passed:
+            logger.error(
+                "Quality gate FAILED for %s after %dms. Failed hooks: %s\n%s",
+                self.phase_name,
+                gate_result.duration_ms,
+                gate_result.failed_hooks,
+                gate_result.output,
+            )
+            hook_list = ", ".join(gate_result.failed_hooks) or "unknown"
+            return PhaseResult.fail(
+                f"Quality gate failed: {len(gate_result.failed_hooks)} hooks failed "
+                f"({hook_list}). See logs for details."
+            )
+
+        logger.info(
+            "Quality gate passed for %s in %dms",
+            self.phase_name,
+            gate_result.duration_ms,
+        )
+        return None
 
     def execute(self, state: State) -> PhaseResult:
         """Execute the handler for the given state.
@@ -944,7 +1062,14 @@ class BaseHandler(ABC):
                     outputs=fail_outputs,
                 )
             else:
-                # Success - return output
+                # Success path — but first run the quality gate (if
+                # enabled for this phase) BEFORE declaring success. The
+                # gate hard-fails the phase if any pre-commit hook fails;
+                # there is no LLM fix-retry. See D.7.
+                gate_failure = self._run_quality_gate_check()
+                if gate_failure is not None:
+                    return gate_failure
+
                 outputs: dict[str, Any] = {
                     "response": result.stdout,
                     "model": result.model,

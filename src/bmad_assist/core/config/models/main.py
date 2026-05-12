@@ -24,6 +24,7 @@ from bmad_assist.core.config.models.providers import (
     ProviderConfig,
     parse_phase_models,
 )
+from bmad_assist.core.config.models.quality_gate import QualityGateConfig
 from bmad_assist.deep_verify.config import DeepVerifyConfig
 from bmad_assist.notifications.config import NotificationConfig
 from bmad_assist.security.config import SecurityAgentConfig
@@ -149,6 +150,14 @@ class Config(BaseModel):
     tool_guard: ToolGuardConfig = Field(
         default_factory=ToolGuardConfig,
         description="ToolCallGuard watchdog thresholds (optional)",
+    )
+    quality_gate: QualityGateConfig | None = Field(
+        default=None,
+        description=(
+            "Quality-gate phase-success configuration. When None, defaults "
+            "are used (gate enabled, skip_if_no_config=True — safe no-op for "
+            "projects without pre-commit)."
+        ),
     )
 
     @model_validator(mode="before")

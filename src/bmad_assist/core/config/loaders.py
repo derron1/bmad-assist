@@ -16,6 +16,7 @@ from bmad_assist.core.config.constants import (
 )
 from bmad_assist.core.config.env import load_env_file
 from bmad_assist.core.config.models.main import Config
+from bmad_assist.core.config.models.quality_gate import QualityGateConfig
 from bmad_assist.core.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -547,6 +548,24 @@ def get_phase_retries(config: Config, phase: str) -> int | None:
     if config.timeouts is not None:
         return config.timeouts.get_retries(phase)
     return None  # No retry by default for legacy config
+
+
+def get_quality_gate_config(config: Config) -> QualityGateConfig:
+    """Get quality gate config, returning defaults if unset.
+
+    When ``config.quality_gate`` is None (the default — config files without
+    a ``quality_gate:`` block), a fresh ``QualityGateConfig()`` is returned.
+    Its defaults are designed to be a safe no-op for projects without a
+    ``.pre-commit-config.yaml`` (``skip_if_no_config=True``).
+
+    Args:
+        config: Application configuration.
+
+    Returns:
+        The configured QualityGateConfig, or defaults if unset.
+
+    """
+    return config.quality_gate or QualityGateConfig()
 
 
 def reload_config(project_path: Path | None = None) -> Config:

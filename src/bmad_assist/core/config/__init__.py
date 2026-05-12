@@ -39,6 +39,7 @@ from bmad_assist.core.config.loaders import (
     get_config,
     get_phase_retries,
     get_phase_timeout,
+    get_quality_gate_config,
     load_config,
     load_config_with_project,
     load_global_config,
@@ -74,6 +75,7 @@ from bmad_assist.core.config.models import (
     PromptBudgetConfig,
     ProviderConfig,
     QAConfig,
+    QualityGateConfig,
     SourceContextBudgetsConfig,
     SourceContextConfig,
     SourceContextExtractionConfig,
@@ -157,6 +159,7 @@ __all__ = [
     "PlaywrightServerConfig",
     "PlaywrightConfig",
     "QAConfig",
+    "QualityGateConfig",
     # Models - Loop
     "LoopConfig",
     "SprintConfig",
@@ -173,6 +176,7 @@ __all__ = [
     "reload_config",
     "get_phase_timeout",
     "get_phase_retries",
+    "get_quality_gate_config",
     "_reset_config",
     # Loop Config
     "get_loop_config",
