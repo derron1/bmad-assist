@@ -416,26 +416,37 @@ remaining_high: {N}
 <step n="6.5" goal="Append Review Findings section to story file">
   <critical>This section enables `dev_story` to detect that a code review has occurred and extract action items. APPEND a new `### Review Findings` heading at the end of the `## Tasks / Subtasks` section — do NOT replace existing content. This matches the upstream BMAD `bmad-code-review` step-04-present convention.</critical>
 
-  <action>Determine the evidence verdict from your analysis:
-    - **REJECT** when remaining Critical or High issues exist.
-    - **PASS** when all Critical and High verified issues are fixed.
-    - **UNCERTAIN** when low-severity issues dominate or evidence is ambiguous.
+  <critical>DEFER EXCLUSION: `[Review][Defer]` items are verified-but-not-remediable in this story (research-blocked, out-of-scope, pre-existing). They MUST NOT drive the Outcome — otherwise any story with a deferred CRITICAL can never reach `Approved` regardless of how many real items dev_story fixes. Outcome is determined from NON-DEFERRED remaining counts only. Deferred counts are emitted separately as informational fields.</critical>
+
+  <action>Compute the four count fields from your analysis above:
+    - `remaining_critical` = count of CRITICAL findings that are NEITHER fixed NOR deferred (i.e. unchecked `[ ] [Review][Patch]` / `[ ] [Review][Decision]` items at CRITICAL severity).
+    - `remaining_high` = count of HIGH findings that are NEITHER fixed NOR deferred.
+    - `deferred_critical` = count of CRITICAL findings tagged `[Review][Defer]` in this synthesis.
+    - `deferred_high` = count of HIGH findings tagged `[Review][Defer]` in this synthesis.
   </action>
-  <action>Map verdict to outcome:
-    - PASS → "Approved"
-    - REJECT → "Changes Requested"
-    - UNCERTAIN → "Approved with Reservations"
+
+  <action>Determine Outcome and resolution using these rules, applied in order — first match wins:
+    1. **Safety cap (HALT for human review):** If `deferred_critical > 3` OR `deferred_high > 5` → Outcome=Blocked, resolution=halt. The volume of deferrals indicates the story scope is wrong; escalate to a human before continuing.
+    2. **Clean pass:** Else if `remaining_critical == 0` AND `remaining_high == 0` AND no remaining MEDIUM/LOW issues → Outcome=Approved, resolution=resolved.
+    3. **Approved with reservations:** Else if `remaining_critical == 0` AND `remaining_high == 0` (only LOW/MEDIUM remain) → Outcome=Approved with Reservations, resolution=resolved.
+    4. **Rework required:** Else (`remaining_critical > 0` OR `remaining_high > 0`) → Outcome=Changes Requested, resolution=rework.
   </action>
-  <action>Append the following block to the story file at the end of the `## Tasks / Subtasks` section. Each rework round adds a new `### Review Findings` heading; previous rounds remain in place:
+
+  <action>Append the following block to the story file at the end of the `## Tasks / Subtasks` section. Each rework round adds a new `### Review Findings` heading; previous rounds remain in place. Emit ALL fields in this exact order — do NOT omit `Deferred (Critical)` / `Deferred (High)` even when their values are 0:
     ```
     ### Review Findings
     - **Date:** {current_date}
     - **Reviewer:** AI Code Review Synthesis
-    - **Outcome:** {Approved|Changes Requested|Approved with Reservations}
+    - **Outcome:** {Approved|Changes Requested|Approved with Reservations|Blocked}
     - **Issues Found:** {total_verified_issues}
     - **Issues Fixed:** {fixes_applied_count}
+    - **Deferred (Critical):** {deferred_critical}
+    - **Deferred (High):** {deferred_high}
+    - **Remaining Critical (non-deferred):** {remaining_critical}
+    - **Remaining High (non-deferred):** {remaining_high}
     - **Action Items Created:** {remaining_unfixed_count}
     ```
+    Note: `Action Items Created` is the TOTAL remaining list including deferred items (dev_story consumes from this list). It is NOT used for the Outcome decision — that comes from the non-deferred remaining counts only.
   </action>
 
   <critical>When the verdict is REJECT, you MUST create Review Follow-ups tasks. The "Action Items Created" count MUST equal the number of unchecked `[ ] [Review][Patch]` and `[ ] [Review][Decision]` tasks emitted below. Do NOT skip this step. Do NOT claim all issues are fixed if you reported deferred items above.</critical>

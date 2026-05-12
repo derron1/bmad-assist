@@ -16,6 +16,26 @@ Verdict thresholds (non-overlapping):
     - score > 12   → REJECT (too many high-severity findings)
     - -3 ≤ score ≤ 12 → UNCERTAIN (needs human review)
     - score < -3   → ACCEPT (clean enough)
+
+D.3 (defer-aware verdict, 2026-05) — design note
+------------------------------------------------
+Scoring is intentionally pure math: ``calculate_score`` and
+``determine_verdict`` operate on the raw reviewer findings produced
+pre-synthesis, and the CRITICAL hard-block still forces ``REJECT`` here.
+
+Defer marking happens later, at synthesis time, where the
+``[Review][Defer]`` taxonomy is applied to verified-but-not-remediable
+items.  By the time we know which findings are deferred, the scoring layer
+has already produced its verdict.
+
+The defer-aware override therefore lives one layer up, in
+``bmad_assist.core.loop.synthesis_contract`` — see
+``_decision_from_parsed``.  When the synthesizer reports the new
+``deferred_critical`` / ``deferred_high`` / ``remaining_critical`` /
+``remaining_high`` fields with no real remaining items, the contract layer
+overrides this module's score-based REJECT and returns
+``CanonicalResolution.RESOLVED``.  scoring.py stays as pure math; policy
+about defer-aware acceptance is the contract layer's job.
 """
 
 from __future__ import annotations

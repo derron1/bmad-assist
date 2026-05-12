@@ -95,6 +95,7 @@ class SynthesisDecision:
         failure_class: How to respond if something went wrong (None = clean run).
         raw_parsed: Raw parsed fields from extraction, for logging/debugging.
         evidence_summary: Human-readable explanation of how the decision was made.
+
     """
 
     resolution: CanonicalResolution
@@ -204,6 +205,13 @@ _REWORK_VERDICTS = frozenset({"REJECT", "MAJOR_REWORK"})
 # Verdicts where we cannot trust evidence as a standalone signal.
 _UNCERTAIN_VERDICTS = frozenset({"UNCERTAIN", "UNKNOWN"})
 
+# Safety caps for the defer-aware resolution override (D.3, 2026-05).
+# When the synthesizer reports unusually large deferral counts the story scope
+# is almost certainly wrong; halt for human review instead of letting the
+# defer-aware override silently accept a defer-everything outcome.
+_DEFER_SAFETY_CAP_CRITICAL = 3
+_DEFER_SAFETY_CAP_HIGH = 5
+
 
 def _has_sufficient_evidence(
     evidence_verdict: str,
@@ -255,6 +263,7 @@ def make_synthesis_decision(
 
     Returns:
         SynthesisDecision with resolution, quality, failure_class, and summary.
+
     """
     if parsed is not None and quality != ExtractionQuality.FAILED:
         return _decision_from_parsed(parsed, quality, evidence_verdict, evidence_score_data)
@@ -304,6 +313,90 @@ def _decision_from_parsed(
         )
 
     # resolution_str == "resolved"
+
+    # ── D.3 (2026-05) defer-aware override ────────────────────────────────
+    # The synthesizer can classify verified-but-not-remediable findings as
+    # `[Review][Defer]` and exclude them from `remaining_*`.  When the new
+    # defer fields are present we apply three rules in order:
+    #
+    #   1. Safety cap → halt when deferred_critical > 3 or deferred_high > 5
+    #      (overrides LLM resolved — the volume signals a scoping problem).
+    #   2. Defer-aware override → resolved when remaining_* == 0 and the
+    #      evidence verdict was REJECT/MAJOR_REWORK driven solely by items
+    #      the synthesis classified as deferred.  This overrides the score
+    #      layer's CRITICAL hard-block (scoring.py stays pure math; defer
+    #      policy lives here — see module docstring).
+    #   3. Otherwise fall through to the legacy accounting cross-validation.
+    #
+    # Backwards compatibility: when deferred_critical and deferred_high are
+    # both absent (legacy synthesizer output) the safety cap and the override
+    # are skipped — the legacy `fixed + dismissed` accounting runs unchanged.
+    defer_critical = parsed.get("deferred_critical")
+    defer_high = parsed.get("deferred_high")
+    has_defer_fields = isinstance(defer_critical, int) or isinstance(defer_high, int)
+
+    if has_defer_fields:
+        dc = defer_critical if isinstance(defer_critical, int) else 0
+        dh = defer_high if isinstance(defer_high, int) else 0
+
+        # Rule 1 — safety cap: too many deferrals indicates scope drift.
+        if dc > _DEFER_SAFETY_CAP_CRITICAL or dh > _DEFER_SAFETY_CAP_HIGH:
+            logger.warning(
+                "Defer-aware safety cap tripped: deferred_critical=%d "
+                "(cap=%d), deferred_high=%d (cap=%d). Halting for human "
+                "review even though LLM reported resolved.",
+                dc,
+                _DEFER_SAFETY_CAP_CRITICAL,
+                dh,
+                _DEFER_SAFETY_CAP_HIGH,
+            )
+            return SynthesisDecision(
+                resolution=CanonicalResolution.HALT,
+                extraction_quality=quality,
+                failure_class=FailureClass.HALT,
+                raw_parsed=parsed,
+                evidence_summary=(
+                    f"Deferred-item safety cap tripped (deferred_critical={dc} "
+                    f"> {_DEFER_SAFETY_CAP_CRITICAL} or deferred_high={dh} > "
+                    f"{_DEFER_SAFETY_CAP_HIGH}); halting for human review"
+                ),
+            )
+
+        # Rule 2 — defer-aware override.  Trust LLM-resolved when no real
+        # remaining items and the evidence REJECT was attributable to defer.
+        rc = parsed.get("remaining_critical", 0)
+        rh = parsed.get("remaining_high", 0)
+        if (
+            isinstance(rc, int)
+            and isinstance(rh, int)
+            and rc == 0
+            and rh == 0
+            and (dc > 0 or dh > 0)
+            and evidence_verdict in _REWORK_VERDICTS
+        ):
+            logger.info(
+                "Defer-aware override: LLM resolved with remaining_critical=0 "
+                "remaining_high=0, deferred_critical=%d deferred_high=%d, "
+                "evidence_verdict=%s. Accepting resolved (score-layer REJECT "
+                "treated as PASS for defer-only findings).",
+                dc,
+                dh,
+                evidence_verdict,
+            )
+            return SynthesisDecision(
+                resolution=CanonicalResolution.RESOLVED,
+                extraction_quality=quality,
+                failure_class=None,
+                raw_parsed=parsed,
+                evidence_summary=(
+                    f"Defer-aware override: LLM reported resolved with no "
+                    f"non-deferred remaining items (deferred_critical={dc}, "
+                    f"deferred_high={dh}); accepted despite "
+                    f"evidence_verdict={evidence_verdict}"
+                ),
+            )
+        # Rule 3 falls through to the legacy accounting block below.
+
     # Cross-validate: if evidence shows pre-synthesis issues existed but the LLM
     # cannot account for their disposition, that is suspicious.
     #
@@ -454,6 +547,7 @@ class StoryPatch:
             used to locate the section in the story file.
         content: Complete replacement content for that section, including
             the heading line itself.
+
     """
 
     heading: str
@@ -478,6 +572,7 @@ def extract_story_patches(stdout: str) -> list[StoryPatch]:
     Returns:
         List of StoryPatch instances in order of appearance.
         Returns [] if no patch blocks are found or on parse error.
+
     """
     patches: list[StoryPatch] = []
     for match in _PATCH_PATTERN.finditer(stdout):

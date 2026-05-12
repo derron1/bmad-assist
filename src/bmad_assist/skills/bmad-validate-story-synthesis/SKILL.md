@@ -143,20 +143,25 @@ Activation is complete. Begin the workflow below.
 
 <step n="3.5" goal="Compute contract values before writing output">
   <critical>Compute these counts BEFORE generating any output. They will be emitted FIRST in your output, before any prose.</critical>
+  <critical>DEFER EXCLUSION: A verified finding may be tagged `[Review][Defer]` when it is research-blocked, out-of-scope, or pre-existing — i.e. verified but NOT remediable in this story via a STORY_PATCH. Deferred items MUST NOT drive resolution — otherwise any story with a research-blocked CRITICAL can never reach `resolved` regardless of how many real items get patched. Resolution is determined from NON-DEFERRED remaining counts only. Deferred counts are emitted separately as informational fields.</critical>
   <action>From your verified findings:
     - `verified_critical` — Critical issues you VERIFIED (not dismissed) across validators.
     - `verified_high` — High issues you VERIFIED.
     - `fixed_critical` — Critical issues addressed by a STORY_PATCH in this round.
     - `fixed_high` — High issues addressed by a STORY_PATCH in this round.
-    - `remaining_critical` = `verified_critical - fixed_critical` (must be ≥ 0).
-    - `remaining_high` = `verified_high - fixed_high` (must be ≥ 0).
-    - `resolution`:
-      - `resolved` when `remaining_critical == 0 AND remaining_high == 0`
-      - `rework` when any Critical or High remains unaddressed
-      - `halt` when you cannot reliably determine the validation outcome
+    - `deferred_critical` — Critical issues classified as `[Review][Defer]` (research-blocked, out-of-scope, or pre-existing). A deferred item is verified but NOT remediable in this story.
+    - `deferred_high` — High issues classified as `[Review][Defer]`.
+    - `remaining_critical` = `verified_critical - fixed_critical - deferred_critical` (must be ≥ 0). NON-DEFERRED remaining only.
+    - `remaining_high` = `verified_high - fixed_high - deferred_high` (must be ≥ 0). NON-DEFERRED remaining only.
+    - `resolution` — apply these rules in order, first match wins:
+      1. **Safety cap (`halt` for human review):** If `deferred_critical > 3` OR `deferred_high > 5` → `halt`. Volume of deferrals indicates story scope is wrong; escalate.
+      2. `resolved` when `remaining_critical == 0 AND remaining_high == 0`
+      3. `rework` when `remaining_critical > 0 OR remaining_high > 0`
+      4. `halt` when you cannot reliably determine the validation outcome
   </action>
   <critical>Contract key rules — copy these EXACTLY:
-    - Field names: `resolution`, `verified_critical`, `verified_high`, `fixed_critical`, `fixed_high`, `remaining_critical`, `remaining_high`. Do NOT rename. Do NOT add extras (no `story_id` / `story_key` / `validators_count`).
+    - Field names: `resolution`, `verified_critical`, `verified_high`, `fixed_critical`, `fixed_high`, `deferred_critical`, `deferred_high`, `remaining_critical`, `remaining_high`. Do NOT rename. Do NOT add extras (no `story_id` / `story_key` / `validators_count`).
+    - When you have no deferred items, emit `deferred_critical: 0` and `deferred_high: 0` explicitly — do not skip the lines.
     - METRICS_JSON top-level keys must be exactly `quality` and `consensus` — no other keys.
     - METRICS_JSON must NOT be wrapped in fenced code blocks (no ` ```json `).
     - When uncertain, use 0 for counts and `halt` for resolution — never invent fields.
@@ -176,6 +181,8 @@ verified_critical: {N}
 verified_high: {N}
 fixed_critical: {N}
 fixed_high: {N}
+deferred_critical: {N}
+deferred_high: {N}
 remaining_critical: {N}
 remaining_high: {N}
 &lt;!-- VALIDATION_CONTRACT_END --&gt;
@@ -262,6 +269,8 @@ verified_critical: 1
 verified_high: 2
 fixed_critical: 1
 fixed_high: 1
+deferred_critical: 0
+deferred_high: 0
 remaining_critical: 0
 remaining_high: 1
 &lt;!-- VALIDATION_CONTRACT_END --&gt;
@@ -296,9 +305,10 @@ INVALID metrics keys: any top-level key other than "quality" and "consensus"
 
 <step n="5" goal="Final verification">
   <action>Re-read your output and confirm:
-    - The contract block is present and uses the exact key names above.
+    - The contract block is present and uses the exact key names above (including `deferred_critical` and `deferred_high`).
     - The METRICS_JSON block is valid JSON with only `quality` and `consensus` at the top level.
-    - Every Critical and High verified issue is either fixed (counted in `fixed_*`) or remaining (counted in `remaining_*`); the arithmetic balances.
+    - Every Critical and High verified issue is either fixed (counted in `fixed_*`), deferred (counted in `deferred_*`), or remaining (counted in `remaining_*`); the arithmetic balances: `verified_* == fixed_* + deferred_* + remaining_*`.
+    - `deferred_critical` and `deferred_high` are emitted explicitly (as `0` when no defers).
     - Each STORY_PATCH heading appears at most once.
     - The synthesis report sits between `VALIDATION_SYNTHESIS_START` / `VALIDATION_SYNTHESIS_END` markers.
   </action>

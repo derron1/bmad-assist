@@ -41,8 +41,12 @@ from pydantic import ValidationError
 from bmad_assist.benchmarking.schema import ConsensusData, QualitySignals
 
 __all__ = [
+    "ReviewFindings",
     "SynthesisMetrics",
+    "count_review_followups_by_severity",
+    "cross_check_defer_counts",
     "extract_metrics_via_llm",
+    "extract_review_findings",
     "extract_synthesis_metrics",
 ]
 
@@ -162,8 +166,7 @@ def _try_post_contract_fenced_json(raw_output: str) -> dict | None:
         # Strict key check: exactly {"quality", "consensus"}
         if set(data.keys()) != _ALLOWED_METRICS_KEYS:
             logger.info(
-                "Layer 1.5: fenced JSON after contract end rejected — "
-                "unexpected keys: %s",
+                "Layer 1.5: fenced JSON after contract end rejected — unexpected keys: %s",
                 sorted(set(data.keys()) - _ALLOWED_METRICS_KEYS),
             )
             continue
@@ -244,6 +247,7 @@ def _finalize_result(
 
     Returns:
         SynthesisMetrics or None if both sections are still None.
+
     """
     if quality is None and consensus is None:
         return None
@@ -391,8 +395,7 @@ def extract_metrics_via_llm(
             recovered_consensus = need_consensus and consensus is not None
             if not recovered_quality and not recovered_consensus:
                 last_error = (
-                    "LLM response did not recover any missing section "
-                    f"(needed: {sections_needed})"
+                    f"LLM response did not recover any missing section (needed: {sections_needed})"
                 )
                 continue
 
@@ -412,14 +415,10 @@ def extract_metrics_via_llm(
 
         except json.JSONDecodeError as e:
             last_error = f"Invalid JSON: {e}"
-            logger.warning(
-                "LLM metrics extraction attempt %d failed: %s", attempt + 1, last_error
-            )
+            logger.warning("LLM metrics extraction attempt %d failed: %s", attempt + 1, last_error)
         except ValidationError as e:
             last_error = f"Schema validation: {e}"
-            logger.warning(
-                "LLM metrics extraction attempt %d failed: %s", attempt + 1, last_error
-            )
+            logger.warning("LLM metrics extraction attempt %d failed: %s", attempt + 1, last_error)
         except Exception as e:
             last_error = f"Unexpected error: {e}"
             logger.warning(
@@ -472,9 +471,7 @@ def extract_synthesis_metrics(
     # ── Layer 1: Marker-based extraction ──────────────────────────────
     start_idx = raw_output.find(_METRICS_START)
     end_idx = (
-        raw_output.find(_METRICS_END, start_idx + len(_METRICS_START))
-        if start_idx != -1
-        else -1
+        raw_output.find(_METRICS_END, start_idx + len(_METRICS_START)) if start_idx != -1 else -1
     )
 
     data: dict | None = None
@@ -588,13 +585,293 @@ def extract_synthesis_metrics(
 
     if data is None:
         logger.warning(
-            "Metrics extraction failed — no JSON found and all fallbacks exhausted "
-            "(len=%d): %s...",
+            "Metrics extraction failed — no JSON found and all fallbacks exhausted (len=%d): %s...",
             len(raw_output),
             excerpt,
         )
     else:
-        logger.warning(
-            "Both quality and consensus schema validation failed for synthesis output"
-        )
+        logger.warning("Both quality and consensus schema validation failed for synthesis output")
     return None
+
+
+# ---------------------------------------------------------------------------
+# Review Findings extraction + defer-aware cross-check (D.3, 2026-05)
+# ---------------------------------------------------------------------------
+#
+# The code-review-synthesis SKILL (step 6.5) appends a `### Review Findings`
+# section to the story file with defer-aware accounting:
+#
+#     ### Review Findings
+#     - **Date:** 2026-05-12
+#     - **Reviewer:** AI Code Review Synthesis
+#     - **Outcome:** Approved with Reservations
+#     - **Issues Found:** 5
+#     - **Issues Fixed:** 3
+#     - **Deferred (Critical):** 1
+#     - **Deferred (High):** 0
+#     - **Remaining Critical (non-deferred):** 0
+#     - **Remaining High (non-deferred):** 0
+#     - **Action Items Created:** 2
+#
+# These counts pair with the machine-readable SYNTHESIS_RESOLUTION block, but
+# also stand alone for downstream consumers that read the story file directly.
+# Pre-D.3 outputs lack the four `Deferred (...)` / `Remaining ... (non-deferred)`
+# bullets entirely; ``extract_review_findings`` reports them as ``None`` so
+# callers can detect the legacy schema and fall through to the old code path.
+
+# Each bullet is a Markdown list item with a bolded label.  We accept any of:
+#   - **Label:** value     (colon INSIDE the bold — the synthesizer's format)
+#   - **Label**: value     (colon outside the bold)
+#   - **Label** value      (no colon at all — defensive)
+# Trailing colon on the label is stripped before normalisation.  The label
+# pattern is non-greedy and stops at the closing ``**`` regardless of any
+# colons inside.
+_REVIEW_FINDINGS_HEADING_RE = re.compile(
+    r"^#{2,4}\s+Review\s+Findings\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_REVIEW_FIELD_RE = re.compile(
+    r"^\s*[-*]\s*\*\*\s*(?P<label>[^*\n]+?)\s*\*\*\s*:?\s*(?P<value>.+?)\s*$",
+    re.MULTILINE,
+)
+# Stop scanning when we hit the next heading (any level).
+_NEXT_HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+
+# Unchecked Review Follow-up tasks. `[ ]` only (checked `[x]` is closed).
+_UNCHECKED_REVIEW_TASK_RE = re.compile(
+    r"^[-*]\s*\[\s\]\s*"
+    r"\[Review\]\[(?P<marker>Patch|Decision)\]\s+"
+    r"(?P<body>[^\n]+)$",
+    re.MULTILINE,
+)
+# Inline severity prefix in the post-em-dash detail (e.g. "HIGH: ..."
+# or "CRITICAL: ..."). We also accept HIGH→CRITICAL alias mapping.
+_TASK_INLINE_SEVERITY_RE = re.compile(
+    r"[—–-]+\s*(?P<sev>CRITICAL|HIGH|MEDIUM|LOW|IMPORTANT|MINOR)\s*:",
+    re.IGNORECASE,
+)
+
+# Map free-form severity tokens to (critical|high|medium|low) buckets used by
+# the resolution accounting.  Synthesis SKILL.md emits HIGH for the IMPORTANT
+# bucket and CRITICAL for the top bucket — keep both alive.
+_SEVERITY_BUCKET: dict[str, str] = {
+    "CRITICAL": "critical",
+    "HIGH": "high",
+    "IMPORTANT": "high",
+    "MEDIUM": "medium",
+    "LOW": "low",
+    "MINOR": "low",
+}
+
+
+@dataclass(frozen=True)
+class ReviewFindings:
+    """Counts extracted from the `### Review Findings` markdown block.
+
+    All four defer-related fields are ``int | None``: ``None`` indicates the
+    field was absent from the report (pre-D.3 schema) and the caller should
+    fall back to the legacy code path.  ``issues_found``, ``issues_fixed``,
+    and ``action_items_created`` are informational only.
+
+    Attributes:
+        outcome: Free-form Outcome string (e.g. ``"Approved"``,
+            ``"Changes Requested"``).
+        issues_found: Total verified issues across reviewers (informational).
+        issues_fixed: Fixes applied this round (informational).
+        deferred_critical: CRITICAL findings tagged ``[Review][Defer]``.
+            ``None`` when the field is missing.
+        deferred_high: HIGH findings tagged ``[Review][Defer]``.
+        remaining_critical: CRITICAL findings still open and NOT deferred.
+        remaining_high: HIGH findings still open and NOT deferred.
+        action_items_created: Total open follow-up items written to the story
+            (informational; includes deferred entries since dev_story reads
+            the same list).
+
+    """
+
+    outcome: str | None
+    issues_found: int | None
+    issues_fixed: int | None
+    deferred_critical: int | None
+    deferred_high: int | None
+    remaining_critical: int | None
+    remaining_high: int | None
+    action_items_created: int | None
+
+
+def _parse_int(value: str) -> int | None:
+    """Return ``int(value)`` or None when the token is not a non-negative int."""
+    value = value.strip()
+    # Strip surrounding bold/emphasis if the synthesizer included `**N**`.
+    value = value.strip("*").strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    if parsed < 0:
+        return None
+    return parsed
+
+
+def extract_review_findings(report: str) -> ReviewFindings | None:
+    """Extract the `### Review Findings` block from a synthesis report.
+
+    Scans for the most recent ``### Review Findings`` heading (rework rounds
+    append new blocks — the last one is authoritative).  Reads bold-labelled
+    bullets until the next heading and returns a ``ReviewFindings`` with the
+    parsed values.  Missing fields are returned as ``None`` so callers can
+    distinguish a legacy report (no defer fields) from an explicit zero.
+
+    Returns ``None`` only when no ``### Review Findings`` heading is present at
+    all.
+
+    Args:
+        report: Full synthesis-report text (markdown).
+
+    Returns:
+        ReviewFindings or None.
+
+    """
+    headings = list(_REVIEW_FINDINGS_HEADING_RE.finditer(report))
+    if not headings:
+        return None
+
+    # Last heading wins — synthesis appends a new block per rework round.
+    last = headings[-1]
+    block_start = last.end()
+    next_heading = _NEXT_HEADING_RE.search(report, block_start)
+    block_end = next_heading.start() if next_heading else len(report)
+    block = report[block_start:block_end]
+
+    fields: dict[str, str] = {}
+    for m in _REVIEW_FIELD_RE.finditer(block):
+        label = m.group("label").strip().rstrip(":").strip().lower()
+        fields[label] = m.group("value").strip()
+
+    def _get(*labels: str) -> str | None:
+        for label in labels:
+            if label in fields:
+                return fields[label]
+        return None
+
+    def _get_int(*labels: str) -> int | None:
+        raw = _get(*labels)
+        if raw is None:
+            return None
+        return _parse_int(raw)
+
+    outcome = _get("outcome")
+
+    return ReviewFindings(
+        outcome=outcome,
+        issues_found=_get_int("issues found"),
+        issues_fixed=_get_int("issues fixed"),
+        deferred_critical=_get_int("deferred (critical)", "deferred critical"),
+        deferred_high=_get_int("deferred (high)", "deferred high"),
+        remaining_critical=_get_int("remaining critical (non-deferred)", "remaining critical"),
+        remaining_high=_get_int("remaining high (non-deferred)", "remaining high"),
+        action_items_created=_get_int("action items created"),
+    )
+
+
+def count_review_followups_by_severity(report: str) -> dict[str, int]:
+    """Count unchecked ``[Review][Patch]``/``[Review][Decision]`` task lines.
+
+    Buckets each unchecked item by the severity prefix in its post-em-dash
+    detail (``CRITICAL`` / ``HIGH``-or-``IMPORTANT`` / ``MEDIUM`` / ``LOW``).
+    Items without an inline severity hint fall into ``"unknown"`` so callers
+    can detect missing-severity bullets without silently miscounting.
+
+    ``[Review][Defer]`` is excluded by construction — deferred items are
+    closed for the purposes of this story's loop, regardless of checkbox
+    state.
+
+    Args:
+        report: Full synthesis-report text (markdown).
+
+    Returns:
+        Dict with non-negative counts under keys ``critical``, ``high``,
+        ``medium``, ``low``, ``unknown``.  Always returns all five keys.
+
+    """
+    counts: dict[str, int] = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "unknown": 0,
+    }
+    for match in _UNCHECKED_REVIEW_TASK_RE.finditer(report):
+        body = match.group("body")
+        sev_match = _TASK_INLINE_SEVERITY_RE.search(body)
+        if sev_match is None:
+            counts["unknown"] += 1
+            continue
+        bucket = _SEVERITY_BUCKET.get(sev_match.group("sev").upper())
+        if bucket is None:
+            counts["unknown"] += 1
+        else:
+            counts[bucket] += 1
+    return counts
+
+
+def cross_check_defer_counts(
+    findings: ReviewFindings | None,
+    report: str,
+) -> tuple[int | None, int | None]:
+    """Reconcile LLM-reported remaining_* counts against parser-observed tasks.
+
+    The synthesizer emits ``Remaining Critical (non-deferred)`` and
+    ``Remaining High (non-deferred)`` in the Review Findings block.  This
+    function compares those numbers against the parser's own count of unchecked
+    ``[Review][Patch]`` / ``[Review][Decision]`` bullets in the
+    ``#### Review Follow-ups (AI)`` subsection.
+
+    When the LLM-reported counts match the parser-observed counts we trust the
+    LLM.  When they disagree we log a warning and return the parser's counts
+    (the safer choice — a misclaimed "0 remaining" would otherwise let a
+    real CRITICAL slip through).
+
+    When the LLM did not emit the new fields (``findings`` is None or its
+    ``remaining_*`` are None), the function returns ``(None, None)`` — caller
+    falls back to the legacy code path.
+
+    Args:
+        findings: Output of :func:`extract_review_findings` (may be None).
+        report: Full synthesis-report text (used for parser-observed counts).
+
+    Returns:
+        Tuple ``(remaining_critical, remaining_high)``.  Each element is an
+        ``int`` when defer-aware accounting is active, or ``None`` when the
+        legacy fallback should be used.
+
+    """
+    if findings is None:
+        return None, None
+    if findings.remaining_critical is None or findings.remaining_high is None:
+        return None, None
+
+    observed = count_review_followups_by_severity(report)
+    obs_critical = observed["critical"]
+    # HIGH-equivalent: HIGH and IMPORTANT share a bucket in synthesis output.
+    obs_high = observed["high"]
+
+    llm_critical = findings.remaining_critical
+    llm_high = findings.remaining_high
+
+    if obs_critical == llm_critical and obs_high == llm_high:
+        return llm_critical, llm_high
+
+    logger.warning(
+        "Review-findings cross-check mismatch: LLM reported remaining "
+        "critical=%d high=%d but parser observed critical=%d high=%d "
+        "(unknown=%d). Using parser-observed counts.",
+        llm_critical,
+        llm_high,
+        obs_critical,
+        obs_high,
+        observed["unknown"],
+    )
+    return obs_critical, obs_high

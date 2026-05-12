@@ -640,11 +640,7 @@ class TestNoBackwardScan:
         """Bare JSON near end without markers is NOT extracted (backward scan removed)."""
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
-        output = (
-            "## Synthesis Summary\n\n"
-            "Review complete.\n\n"
-            f"{_VALID_METRICS_JSON}\n"
-        )
+        output = f"## Synthesis Summary\n\nReview complete.\n\n{_VALID_METRICS_JSON}\n"
         # Without markers and without llm_fallback, this should fall through
         # to markdown fallback (which won't find enough headings)
         result = extract_synthesis_metrics(output)
@@ -1087,9 +1083,7 @@ class TestExtractSynthesisMetricsLlmFallback:
         mock_get.assert_not_called()
         assert result is None
 
-    def test_llm_fallback_missing_config_falls_through(
-        self, caplog: "LogCaptureFixture"
-    ) -> None:
+    def test_llm_fallback_missing_config_falls_through(self, caplog: "LogCaptureFixture") -> None:
         """When provider_name/model is None, logs warning and falls through."""
         from bmad_assist.validation.synthesis_parser import extract_synthesis_metrics
 
@@ -1596,11 +1590,7 @@ class TestLayer15PostContractFencedJson:
         )
 
         gap = "x" * 550
-        output = (
-            "<!-- VALIDATION_CONTRACT_END -->\n"
-            f"{gap}\n"
-            f"```json\n{_VALID_METRICS_JSON}\n```\n"
-        )
+        output = f"<!-- VALIDATION_CONTRACT_END -->\n{gap}\n```json\n{_VALID_METRICS_JSON}\n```\n"
         result = _try_post_contract_fenced_json(output)
         assert result is None
 
@@ -1756,6 +1746,331 @@ class TestDeferredFieldsBackwardCompat:
         )
         result = parse_resolution_block(block)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# D.3 (2026-05) — Review Findings markdown extraction
+# ---------------------------------------------------------------------------
+
+
+_FULL_REVIEW_FINDINGS_BLOCK = """## Tasks / Subtasks
+
+### Review Findings
+- **Date:** 2026-05-12
+- **Reviewer:** AI Code Review Synthesis
+- **Outcome:** Approved with Reservations
+- **Issues Found:** 5
+- **Issues Fixed:** 3
+- **Deferred (Critical):** 1
+- **Deferred (High):** 0
+- **Remaining Critical (non-deferred):** 0
+- **Remaining High (non-deferred):** 0
+- **Action Items Created:** 2
+
+#### Review Follow-ups (AI)
+- [ ] [Review][Patch] Activate ATDD tests [tests/foo.spec.ts] — HIGH: convert all test.fixme() to test()
+- [x] [Review][Defer] Permutation FST [src/fst.py:42] — deferred from AI review (methodology change)
+
+## Dev Agent Record
+"""
+
+
+_LEGACY_REVIEW_FINDINGS_BLOCK = """## Tasks / Subtasks
+
+### Review Findings
+- **Date:** 2026-04-30
+- **Reviewer:** AI Code Review Synthesis
+- **Outcome:** Approved
+- **Issues Found:** 2
+- **Issues Fixed:** 2
+- **Action Items Created:** 0
+
+## Dev Agent Record
+"""
+
+
+class TestExtractReviewFindings:
+    """D.3 — parsing the appended ``### Review Findings`` block."""
+
+    def test_extracts_all_fields_from_new_format(self) -> None:
+        """New-format block populates every field on ``ReviewFindings``."""
+        from bmad_assist.validation.synthesis_parser import extract_review_findings
+
+        result = extract_review_findings(_FULL_REVIEW_FINDINGS_BLOCK)
+        assert result is not None
+        assert result.outcome == "Approved with Reservations"
+        assert result.issues_found == 5
+        assert result.issues_fixed == 3
+        assert result.deferred_critical == 1
+        assert result.deferred_high == 0
+        assert result.remaining_critical == 0
+        assert result.remaining_high == 0
+        assert result.action_items_created == 2
+
+    def test_legacy_block_returns_none_for_defer_fields(self) -> None:
+        """Pre-D.3 blocks omit the four defer-related fields."""
+        from bmad_assist.validation.synthesis_parser import extract_review_findings
+
+        result = extract_review_findings(_LEGACY_REVIEW_FINDINGS_BLOCK)
+        assert result is not None
+        assert result.outcome == "Approved"
+        assert result.issues_found == 2
+        assert result.issues_fixed == 2
+        # The four defer-related fields must be None so callers can detect
+        # the legacy schema and fall through to the old code path.
+        assert result.deferred_critical is None
+        assert result.deferred_high is None
+        assert result.remaining_critical is None
+        assert result.remaining_high is None
+        assert result.action_items_created == 0
+
+    def test_missing_heading_returns_none(self) -> None:
+        """No ``### Review Findings`` heading anywhere → returns None."""
+        from bmad_assist.validation.synthesis_parser import extract_review_findings
+
+        result = extract_review_findings("just some unrelated markdown\n")
+        assert result is None
+
+    def test_uses_last_review_findings_block_when_multiple_rounds(self) -> None:
+        """Rework loops append new Review Findings blocks; last wins."""
+        from bmad_assist.validation.synthesis_parser import extract_review_findings
+
+        report = (
+            "### Review Findings\n"
+            "- **Date:** 2026-05-01\n"
+            "- **Outcome:** Changes Requested\n"
+            "- **Issues Found:** 5\n"
+            "- **Issues Fixed:** 2\n"
+            "- **Deferred (Critical):** 0\n"
+            "- **Deferred (High):** 0\n"
+            "- **Remaining Critical (non-deferred):** 1\n"
+            "- **Remaining High (non-deferred):** 2\n"
+            "- **Action Items Created:** 3\n"
+            "\n"
+            "### Review Findings\n"
+            "- **Date:** 2026-05-02\n"
+            "- **Outcome:** Approved\n"
+            "- **Issues Found:** 5\n"
+            "- **Issues Fixed:** 5\n"
+            "- **Deferred (Critical):** 0\n"
+            "- **Deferred (High):** 0\n"
+            "- **Remaining Critical (non-deferred):** 0\n"
+            "- **Remaining High (non-deferred):** 0\n"
+            "- **Action Items Created:** 0\n"
+        )
+        result = extract_review_findings(report)
+        assert result is not None
+        assert result.outcome == "Approved"
+        assert result.issues_fixed == 5
+        assert result.remaining_critical == 0
+
+    def test_non_integer_count_value_returns_none_for_that_field(self) -> None:
+        """Garbage in a count cell → the specific field is None, not an error."""
+        from bmad_assist.validation.synthesis_parser import extract_review_findings
+
+        report = (
+            "### Review Findings\n"
+            "- **Outcome:** Approved\n"
+            "- **Issues Found:** unknown\n"
+            "- **Deferred (Critical):** 1\n"
+        )
+        result = extract_review_findings(report)
+        assert result is not None
+        assert result.outcome == "Approved"
+        assert result.issues_found is None
+        assert result.deferred_critical == 1
+
+
+class TestCountReviewFollowupsBySeverity:
+    """D.3 — parser-observed counts under ``#### Review Follow-ups (AI)``."""
+
+    def test_counts_critical_and_high_bullets(self) -> None:
+        """Inline severity prefixes drive bucket counts."""
+        from bmad_assist.validation.synthesis_parser import (
+            count_review_followups_by_severity,
+        )
+
+        report = (
+            "#### Review Follow-ups (AI)\n"
+            "- [ ] [Review][Patch] Fix SQL injection [api/db.py:12] — CRITICAL: ...\n"
+            "- [ ] [Review][Patch] Validate input [api/router.py:5] — HIGH: ...\n"
+            "- [ ] [Review][Decision] Pick API surface — MEDIUM: ...\n"
+            "- [x] [Review][Defer] Out-of-scope item — deferred from AI review\n"
+        )
+        counts = count_review_followups_by_severity(report)
+        assert counts == {
+            "critical": 1,
+            "high": 1,
+            "medium": 1,
+            "low": 0,
+            "unknown": 0,
+        }
+
+    def test_excludes_checked_and_deferred(self) -> None:
+        """Checked tasks AND Defer markers are excluded by construction."""
+        from bmad_assist.validation.synthesis_parser import (
+            count_review_followups_by_severity,
+        )
+
+        report = (
+            "- [x] [Review][Patch] already done [a.py:1] — CRITICAL: ...\n"
+            "- [ ] [Review][Defer] never counted [b.py:2] — deferred ...\n"
+            "- [x] [Review][Defer] also defer [c.py:3] — deferred ...\n"
+        )
+        counts = count_review_followups_by_severity(report)
+        assert counts["critical"] == 0
+        assert counts["high"] == 0
+
+    def test_missing_severity_buckets_as_unknown(self) -> None:
+        """Bullets without an inline severity hint land in ``unknown``."""
+        from bmad_assist.validation.synthesis_parser import (
+            count_review_followups_by_severity,
+        )
+
+        report = (
+            "- [ ] [Review][Patch] no inline severity [a.py:1] — just a detail\n"
+            "- [ ] [Review][Patch] another one [b.py:2]\n"
+        )
+        counts = count_review_followups_by_severity(report)
+        assert counts["unknown"] == 2
+        assert counts["critical"] == 0
+        assert counts["high"] == 0
+
+    def test_important_aliases_to_high(self) -> None:
+        """IMPORTANT and HIGH share the same accounting bucket."""
+        from bmad_assist.validation.synthesis_parser import (
+            count_review_followups_by_severity,
+        )
+
+        report = (
+            "- [ ] [Review][Patch] one [a.py:1] — HIGH: ...\n"
+            "- [ ] [Review][Patch] two [b.py:2] — IMPORTANT: ...\n"
+        )
+        counts = count_review_followups_by_severity(report)
+        assert counts["high"] == 2
+
+    def test_empty_report_returns_zeros(self) -> None:
+        """Empty input returns the five-key zero dict."""
+        from bmad_assist.validation.synthesis_parser import (
+            count_review_followups_by_severity,
+        )
+
+        counts = count_review_followups_by_severity("")
+        assert counts == {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "unknown": 0,
+        }
+
+
+class TestCrossCheckDeferCounts:
+    """D.3 — cross-check LLM-reported counts against parser-observed tasks."""
+
+    def test_matching_counts_trusts_llm(self) -> None:
+        """LLM and parser agree → LLM counts returned, no warning logged."""
+        from bmad_assist.validation.synthesis_parser import (
+            cross_check_defer_counts,
+            extract_review_findings,
+        )
+
+        report = (
+            "### Review Findings\n"
+            "- **Outcome:** Changes Requested\n"
+            "- **Issues Found:** 3\n"
+            "- **Issues Fixed:** 0\n"
+            "- **Deferred (Critical):** 0\n"
+            "- **Deferred (High):** 0\n"
+            "- **Remaining Critical (non-deferred):** 1\n"
+            "- **Remaining High (non-deferred):** 1\n"
+            "- **Action Items Created:** 2\n"
+            "\n"
+            "#### Review Follow-ups (AI)\n"
+            "- [ ] [Review][Patch] critical bug [a.py:1] — CRITICAL: ...\n"
+            "- [ ] [Review][Patch] high bug [b.py:2] — HIGH: ...\n"
+        )
+        findings = extract_review_findings(report)
+        rc, rh = cross_check_defer_counts(findings, report)
+        assert rc == 1
+        assert rh == 1
+
+    def test_full_block_mismatch_warns_and_uses_parser(self, caplog: LogCaptureFixture) -> None:
+        """The hand-built fixture LLM-claims 0 high-remaining but ships one.
+
+        It carries one unchecked HIGH task — the parser must override and warn.
+        """
+        from bmad_assist.validation.synthesis_parser import (
+            cross_check_defer_counts,
+            extract_review_findings,
+        )
+
+        findings = extract_review_findings(_FULL_REVIEW_FINDINGS_BLOCK)
+        caplog.set_level(logging.WARNING, logger="bmad_assist.validation.synthesis_parser")
+        rc, rh = cross_check_defer_counts(findings, _FULL_REVIEW_FINDINGS_BLOCK)
+        # LLM remaining_high=0, but the report has one unchecked HIGH task.
+        assert rc == 0
+        assert rh == 1
+        assert any("cross-check mismatch" in r.getMessage().lower() for r in caplog.records)
+
+    def test_mismatch_logs_warning_and_returns_parser_counts(
+        self, caplog: LogCaptureFixture
+    ) -> None:
+        """LLM claims 0 remaining_critical but parser sees 2 → parser wins."""
+        from bmad_assist.validation.synthesis_parser import (
+            ReviewFindings,
+            cross_check_defer_counts,
+        )
+
+        report = (
+            "### Review Findings\n"
+            "- **Outcome:** Approved\n"
+            "- **Deferred (Critical):** 0\n"
+            "- **Deferred (High):** 0\n"
+            "- **Remaining Critical (non-deferred):** 0\n"
+            "- **Remaining High (non-deferred):** 0\n"
+            "- **Action Items Created:** 2\n"
+            "\n"
+            "#### Review Follow-ups (AI)\n"
+            "- [ ] [Review][Patch] first [a.py:1] — CRITICAL: ...\n"
+            "- [ ] [Review][Patch] second [b.py:2] — CRITICAL: ...\n"
+        )
+        findings = ReviewFindings(
+            outcome="Approved",
+            issues_found=None,
+            issues_fixed=None,
+            deferred_critical=0,
+            deferred_high=0,
+            remaining_critical=0,
+            remaining_high=0,
+            action_items_created=2,
+        )
+        caplog.set_level(logging.WARNING, logger="bmad_assist.validation.synthesis_parser")
+        rc, rh = cross_check_defer_counts(findings, report)
+        assert rc == 2
+        assert rh == 0
+        # Warning was logged
+        assert any(
+            "cross-check mismatch" in record.getMessage().lower() for record in caplog.records
+        )
+
+    def test_none_findings_returns_none(self) -> None:
+        """``findings is None`` short-circuits to ``(None, None)``."""
+        from bmad_assist.validation.synthesis_parser import cross_check_defer_counts
+
+        rc, rh = cross_check_defer_counts(None, "irrelevant")
+        assert rc is None and rh is None
+
+    def test_legacy_findings_returns_none(self) -> None:
+        """remaining_* is None on legacy reports → caller falls back."""
+        from bmad_assist.validation.synthesis_parser import (
+            cross_check_defer_counts,
+            extract_review_findings,
+        )
+
+        findings = extract_review_findings(_LEGACY_REVIEW_FINDINGS_BLOCK)
+        rc, rh = cross_check_defer_counts(findings, _LEGACY_REVIEW_FINDINGS_BLOCK)
+        assert rc is None and rh is None
 
 
 # Type hints for fixtures
