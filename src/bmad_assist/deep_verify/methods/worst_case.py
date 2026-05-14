@@ -400,6 +400,16 @@ class WorstCaseMethod(BaseVerificationMethod):
 
     method_id: MethodId = MethodId("#205")
 
+    # D.8 Agent A: cap #205 at WARNING.
+    #
+    # Worst-case construction is the dominant severity-inflation source in
+    # Deep Verify — it speculatively frames any reachable failure mode as
+    # "catastrophic cascade" and emits CRITICAL findings that single-handedly
+    # force REJECT verdicts. Capping at WARNING keeps the signal in the report
+    # for human review without letting one speculative method override the
+    # verdict. See BaseVerificationMethod._cap_severities for mechanism.
+    max_severity: Severity | None = Severity.WARNING
+
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
@@ -512,7 +522,7 @@ class WorstCaseMethod(BaseVerificationMethod):
                 self._threshold,
             )
 
-            return findings
+            return self._cap_severities(findings)
 
         except (ProviderError, ProviderTimeoutError) as e:
             logger.warning("Worst-case construction analysis failed: %s", e)
@@ -925,15 +935,11 @@ class WorstCaseMethod(BaseVerificationMethod):
                 if confidence >= self._threshold:
                     finding_idx += 1
                     findings.append(
-                        self._create_finding_from_scenario(
-                            scenario_data, finding_idx, []
-                        )
+                        self._create_finding_from_scenario(scenario_data, finding_idx, [])
                     )
 
-            return findings
+            return self._cap_severities(findings)
 
         except (json.JSONDecodeError, ValueError, ValidationError, KeyError) as e:
-            logger.debug(
-                "Failed to parse batch file response for %s: %s", file_path, e
-            )
+            logger.debug("Failed to parse batch file response for %s: %s", file_path, e)
             return []

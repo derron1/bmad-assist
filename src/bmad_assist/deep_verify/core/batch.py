@@ -297,6 +297,7 @@ class BatchVerifyOrchestrator:
             clean_pass_bonus=config.clean_pass_bonus,
             reject_threshold=config.reject_threshold,
             accept_threshold=config.accept_threshold,
+            critical_count_threshold=config.critical_count_threshold,
         )
 
     async def verify_batch(

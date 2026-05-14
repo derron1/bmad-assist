@@ -326,6 +326,20 @@ class DeepVerifyConfig(BaseModel):
         le=100.0,
     )
 
+    # CRITICAL hard-block threshold (D.8). Default 2 lets single
+    # non-excluded CRITICALs fall through to the score-based path (P3
+    # raised REJECT_THRESHOLD to 12.0 for exactly this case). Set to 1
+    # to restore the legacy single-CRITICAL hard-block behavior.
+    critical_count_threshold: int = Field(
+        default=2,
+        ge=1,
+        le=20,
+        description=(
+            "Number of non-excluded CRITICAL findings required to force REJECT. "
+            "Default 2 lets single CRITICALs fall through to score-based path (P3)."
+        ),
+    )
+
     # Severity weight overrides
     critical_weight: float = Field(
         default=4.0,

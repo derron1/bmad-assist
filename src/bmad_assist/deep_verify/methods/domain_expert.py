@@ -184,6 +184,14 @@ class DomainExpertMethod(BaseVerificationMethod):
 
     method_id: MethodId = MethodId("#203")
 
+    # D.8 Agent A: cap #203 at WARNING.
+    #
+    # Domain Expert applies industry-standard rule libraries (OWASP, PCI-DSS,
+    # HIPAA, etc.) and tends to emit CRITICAL findings too liberally when
+    # general-purpose rules are matched against narrow code regions. Capping
+    # at WARNING preserves the advisory signal without forcing REJECT.
+    max_severity: Severity | None = Severity.WARNING
+
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
@@ -298,7 +306,7 @@ class DomainExpertMethod(BaseVerificationMethod):
                 self._threshold,
             )
 
-            return findings
+            return self._cap_severities(findings)
 
         except (ProviderError, ProviderTimeoutError) as e:
             logger.warning("Domain expert failed: %s", e)
@@ -673,10 +681,8 @@ class DomainExpertMethod(BaseVerificationMethod):
                         self._create_finding_from_violation(violation_data, finding_idx, rules)
                     )
 
-            return findings
+            return self._cap_severities(findings)
 
         except (json.JSONDecodeError, ValueError, ValidationError, KeyError) as e:
-            logger.debug(
-                "Failed to parse batch file response for %s: %s", file_path, e
-            )
+            logger.debug("Failed to parse batch file response for %s: %s", file_path, e)
             return []

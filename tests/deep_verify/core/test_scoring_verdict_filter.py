@@ -194,12 +194,13 @@ class TestMixedFindingsScoring:
         assert verdict != VerdictDecision.REJECT
         assert verdict == VerdictDecision.UNCERTAIN
 
-    def test_determine_verdict_critical_in_real_pattern_still_rejects(self) -> None:
-        """A CRITICAL on a real (non-excluded) pattern still auto-REJECTs."""
-        # Mirror image of the previous test: a CRITICAL on a real
-        # (non-excluded) pattern still forces REJECT, regardless of score.
+    def test_determine_verdict_two_real_criticals_still_rejects(self) -> None:
+        """Two CRITICALs on real (non-excluded) patterns still auto-REJECT (D.8)."""
+        # D.8 raised the hard-block floor to N >= 2 non-excluded CRITICALs.
+        # Two real CRITICALs still force REJECT, regardless of score.
         findings = [
             _finding("F1", Severity.CRITICAL, "RCW-001"),
+            _finding("F2", Severity.CRITICAL, "CQ-002-CODE-GO"),
         ]
         # Pass an artificially-low score to prove the CRITICAL rule is what
         # drives REJECT here.
@@ -208,26 +209,35 @@ class TestMixedFindingsScoring:
     def test_evidence_scorer_determine_verdict_filters_critical(self) -> None:
         """EvidenceScorer.determine_verdict mirrors the standalone behavior."""
         scorer = EvidenceScorer()
-        excluded_only = [_finding("F1", Severity.CRITICAL, "API-BOUNDARY-002")]
-        # Score 0.0, no real CRITICAL → UNCERTAIN, not REJECT.
+        # Two excluded CRITICALs: still no hard-block, score-based path
+        # applies and lands UNCERTAIN at score 0.0.
+        excluded_only = [
+            _finding("F1", Severity.CRITICAL, "API-BOUNDARY-002"),
+            _finding("F2", Severity.CRITICAL, "GEN-001"),
+        ]
         assert scorer.determine_verdict(0.0, excluded_only) == VerdictDecision.UNCERTAIN
 
-        real_critical = [_finding("F2", Severity.CRITICAL, "RCW-001")]
-        assert scorer.determine_verdict(0.0, real_critical) == VerdictDecision.REJECT
+        # Two real CRITICALs cross the D.8 default threshold → REJECT.
+        real_criticals = [
+            _finding("F3", Severity.CRITICAL, "RCW-001"),
+            _finding("F4", Severity.CRITICAL, "CQ-002-CODE-GO"),
+        ]
+        assert scorer.determine_verdict(0.0, real_criticals) == VerdictDecision.REJECT
 
     def test_mixed_findings_full_pipeline(self) -> None:
-        """End-to-end: mixed findings score from real ones; real CRITICAL still REJECTs."""
-        # The headline assertion of the P2 fix: with mixed findings, the
-        # verdict no longer auto-rejects on the GEN-* CRITICAL, and the
-        # score reflects only non-excluded findings.
+        """End-to-end: mixed findings, only one real CRITICAL → score-based path (UNCERTAIN)."""
+        # Headline of the combined P2 + D.8 fix: with mixed findings, the
+        # GEN-* CRITICAL does not auto-reject, AND a single real CRITICAL
+        # (RCW-001) no longer hard-blocks either — we fall through to the
+        # score-based path (score 7.0 < REJECT_THRESHOLD 12.0 → UNCERTAIN).
         findings = self._mixed_findings()
         score = calculate_score(findings)
         verdict = determine_verdict(score, findings)
 
         # Score = 7.0 (CRITICAL RCW + ERROR CQ-GO + WARNING CQ-PY).
         assert score == 7.0
-        # A real CRITICAL (RCW-001) is present, so REJECT is still correct.
-        assert verdict == VerdictDecision.REJECT
+        # One real CRITICAL on its own no longer forces REJECT under D.8.
+        assert verdict == VerdictDecision.UNCERTAIN
 
     def test_mixed_findings_without_real_critical(self) -> None:
         """Without a real CRITICAL the GEN-* CRITICAL no longer drives REJECT."""

@@ -167,9 +167,8 @@ class DeepVerifyEngine:
             clean_pass_bonus=self._config.clean_pass_bonus,
             reject_threshold=self._config.reject_threshold,
             accept_threshold=self._config.accept_threshold,
+            critical_count_threshold=self._config.critical_count_threshold,
         )
-
-
 
         # Method selector with LLM client
         self._method_selector = MethodSelector(
@@ -694,7 +693,11 @@ class DeepVerifyEngine:
                 await asyncio.sleep(delay)
             task = asyncio.create_task(
                 self._run_single_method_with_result(
-                    method, artifact_text, context, timeout, domains,
+                    method,
+                    artifact_text,
+                    context,
+                    timeout,
+                    domains,
                 ),
                 name=f"dv-{method.method_id}",
             )
@@ -762,7 +765,9 @@ class DeepVerifyEngine:
 
         """
         try:
-            findings = await self._run_single_method(method, artifact_text, context, timeout, domains)
+            findings = await self._run_single_method(
+                method, artifact_text, context, timeout, domains
+            )
             return MethodResult(
                 method_id=method.method_id,
                 findings=findings,

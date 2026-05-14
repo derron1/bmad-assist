@@ -49,9 +49,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 def mock_provider() -> Generator[MagicMock, None, None]:
     """Mock the ClaudeSDKProvider - must be before method fixture."""
-    with patch(
-        "bmad_assist.deep_verify.methods.worst_case.ClaudeSDKProvider"
-    ) as mock:
+    with patch("bmad_assist.deep_verify.methods.worst_case.ClaudeSDKProvider") as mock:
         provider_instance = MagicMock()
         mock.return_value = provider_instance
         yield provider_instance
@@ -325,7 +323,9 @@ class TestDomainFiltering:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_runs_for_concurrency_domain(self, method: WorstCaseMethod, mock_provider: MagicMock) -> None:
+    async def test_runs_for_concurrency_domain(
+        self, method: WorstCaseMethod, mock_provider: MagicMock
+    ) -> None:
         """Test method runs when CONCURRENCY domain is detected."""
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = json.dumps({"scenarios": []})
@@ -337,7 +337,9 @@ class TestDomainFiltering:
         assert isinstance(result, list)
 
     @pytest.mark.asyncio
-    async def test_runs_for_messaging_domain(self, method: WorstCaseMethod, mock_provider: MagicMock) -> None:
+    async def test_runs_for_messaging_domain(
+        self, method: WorstCaseMethod, mock_provider: MagicMock
+    ) -> None:
         """Test method runs when MESSAGING domain is detected."""
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = json.dumps({"scenarios": []})
@@ -349,7 +351,9 @@ class TestDomainFiltering:
         assert isinstance(result, list)
 
     @pytest.mark.asyncio
-    async def test_runs_for_both_concurrency_and_messaging(self, method: WorstCaseMethod, mock_provider: MagicMock) -> None:
+    async def test_runs_for_both_concurrency_and_messaging(
+        self, method: WorstCaseMethod, mock_provider: MagicMock
+    ) -> None:
         """Test method runs when both CONCURRENCY and MESSAGING domains are detected."""
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = json.dumps({"scenarios": []})
@@ -528,9 +532,7 @@ class TestFindingCreation:
         assert finding.domain == ArtifactDomain.CONCURRENCY
 
         # Fallback to MESSAGING if CONCURRENCY not present
-        finding = method._create_finding_from_scenario(
-            scenario_data, 0, [ArtifactDomain.MESSAGING]
-        )
+        finding = method._create_finding_from_scenario(scenario_data, 0, [ArtifactDomain.MESSAGING])
         assert finding.domain == ArtifactDomain.MESSAGING
 
     def test_create_finding_domain_assignment_exhaustion(self, method: WorstCaseMethod) -> None:
@@ -552,9 +554,7 @@ class TestFindingCreation:
         assert finding.domain == ArtifactDomain.CONCURRENCY
 
         # Fallback to MESSAGING if CONCURRENCY not present
-        finding = method._create_finding_from_scenario(
-            scenario_data, 0, [ArtifactDomain.MESSAGING]
-        )
+        finding = method._create_finding_from_scenario(scenario_data, 0, [ArtifactDomain.MESSAGING])
         assert finding.domain == ArtifactDomain.MESSAGING
 
     def test_create_finding_domain_assignment_corruption(self, method: WorstCaseMethod) -> None:
@@ -575,7 +575,9 @@ class TestFindingCreation:
         )
         assert finding.domain == ArtifactDomain.CONCURRENCY
 
-    def test_create_finding_domain_assignment_thundering_herd(self, method: WorstCaseMethod) -> None:
+    def test_create_finding_domain_assignment_thundering_herd(
+        self, method: WorstCaseMethod
+    ) -> None:
         """Test domain assignment for THUNDERING_HERD category."""
         scenario_data = WorstCaseScenarioData(
             scenario="Thundering herd",
@@ -683,7 +685,9 @@ class TestPromptBuilding:
         prompt = method._build_prompt("code")
 
         # Find the category list section (after "Categories to analyze:")
-        category_section = prompt.split("Categories to analyze:")[1].split("Construct worst-case")[0]
+        category_section = prompt.split("Categories to analyze:")[1].split("Construct worst-case")[
+            0
+        ]
 
         assert "CASCADE:" in category_section
         # Should not include other categories in the category list
@@ -701,20 +705,22 @@ class TestResponseParsing:
 
     def test_parse_valid_json(self, method: WorstCaseMethod) -> None:
         """Test parsing valid JSON response."""
-        response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "OOM crash",
-                    "category": "exhaustion",
-                    "severity": "catastrophic",
-                    "trigger": "Unbounded input",
-                    "cascade_effect": "Service crashes",
-                    "evidence_quote": "m.map[key] = val",
-                    "line_number": 42,
-                    "mitigation": "Add bounds",
-                }
-            ]
-        })
+        response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "OOM crash",
+                        "category": "exhaustion",
+                        "severity": "catastrophic",
+                        "trigger": "Unbounded input",
+                        "cascade_effect": "Service crashes",
+                        "evidence_quote": "m.map[key] = val",
+                        "line_number": 42,
+                        "mitigation": "Add bounds",
+                    }
+                ]
+            }
+        )
 
         result = method._parse_response(response)
         assert len(result.scenarios) == 1
@@ -758,38 +764,42 @@ class TestResponseParsing:
 
     def test_parse_invalid_category_raises(self, method: WorstCaseMethod) -> None:
         """Test invalid category raises validation error."""
-        response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Something",
-                    "category": "invalid_category",
-                    "severity": "severe",
-                    "trigger": "trigger",
-                    "cascade_effect": "effect",
-                    "evidence_quote": "code",
-                    "mitigation": "fix",
-                }
-            ]
-        })
+        response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Something",
+                        "category": "invalid_category",
+                        "severity": "severe",
+                        "trigger": "trigger",
+                        "cascade_effect": "effect",
+                        "evidence_quote": "code",
+                        "mitigation": "fix",
+                    }
+                ]
+            }
+        )
 
         with pytest.raises(Exception):  # Pydantic validation error
             method._parse_response(response)
 
     def test_parse_invalid_severity_raises(self, method: WorstCaseMethod) -> None:
         """Test invalid severity raises validation error."""
-        response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Something",
-                    "category": "exhaustion",
-                    "severity": "extreme",
-                    "trigger": "trigger",
-                    "cascade_effect": "effect",
-                    "evidence_quote": "code",
-                    "mitigation": "fix",
-                }
-            ]
-        })
+        response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Something",
+                        "category": "exhaustion",
+                        "severity": "extreme",
+                        "trigger": "trigger",
+                        "cascade_effect": "effect",
+                        "evidence_quote": "code",
+                        "mitigation": "fix",
+                    }
+                ]
+            }
+        )
 
         with pytest.raises(Exception):  # Pydantic validation error
             method._parse_response(response)
@@ -806,7 +816,7 @@ class TestFullAnalysisFlow:
     @pytest.mark.asyncio
     async def test_unbounded_map_detection(self, mock_provider: MagicMock) -> None:
         """Test detection of unbounded map → OOM (concurrency artifact)."""
-        artifact = '''
+        artifact = """
 func (m *Manager) AddDestination(id string, dest Destination) {
     m.destinations[id] = dest  // No bounds check!
 }
@@ -816,22 +826,24 @@ func (m *Manager) Broadcast(msg []byte) {
         go dest.Send(msg)  // Unlimited goroutines
     }
 }
-'''
+"""
 
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Unbounded destination map leads to OOM crash",
-                    "category": "exhaustion",
-                    "severity": "catastrophic",
-                    "trigger": "Malicious actor adds millions of destinations",
-                    "cascade_effect": "OOM kill crashes service, causing cascading failures to dependent services",
-                    "evidence_quote": "m.destinations[id] = dest",
-                    "line_number": 3,
-                    "mitigation": "Add maximum limit to destinations map",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Unbounded destination map leads to OOM crash",
+                        "category": "exhaustion",
+                        "severity": "catastrophic",
+                        "trigger": "Malicious actor adds millions of destinations",
+                        "cascade_effect": "OOM kill crashes service, causing cascading failures to dependent services",
+                        "evidence_quote": "m.destinations[id] = dest",
+                        "line_number": 3,
+                        "mitigation": "Add maximum limit to destinations map",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -844,13 +856,16 @@ func (m *Manager) Broadcast(msg []byte) {
 
         assert len(findings) == 1
         assert findings[0].title == "Unbounded destination map leads to OOM crash"
-        assert findings[0].severity == Severity.CRITICAL
+        # D.8 Agent A: #205 caps emitted findings at WARNING — the catastrophic
+        # severity assigned inside _create_finding_from_scenario is downgraded
+        # by _cap_severities on the analyze() return path.
+        assert findings[0].severity == Severity.WARNING
         assert findings[0].pattern_id == PatternId("WC-EXH-001")
 
     @pytest.mark.asyncio
     async def test_deadlock_detection(self, mock_provider: MagicMock) -> None:
         """Test detection of nested lock ordering → deadlock (concurrency artifact)."""
-        artifact = '''
+        artifact = """
 func (a *Account) Transfer(to *Account, amount int) {
     a.mu.Lock()
     defer a.mu.Unlock()
@@ -861,22 +876,24 @@ func (a *Account) Transfer(to *Account, amount int) {
     a.balance -= amount
     to.balance += amount
 }
-'''
+"""
 
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Nested lock ordering violation causes distributed deadlock",
-                    "category": "cascade",
-                    "severity": "severe",
-                    "trigger": "Concurrent transfers between accounts A→B and B→A",
-                    "cascade_effect": "Deadlock blocks all account operations, request queue fills up",
-                    "evidence_quote": "to.mu.Lock()",
-                    "line_number": 6,
-                    "mitigation": "Use consistent lock ordering across all operations",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Nested lock ordering violation causes distributed deadlock",
+                        "category": "cascade",
+                        "severity": "severe",
+                        "trigger": "Concurrent transfers between accounts A→B and B→A",
+                        "cascade_effect": "Deadlock blocks all account operations, request queue fills up",
+                        "evidence_quote": "to.mu.Lock()",
+                        "line_number": 6,
+                        "mitigation": "Use consistent lock ordering across all operations",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -889,14 +906,15 @@ func (a *Account) Transfer(to *Account, amount int) {
 
         assert len(findings) == 1
         assert "deadlock" in findings[0].title.lower()
-        # Note: Deadlock is in catastrophic keywords, so this could be CRITICAL
-        # depending on the _is_catastrophic_scenario implementation
-        assert findings[0].severity in (Severity.ERROR, Severity.CRITICAL)
+        # D.8 Agent A: #205 caps emitted findings at WARNING. Pre-cap this
+        # would have been ERROR (severe) or CRITICAL (catastrophic-keyword
+        # match on "deadlock"); both downgrade to WARNING.
+        assert findings[0].severity == Severity.WARNING
 
     @pytest.mark.asyncio
     async def test_thundering_herd_detection(self, mock_provider: MagicMock) -> None:
         """Test detection of thundering herd (messaging artifact)."""
-        artifact = '''
+        artifact = """
 func (c *Client) sendWithRetry(msg Message) error {
     backoff := time.Second
     for i := 0; i < 10; i++ {
@@ -909,22 +927,24 @@ func (c *Client) sendWithRetry(msg Message) error {
     }
     return fmt.Errorf("max retries exceeded")
 }
-'''
+"""
 
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Fixed-interval retries cause thundering herd after service recovery",
-                    "category": "thundering_herd",
-                    "severity": "moderate",
-                    "trigger": "Service outage causes all clients to retry; when service recovers, all retries hit simultaneously",
-                    "cascade_effect": "Sudden traffic spike overwhelms recovering service, causing another outage",
-                    "evidence_quote": "time.Sleep(backoff)",
-                    "line_number": 6,
-                    "mitigation": "Add jitter to retry backoff",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Fixed-interval retries cause thundering herd after service recovery",
+                        "category": "thundering_herd",
+                        "severity": "moderate",
+                        "trigger": "Service outage causes all clients to retry; when service recovers, all retries hit simultaneously",
+                        "cascade_effect": "Sudden traffic spike overwhelms recovering service, causing another outage",
+                        "evidence_quote": "time.Sleep(backoff)",
+                        "line_number": 6,
+                        "mitigation": "Add jitter to retry backoff",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -943,7 +963,7 @@ func (c *Client) sendWithRetry(msg Message) error {
     @pytest.mark.asyncio
     async def test_data_corruption_detection(self, mock_provider: MagicMock) -> None:
         """Test detection of data corruption scenario (concurrency artifact)."""
-        artifact = '''
+        artifact = """
 func (c *Cache) Update(key string, value []byte) {
     // Read existing
     existing := c.data[key]
@@ -952,22 +972,24 @@ func (c *Cache) Update(key string, value []byte) {
     // Write back
     c.data[key] = existing
 }
-'''
+"""
 
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Non-atomic cache update causes data corruption under concurrent access",
-                    "category": "corruption",
-                    "severity": "catastrophic",
-                    "trigger": "Concurrent updates to same cache key",
-                    "cascade_effect": "Corrupted cache data returned to users, causing incorrect business decisions",
-                    "evidence_quote": "existing = append(existing, value...)",
-                    "line_number": 5,
-                    "mitigation": "Use mutex or atomic operations for cache updates",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Non-atomic cache update causes data corruption under concurrent access",
+                        "category": "corruption",
+                        "severity": "catastrophic",
+                        "trigger": "Concurrent updates to same cache key",
+                        "cascade_effect": "Corrupted cache data returned to users, causing incorrect business decisions",
+                        "evidence_quote": "existing = append(existing, value...)",
+                        "line_number": 5,
+                        "mitigation": "Use mutex or atomic operations for cache updates",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -979,13 +1001,14 @@ func (c *Cache) Update(key string, value []byte) {
         )
 
         assert len(findings) == 1
-        assert findings[0].severity == Severity.CRITICAL
+        # D.8 Agent A: #205 caps emitted findings at WARNING.
+        assert findings[0].severity == Severity.WARNING
         assert findings[0].pattern_id == PatternId("WC-COR-001")
 
     @pytest.mark.asyncio
     async def test_split_brain_detection(self, mock_provider: MagicMock) -> None:
         """Test detection of split-brain scenario (messaging artifact)."""
-        artifact = '''
+        artifact = """
 func (n *Node) AcquireLeadership() error {
     // Try to acquire lease
     err := n.leaseMgr.Acquire(n.id, 30*time.Second)
@@ -995,22 +1018,24 @@ func (n *Node) AcquireLeadership() error {
     n.isLeader = true
     return nil
 }
-'''
+"""
 
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Network partition leads to split-brain with two leaders",
-                    "category": "split_brain",
-                    "severity": "catastrophic",
-                    "trigger": "Network partition between nodes during lease renewal",
-                    "cascade_effect": "Both nodes believe they are leader, causing conflicting writes and data divergence",
-                    "evidence_quote": "n.leaseMgr.Acquire(n.id, 30*time.Second)",
-                    "line_number": 4,
-                    "mitigation": "Use consensus protocol with quorum requirement",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Network partition leads to split-brain with two leaders",
+                        "category": "split_brain",
+                        "severity": "catastrophic",
+                        "trigger": "Network partition between nodes during lease renewal",
+                        "cascade_effect": "Both nodes believe they are leader, causing conflicting writes and data divergence",
+                        "evidence_quote": "n.leaseMgr.Acquire(n.id, 30*time.Second)",
+                        "line_number": 4,
+                        "mitigation": "Use consensus protocol with quorum requirement",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -1022,52 +1047,55 @@ func (n *Node) AcquireLeadership() error {
         )
 
         assert len(findings) == 1
-        assert findings[0].severity == Severity.CRITICAL
+        # D.8 Agent A: #205 caps emitted findings at WARNING.
+        assert findings[0].severity == Severity.WARNING
         assert findings[0].domain == ArtifactDomain.MESSAGING
 
     @pytest.mark.asyncio
     async def test_threshold_filtering(self, mock_provider: MagicMock) -> None:
         """Test that findings below threshold are filtered out."""
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Catastrophic OOM",
-                    "category": "exhaustion",
-                    "severity": "catastrophic",  # 0.95 confidence
-                    "trigger": "trigger1",
-                    "cascade_effect": "effect1",
-                    "evidence_quote": "code1",
-                    "mitigation": "fix1",
-                },
-                {
-                    "scenario": "Severe deadlock",
-                    "category": "cascade",
-                    "severity": "severe",  # 0.85 confidence
-                    "trigger": "trigger2",
-                    "cascade_effect": "effect2",
-                    "evidence_quote": "code2",
-                    "mitigation": "fix2",
-                },
-                {
-                    "scenario": "Moderate performance",
-                    "category": "exhaustion",
-                    "severity": "moderate",  # 0.65 confidence
-                    "trigger": "trigger3",
-                    "cascade_effect": "effect3",
-                    "evidence_quote": "code3",
-                    "mitigation": "fix3",
-                },
-                {
-                    "scenario": "Minor optimization",
-                    "category": "exhaustion",
-                    "severity": "minor",  # 0.45 confidence - below threshold
-                    "trigger": "trigger4",
-                    "cascade_effect": "effect4",
-                    "evidence_quote": "code4",
-                    "mitigation": "fix4",
-                },
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Catastrophic OOM",
+                        "category": "exhaustion",
+                        "severity": "catastrophic",  # 0.95 confidence
+                        "trigger": "trigger1",
+                        "cascade_effect": "effect1",
+                        "evidence_quote": "code1",
+                        "mitigation": "fix1",
+                    },
+                    {
+                        "scenario": "Severe deadlock",
+                        "category": "cascade",
+                        "severity": "severe",  # 0.85 confidence
+                        "trigger": "trigger2",
+                        "cascade_effect": "effect2",
+                        "evidence_quote": "code2",
+                        "mitigation": "fix2",
+                    },
+                    {
+                        "scenario": "Moderate performance",
+                        "category": "exhaustion",
+                        "severity": "moderate",  # 0.65 confidence
+                        "trigger": "trigger3",
+                        "cascade_effect": "effect3",
+                        "evidence_quote": "code3",
+                        "mitigation": "fix3",
+                    },
+                    {
+                        "scenario": "Minor optimization",
+                        "category": "exhaustion",
+                        "severity": "minor",  # 0.45 confidence - below threshold
+                        "trigger": "trigger4",
+                        "cascade_effect": "effect4",
+                        "evidence_quote": "code4",
+                        "mitigation": "fix4",
+                    },
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -1218,9 +1246,7 @@ class TestEdgeCases:
             mitigation="fix",
         )
 
-        finding = method._create_finding_from_scenario(
-            scenario_data, 0, []
-        )
+        finding = method._create_finding_from_scenario(scenario_data, 0, [])
         assert finding.domain is None
 
     @pytest.mark.asyncio
@@ -1242,19 +1268,21 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_analysis_with_both_domains(self, mock_provider: MagicMock) -> None:
         """Test analysis with both CONCURRENCY and MESSAGING domains."""
-        mock_response = json.dumps({
-            "scenarios": [
-                {
-                    "scenario": "Test scenario",
-                    "category": "cascade",
-                    "severity": "severe",
-                    "trigger": "trigger",
-                    "cascade_effect": "effect",
-                    "evidence_quote": "code",
-                    "mitigation": "fix",
-                }
-            ]
-        })
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Test scenario",
+                        "category": "cascade",
+                        "severity": "severe",
+                        "trigger": "trigger",
+                        "cascade_effect": "effect",
+                        "evidence_quote": "code",
+                        "mitigation": "fix",
+                    }
+                ]
+            }
+        )
 
         mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
         mock_provider.parse_output.return_value = mock_response
@@ -1268,3 +1296,67 @@ class TestEdgeCases:
         assert len(findings) == 1
         # CASCADE should map to CONCURRENCY as primary
         assert findings[0].domain == ArtifactDomain.CONCURRENCY
+
+
+# =============================================================================
+# Test Per-Method Severity Cap (D.8 Agent A)
+# =============================================================================
+
+
+class TestSeverityCap:
+    """Tests for the #205 max_severity = WARNING cap.
+
+    Method #205 is the dominant severity-inflation source — it speculatively
+    frames any reachable failure mode as catastrophic and emits CRITICAL
+    findings. The cap downgrades severity post-emission without dropping the
+    finding so the signal survives for human review.
+    """
+
+    def test_class_attribute_is_warning(self) -> None:
+        """WorstCaseMethod declares max_severity = WARNING at class level."""
+        assert WorstCaseMethod.max_severity == Severity.WARNING
+
+    @pytest.mark.asyncio
+    async def test_catastrophic_finding_downgraded_to_warning(
+        self, mock_provider: MagicMock
+    ) -> None:
+        """A catastrophic scenario is downgraded to WARNING on the analyze() path.
+
+        Without the cap, "Total service crash" matches catastrophic keywords
+        and would be promoted to CRITICAL inside _create_finding_from_scenario.
+        With the cap, _cap_severities downgrades it to WARNING on return,
+        but every other field (title, evidence, pattern_id) is preserved.
+        """
+        mock_response = json.dumps(
+            {
+                "scenarios": [
+                    {
+                        "scenario": "Total service crash from unbounded growth",
+                        "category": "exhaustion",
+                        "severity": "catastrophic",
+                        "trigger": "Unbounded input",
+                        "cascade_effect": "OOM kill brings down service",
+                        "evidence_quote": "items[k] = v",
+                        "line_number": 7,
+                        "mitigation": "Add bounds",
+                    }
+                ]
+            }
+        )
+        mock_provider.invoke.return_value = MagicMock(stdout="", stderr="", exit_code=0)
+        mock_provider.parse_output.return_value = mock_response
+
+        method = WorstCaseMethod()
+        findings = await method.analyze(
+            "some code",
+            domains=[ArtifactDomain.CONCURRENCY],
+        )
+
+        assert len(findings) == 1
+        # Severity downgraded — but finding NOT dropped.
+        assert findings[0].severity == Severity.WARNING
+        # Pre-cap fields are preserved (cap only changes severity).
+        assert findings[0].title == "Total service crash from unbounded growth"
+        assert findings[0].pattern_id == PatternId("WC-EXH-001")
+        assert len(findings[0].evidence) == 1
+        assert findings[0].evidence[0].quote == "items[k] = v"

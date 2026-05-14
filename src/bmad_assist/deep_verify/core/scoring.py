@@ -17,6 +17,19 @@ Verdict thresholds (non-overlapping):
     - -3 ≤ score ≤ 12 → UNCERTAIN (needs human review)
     - score < -3   → ACCEPT (clean enough)
 
+CRITICAL hard-block threshold (D.8, 2026-05)
+--------------------------------------------
+The hard-block rule no longer fires on a single non-excluded CRITICAL.
+``determine_verdict`` counts non-excluded CRITICAL findings and forces
+REJECT only when that count meets ``critical_count_threshold`` (default
+2).  With method #205 capable of emitting many speculative CRITICALs per
+file, requiring N ≥ 2 distinct non-excluded CRITICALs keeps single noisy
+findings from auto-rejecting; the score-based path (REJECT_THRESHOLD =
+12.0, see P3) catches genuine multi-CRITICAL cases.  Setting
+``critical_count_threshold=1`` restores the legacy hard-block behavior.
+Excluded checklist patterns (GEN-*, *-BOUNDARY-*) still do not count
+toward the threshold.
+
 D.3 (defer-aware verdict, 2026-05) — design note
 ------------------------------------------------
 Scoring is intentionally pure math: ``calculate_score`` and
@@ -36,6 +49,11 @@ The defer-aware override therefore lives one layer up, in
 overrides this module's score-based REJECT and returns
 ``CanonicalResolution.RESOLVED``.  scoring.py stays as pure math; policy
 about defer-aware acceptance is the contract layer's job.
+
+The D.3 contract-layer override and the D.8 critical_count_threshold knob
+are independent and compose: D.8 raises the floor for what counts as a
+hard-block here; D.3 still gets the final say at synthesis time when
+remaining vs deferred counts come in.
 """
 
 from __future__ import annotations
@@ -192,7 +210,11 @@ def calculate_score(findings: list[Finding], clean_passes: int = 0) -> float:
     return round(total, 2)
 
 
-def determine_verdict(score: float, findings: list[Finding] | None = None) -> VerdictDecision:
+def determine_verdict(
+    score: float,
+    findings: list[Finding] | None = None,
+    critical_count_threshold: int = 2,
+) -> VerdictDecision:
     """Determine verdict from evidence score.
 
     Uses non-overlapping thresholds:
@@ -200,7 +222,13 @@ def determine_verdict(score: float, findings: list[Finding] | None = None) -> Ve
         - -3 ≤ score ≤ 12 → UNCERTAIN (needs human review)
         - score < -3   → ACCEPT (clean enough)
 
-    CRITICAL findings always result in REJECT verdict (hard block).
+    CRITICAL findings act as a hard block when their non-excluded count
+    meets ``critical_count_threshold`` (default 2 — see D.8 module note).
+    Below that count, callers fall through to the score-based path so
+    single noisy CRITICALs do not auto-REJECT; pass
+    ``critical_count_threshold=1`` to restore the legacy behavior.
+    Excluded checklist patterns (GEN-*, *-BOUNDARY-*) never count toward
+    the threshold.
 
     The clean pass bonus (-0.5 per clean domain) enables negative scores,
     which are needed to reach ACCEPT verdict.
@@ -208,6 +236,8 @@ def determine_verdict(score: float, findings: list[Finding] | None = None) -> Ve
     Args:
         score: Evidence score from calculate_score().
         findings: Optional list of findings to check for CRITICAL severity.
+        critical_count_threshold: Number of non-excluded CRITICAL findings
+            required to force REJECT (default 2, must be >= 1).
 
     Returns:
         VerdictDecision based on thresholds.
@@ -218,16 +248,20 @@ def determine_verdict(score: float, findings: list[Finding] | None = None) -> Ve
         >>> determine_verdict(-4.0)  # VerdictDecision.ACCEPT
 
     """
-    # CRITICAL findings are hard blocks - always REJECT.
-    # Excluded checklist patterns (GEN-*, *-BOUNDARY-*) do NOT trigger this
-    # rule even when their severity is CRITICAL: they are spec-level
-    # checklists, not real code antipatterns, and would otherwise force
-    # REJECT regardless of the actual code-level findings.
-    if findings and any(
-        f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
-        for f in findings
-    ):
-        return VerdictDecision.REJECT
+    # CRITICAL hard block: REJECT when non-excluded CRITICAL count meets
+    # the threshold (default 2). Excluded checklist patterns (GEN-*,
+    # *-BOUNDARY-*) do NOT contribute to the count even when their
+    # severity is CRITICAL: they are spec-level checklists, not real code
+    # antipatterns, and would otherwise force REJECT regardless of the
+    # actual code-level findings. See D.8 module note.
+    if findings:
+        critical_count = sum(
+            1
+            for f in findings
+            if f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
+        )
+        if critical_count >= critical_count_threshold:
+            return VerdictDecision.REJECT
 
     if score > REJECT_THRESHOLD:
         return VerdictDecision.REJECT
@@ -253,6 +287,8 @@ class EvidenceScorer:
         clean_pass_bonus: Bonus per clean domain (negative value).
         reject_threshold: Score threshold for REJECT verdict.
         accept_threshold: Score threshold for ACCEPT verdict.
+        critical_count_threshold: Number of non-excluded CRITICAL findings
+            required to force REJECT (see D.8 module note).
 
     """
 
@@ -262,6 +298,7 @@ class EvidenceScorer:
         clean_pass_bonus: float = CLEAN_PASS_BONUS,
         reject_threshold: float = REJECT_THRESHOLD,
         accept_threshold: float = ACCEPT_THRESHOLD,
+        critical_count_threshold: int = 2,
     ) -> None:
         """Initialize EvidenceScorer with optional custom thresholds.
 
@@ -270,15 +307,20 @@ class EvidenceScorer:
             clean_pass_bonus: Custom clean pass bonus (defaults to -0.5).
             reject_threshold: Custom reject threshold (defaults to 12.0).
             accept_threshold: Custom accept threshold (defaults to -3.0).
+            critical_count_threshold: Number of non-excluded CRITICAL
+                findings required to force REJECT (defaults to 2, must
+                be >= 1). See D.8 module note.
 
         Raises:
-            ValueError: If thresholds are invalid (reject <= accept).
+            ValueError: If thresholds are invalid (reject <= accept) or
+                critical_count_threshold < 1.
 
         """
         self.severity_weights = severity_weights or SEVERITY_WEIGHTS.copy()
         self.clean_pass_bonus = clean_pass_bonus
         self.reject_threshold = reject_threshold
         self.accept_threshold = accept_threshold
+        self.critical_count_threshold = critical_count_threshold
 
         # Validate thresholds
         if reject_threshold <= accept_threshold:
@@ -286,6 +328,8 @@ class EvidenceScorer:
                 f"reject_threshold ({reject_threshold}) must be greater than "
                 f"accept_threshold ({accept_threshold})"
             )
+        if critical_count_threshold < 1:
+            raise ValueError(f"critical_count_threshold ({critical_count_threshold}) must be >= 1")
 
     def calculate_score(self, findings: list[Finding], clean_passes: int = 0) -> float:
         """Calculate evidence score using instance configuration.
@@ -327,7 +371,9 @@ class EvidenceScorer:
     ) -> VerdictDecision:
         """Determine verdict using instance thresholds.
 
-        CRITICAL findings always result in REJECT verdict (hard block).
+        CRITICAL findings hard-block to REJECT when their non-excluded
+        count meets ``self.critical_count_threshold`` (default 2). Below
+        that count, the score-based path applies. See D.8 module note.
 
         Args:
             score: Evidence score from calculate_score().
@@ -337,17 +383,21 @@ class EvidenceScorer:
             VerdictDecision based on instance thresholds.
 
         """
-        # CRITICAL findings are hard blocks - always REJECT.
-        # Excluded checklist patterns (GEN-*, *-BOUNDARY-*) do NOT trigger
-        # this rule even when their severity is CRITICAL: they are
-        # spec-level checklists, not real code antipatterns, and would
-        # otherwise force REJECT regardless of the actual code-level
-        # findings.
-        if findings and any(
-            f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
-            for f in findings
-        ):
-            return VerdictDecision.REJECT
+        # CRITICAL hard block: REJECT when non-excluded CRITICAL count
+        # meets self.critical_count_threshold. Excluded checklist
+        # patterns (GEN-*, *-BOUNDARY-*) do NOT contribute to the count
+        # even when their severity is CRITICAL: they are spec-level
+        # checklists, not real code antipatterns, and would otherwise
+        # force REJECT regardless of the actual code-level findings. See
+        # D.8 module note.
+        if findings:
+            critical_count = sum(
+                1
+                for f in findings
+                if f.severity == Severity.CRITICAL and not _is_excluded_from_verdict(f.pattern_id)
+            )
+            if critical_count >= self.critical_count_threshold:
+                return VerdictDecision.REJECT
 
         if score > self.reject_threshold:
             return VerdictDecision.REJECT

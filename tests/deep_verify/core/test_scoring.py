@@ -299,17 +299,28 @@ class TestDetermineVerdict:
             }
 
     def test_critical_finding_hard_block(self) -> None:
-        """CRITICAL findings should always result in REJECT verdict (hard block)."""
-        critical_finding = Finding(
-            id="F1",
-            severity=Severity.CRITICAL,
-            title="Critical security issue",
-            description="Test",
-            method_id=MethodId("#153"),
-        )
-        # Even with a very negative score (lots of clean passes), CRITICAL should REJECT
-        assert determine_verdict(-10.0, [critical_finding]) == VerdictDecision.REJECT
-        assert determine_verdict(-5.0, [critical_finding]) == VerdictDecision.REJECT
+        """Two non-excluded CRITICAL findings hard-block to REJECT (D.8 default)."""
+        # D.8 raised the hard-block floor to N >= 2 non-excluded CRITICALs.
+        # Two CRITICALs trip the rule regardless of score.
+        critical_findings = [
+            Finding(
+                id="F1",
+                severity=Severity.CRITICAL,
+                title="Critical security issue",
+                description="Test",
+                method_id=MethodId("#153"),
+            ),
+            Finding(
+                id="F2",
+                severity=Severity.CRITICAL,
+                title="Another critical issue",
+                description="Test",
+                method_id=MethodId("#153"),
+            ),
+        ]
+        # Even with a very negative score (lots of clean passes), 2+ CRITICAL hard-block REJECTs.
+        assert determine_verdict(-10.0, critical_findings) == VerdictDecision.REJECT
+        assert determine_verdict(-5.0, critical_findings) == VerdictDecision.REJECT
         # Without findings parameter, score-based logic applies
         assert determine_verdict(-10.0) == VerdictDecision.ACCEPT
 
@@ -421,18 +432,27 @@ class TestEvidenceScorer:
         assert scorer.determine_verdict(-6.0) == VerdictDecision.ACCEPT
 
     def test_critical_finding_hard_block(self) -> None:
-        """CRITICAL findings should always result in REJECT verdict (hard block)."""
+        """Two non-excluded CRITICAL findings hard-block to REJECT (D.8 default)."""
         scorer = EvidenceScorer()
-        critical_finding = Finding(
-            id="F1",
-            severity=Severity.CRITICAL,
-            title="Critical security issue",
-            description="Test",
-            method_id=MethodId("#153"),
-        )
-        # Even with a very negative score, CRITICAL should REJECT
-        assert scorer.determine_verdict(-10.0, [critical_finding]) == VerdictDecision.REJECT
-        assert scorer.determine_verdict(-5.0, [critical_finding]) == VerdictDecision.REJECT
+        critical_findings = [
+            Finding(
+                id="F1",
+                severity=Severity.CRITICAL,
+                title="Critical security issue",
+                description="Test",
+                method_id=MethodId("#153"),
+            ),
+            Finding(
+                id="F2",
+                severity=Severity.CRITICAL,
+                title="Another critical issue",
+                description="Test",
+                method_id=MethodId("#153"),
+            ),
+        ]
+        # Even with a very negative score, 2+ CRITICAL hard-block REJECTs.
+        assert scorer.determine_verdict(-10.0, critical_findings) == VerdictDecision.REJECT
+        assert scorer.determine_verdict(-5.0, critical_findings) == VerdictDecision.REJECT
         # Without findings, score-based logic applies
         assert scorer.determine_verdict(-10.0) == VerdictDecision.ACCEPT
 
@@ -617,3 +637,118 @@ class TestScoringIntegration:
         for score, expected in test_cases:
             verdict = determine_verdict(score)
             assert verdict == expected, f"Score {score} should give {expected}, got {verdict}"
+
+
+# =============================================================================
+# critical_count_threshold (D.8) Tests
+# =============================================================================
+
+
+def _critical(fid: str, pattern_id: str | None = "RCW-001") -> Finding:
+    """Helper: build a minimal non-excluded CRITICAL finding."""
+    from bmad_assist.deep_verify.core.types import PatternId
+
+    return Finding(
+        id=fid,
+        severity=Severity.CRITICAL,
+        title=f"{fid} critical",
+        description="Test",
+        method_id=MethodId("#153"),
+        pattern_id=PatternId(pattern_id) if pattern_id else None,
+    )
+
+
+class TestCriticalCountThreshold:
+    """Tests for the D.8 critical_count_threshold knob.
+
+    Validates that the hard-block fires only when non-excluded CRITICAL
+    findings meet the configured threshold (default 2). Single CRITICALs
+    fall through to the score-based path, and excluded checklist patterns
+    (GEN-*, *-BOUNDARY-*) never count toward the threshold.
+    """
+
+    def test_single_critical_falls_through_to_score_path(self) -> None:
+        """1 non-excluded CRITICAL with low score does NOT auto-REJECT (D.8)."""
+        # Default threshold is 2; a single CRITICAL no longer hard-blocks.
+        findings = [_critical("F1", "RCW-001")]
+        # Score 0.0 lands UNCERTAIN; score < ACCEPT_THRESHOLD lands ACCEPT.
+        assert determine_verdict(0.0, findings) == VerdictDecision.UNCERTAIN
+        assert determine_verdict(-5.0, findings) == VerdictDecision.ACCEPT
+        # And high score still REJECTs via the score path.
+        assert determine_verdict(15.0, findings) == VerdictDecision.REJECT
+
+    def test_two_criticals_force_reject_regardless_of_score(self) -> None:
+        """2 non-excluded CRITICALs hard-block to REJECT at default threshold."""
+        findings = [_critical("F1", "RCW-001"), _critical("F2", "CQ-002-CODE-GO")]
+        # Even very negative scores cannot escape the hard block.
+        assert determine_verdict(-100.0, findings) == VerdictDecision.REJECT
+        assert determine_verdict(0.0, findings) == VerdictDecision.REJECT
+        assert determine_verdict(15.0, findings) == VerdictDecision.REJECT
+
+    def test_threshold_override_to_one_restores_legacy(self) -> None:
+        """critical_count_threshold=1 restores the pre-D.8 single-CRITICAL hard-block."""
+        findings = [_critical("F1", "RCW-001")]
+        # With override to 1, a single CRITICAL forces REJECT regardless of score.
+        assert (
+            determine_verdict(-100.0, findings, critical_count_threshold=1)
+            == VerdictDecision.REJECT
+        )
+        assert (
+            determine_verdict(0.0, findings, critical_count_threshold=1) == VerdictDecision.REJECT
+        )
+
+    def test_excluded_criticals_do_not_count_toward_threshold(self) -> None:
+        """GEN-*/`*-BOUNDARY-*` CRITICALs are excluded from the count even at 2+."""
+        # Two CRITICALs, but BOTH are excluded patterns. The hard-block must
+        # NOT fire — score-based path applies.
+        excluded_findings = [
+            _critical("F1", "GEN-001"),
+            _critical("F2", "STORAGE-BOUNDARY-002"),
+        ]
+        assert determine_verdict(0.0, excluded_findings) == VerdictDecision.UNCERTAIN
+        # Mix: 1 excluded CRITICAL + 1 real CRITICAL = count of 1 → no hard block.
+        mixed_findings = [
+            _critical("F1", "GEN-001"),  # excluded, does not count
+            _critical("F2", "RCW-001"),  # real, count = 1, below threshold 2
+        ]
+        assert determine_verdict(0.0, mixed_findings) == VerdictDecision.UNCERTAIN
+        # Mix: 1 excluded + 2 real CRITICALs = count of 2 → hard block REJECT.
+        triple_findings = [
+            _critical("F1", "GEN-001"),  # excluded
+            _critical("F2", "RCW-001"),  # real
+            _critical("F3", "CQ-002-CODE-GO"),  # real
+        ]
+        assert determine_verdict(0.0, triple_findings) == VerdictDecision.REJECT
+
+
+class TestEvidenceScorerCriticalCountThreshold:
+    """Tests for EvidenceScorer's critical_count_threshold attribute (D.8)."""
+
+    def test_default_threshold_is_two(self) -> None:
+        """EvidenceScorer defaults critical_count_threshold to 2."""
+        scorer = EvidenceScorer()
+        assert scorer.critical_count_threshold == 2
+
+    def test_invalid_threshold_below_one_raises(self) -> None:
+        """critical_count_threshold < 1 should raise ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            EvidenceScorer(critical_count_threshold=0)
+        assert "critical_count_threshold" in str(exc_info.value)
+
+    def test_single_critical_with_default_threshold(self) -> None:
+        """EvidenceScorer with default threshold: 1 CRITICAL falls through."""
+        scorer = EvidenceScorer()
+        findings = [_critical("F1", "RCW-001")]
+        assert scorer.determine_verdict(0.0, findings) == VerdictDecision.UNCERTAIN
+
+    def test_two_criticals_with_default_threshold_rejects(self) -> None:
+        """EvidenceScorer with default threshold: 2 CRITICALs hard-block REJECT."""
+        scorer = EvidenceScorer()
+        findings = [_critical("F1", "RCW-001"), _critical("F2", "CQ-002-CODE-GO")]
+        assert scorer.determine_verdict(-50.0, findings) == VerdictDecision.REJECT
+
+    def test_legacy_threshold_one_via_instance(self) -> None:
+        """EvidenceScorer(critical_count_threshold=1) restores pre-D.8 behavior."""
+        scorer = EvidenceScorer(critical_count_threshold=1)
+        findings = [_critical("F1", "RCW-001")]
+        assert scorer.determine_verdict(-100.0, findings) == VerdictDecision.REJECT

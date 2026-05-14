@@ -9,11 +9,29 @@ for method-specific implementations.
 
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from bmad_assist.deep_verify.core.types import Severity
+
 if TYPE_CHECKING:
     from bmad_assist.deep_verify.core.types import Finding, MethodId
+
+
+# Severity ordering for per-method caps (D.8 Agent A).
+#
+# This ordering exists solely so a method can downgrade findings that exceed
+# its own confidence ceiling. It is INTENTIONALLY independent of
+# scoring.SEVERITY_WEIGHTS (which expresses verdict math, not rank) — keeping
+# them separate avoids accidental coupling where a tweak to verdict weights
+# silently reorders the cap logic.
+_SEVERITY_RANK: dict[Severity, int] = {
+    Severity.INFO: 1,
+    Severity.WARNING: 2,
+    Severity.ERROR: 3,
+    Severity.CRITICAL: 4,
+}
 
 
 class BaseVerificationMethod(ABC):
@@ -40,6 +58,15 @@ class BaseVerificationMethod(ABC):
     """
 
     method_id: MethodId
+
+    # Per-method severity ceiling (D.8 Agent A).
+    #
+    # When set, any Finding emitted by this method whose severity outranks the
+    # cap is downgraded to the cap. Findings are NEVER dropped — only their
+    # severity changes. Set on the subclass for methods prone to severity
+    # inflation (#205 worst_case, #203 domain_expert, #154 boundary_analysis).
+    # See _cap_severities() for the application point.
+    max_severity: Severity | None = None
 
     @abstractmethod
     async def analyze(
@@ -122,6 +149,40 @@ class BaseVerificationMethod(ABC):
     def supports_batch(self) -> bool:
         """Whether this method supports batch mode."""
         return False
+
+    def _cap_severities(self, findings: list[Finding]) -> list[Finding]:
+        """Downgrade any finding whose severity exceeds this method's cap.
+
+        Applies ``max_severity`` (set as a class attribute on subclasses) as
+        an upper bound on emitted finding severities. Findings exceeding the
+        cap are returned with severity replaced by the cap; all other fields
+        (id, method_id, pattern_id, title, description, evidence, domain) are
+        preserved. Findings at or below the cap pass through unchanged.
+
+        If ``max_severity`` is None (the default), findings are returned
+        unmodified.
+
+        Args:
+            findings: Findings emitted by the method's analyze() implementation.
+
+        Returns:
+            New list of findings with capped severities. The list and any
+            modified Finding instances are fresh objects — the input list and
+            its members are not mutated.
+
+        """
+        cap = self.max_severity
+        if cap is None:
+            return findings
+
+        cap_rank = _SEVERITY_RANK[cap]
+        capped: list[Finding] = []
+        for finding in findings:
+            if _SEVERITY_RANK[finding.severity] > cap_rank:
+                capped.append(dataclasses.replace(finding, severity=cap))
+            else:
+                capped.append(finding)
+        return capped
 
     def __repr__(self) -> str:
         """Return a string representation of the method."""

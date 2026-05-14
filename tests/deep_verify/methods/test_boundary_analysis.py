@@ -168,24 +168,26 @@ def mock_provider() -> MagicMock:
     """Create a mock ClaudeSDKProvider."""
     mock = MagicMock()
     mock_result = MagicMock()
-    mock_result.stdout = json.dumps([
-        {
-            "id": "GEN-001",
-            "violated": True,
-            "confidence": 0.95,
-            "evidence_quote": "return data[0]",
-            "line_number": 3,
-            "explanation": "No check for empty list before accessing index 0",
-        },
-        {
-            "id": "GEN-002",
-            "violated": True,
-            "confidence": 0.9,
-            "evidence_quote": "data[0]",
-            "line_number": 3,
-            "explanation": "No null check",
-        },
-    ])
+    mock_result.stdout = json.dumps(
+        [
+            {
+                "id": "GEN-001",
+                "violated": True,
+                "confidence": 0.95,
+                "evidence_quote": "return data[0]",
+                "line_number": 3,
+                "explanation": "No check for empty list before accessing index 0",
+            },
+            {
+                "id": "GEN-002",
+                "violated": True,
+                "confidence": 0.9,
+                "evidence_quote": "data[0]",
+                "line_number": 3,
+                "explanation": "No null check",
+            },
+        ]
+    )
     mock_result.stderr = ""
     mock_result.exit_code = 0
     mock.invoke.return_value = mock_result
@@ -364,9 +366,7 @@ class TestBoundaryAnalysisMethodCreation:
 
         assert method._model == "sonnet"
 
-    def test_method_instantiation_custom_checklist_dir(
-        self, temp_checklist_dir: Path
-    ) -> None:
+    def test_method_instantiation_custom_checklist_dir(self, temp_checklist_dir: Path) -> None:
         """Test creating BoundaryAnalysisMethod with custom checklist directory."""
         method = BoundaryAnalysisMethod(checklist_dir=temp_checklist_dir)
 
@@ -460,10 +460,12 @@ class TestResponseParsing:
     def test_parse_multiple_items(self) -> None:
         """Test parsing batch response with multiple items."""
         method = BoundaryAnalysisMethod()
-        response = json.dumps([
-            {"id": "GEN-001", "violated": True, "confidence": 0.9},
-            {"id": "GEN-002", "violated": False, "confidence": 0.8},
-        ])
+        response = json.dumps(
+            [
+                {"id": "GEN-001", "violated": True, "confidence": 0.9},
+                {"id": "GEN-002", "violated": False, "confidence": 0.8},
+            ]
+        )
 
         results = method._parse_batch_response(response)
 
@@ -700,7 +702,9 @@ class TestEdgeCases:
         assert len(findings) == 0
 
     @pytest.mark.asyncio
-    async def test_finding_id_format(self, temp_checklist_dir: Path, mock_provider: MagicMock) -> None:
+    async def test_finding_id_format(
+        self, temp_checklist_dir: Path, mock_provider: MagicMock
+    ) -> None:
         """Test that finding IDs use method-prefixed format."""
         with patch(
             "bmad_assist.deep_verify.methods.boundary_analysis.ClaudeSDKProvider",
@@ -708,10 +712,7 @@ class TestEdgeCases:
         ):
             method = BoundaryAnalysisMethod(checklist_dir=temp_checklist_dir)
 
-            artifact = (
-                "def process_data(data):\n"
-                "    return data[0]  # No empty check\n"
-            )
+            artifact = "def process_data(data):\n    return data[0]  # No empty check\n"
             findings = await method.analyze(artifact)
 
             # Should have findings with proper IDs
@@ -725,10 +726,17 @@ class TestEdgeCases:
         """Test that no findings returned when not violated."""
         # Mock batch response indicating no violations
         mock_result = MagicMock()
-        mock_result.stdout = json.dumps([
-            {"id": "GEN-001", "violated": False, "confidence": 0.9, "explanation": "Properly handled"},
-            {"id": "GEN-002", "violated": False, "confidence": 0.85, "explanation": "Handled"},
-        ])
+        mock_result.stdout = json.dumps(
+            [
+                {
+                    "id": "GEN-001",
+                    "violated": False,
+                    "confidence": 0.9,
+                    "explanation": "Properly handled",
+                },
+                {"id": "GEN-002", "violated": False, "confidence": 0.85, "explanation": "Handled"},
+            ]
+        )
         mock_provider.invoke.return_value = mock_result
         mock_provider.parse_output.return_value = mock_result.stdout
 
@@ -750,10 +758,17 @@ class TestEdgeCases:
         """Test that no findings returned when confidence below threshold."""
         # Mock batch response with low confidence
         mock_result = MagicMock()
-        mock_result.stdout = json.dumps([
-            {"id": "GEN-001", "violated": True, "confidence": 0.3, "evidence_quote": "something"},
-            {"id": "GEN-002", "violated": True, "confidence": 0.2, "evidence_quote": "other"},
-        ])
+        mock_result.stdout = json.dumps(
+            [
+                {
+                    "id": "GEN-001",
+                    "violated": True,
+                    "confidence": 0.3,
+                    "evidence_quote": "something",
+                },
+                {"id": "GEN-002", "violated": True, "confidence": 0.2, "evidence_quote": "other"},
+            ]
+        )
         mock_provider.invoke.return_value = mock_result
         mock_provider.parse_output.return_value = mock_result.stdout
 
@@ -761,9 +776,7 @@ class TestEdgeCases:
             "bmad_assist.deep_verify.methods.boundary_analysis.ClaudeSDKProvider",
             return_value=mock_provider,
         ):
-            method = BoundaryAnalysisMethod(
-                checklist_dir=temp_checklist_dir, threshold=0.6
-            )
+            method = BoundaryAnalysisMethod(checklist_dir=temp_checklist_dir, threshold=0.6)
 
             findings = await method.analyze("some code")
 
@@ -799,15 +812,11 @@ class TestDomainFiltering:
             assert len(security_items) == 1
 
     @pytest.mark.asyncio
-    async def test_multiple_domains_load_all_checklists(
-        self, temp_checklist_dir: Path
-    ) -> None:
+    async def test_multiple_domains_load_all_checklists(self, temp_checklist_dir: Path) -> None:
         """Test loading checklists for multiple domains."""
         method = BoundaryAnalysisMethod(checklist_dir=temp_checklist_dir)
 
-        items = method._loader.load(
-            domains=[ArtifactDomain.SECURITY, ArtifactDomain.STORAGE]
-        )
+        items = method._loader.load(domains=[ArtifactDomain.SECURITY, ArtifactDomain.STORAGE])
 
         # Should have general + security + storage
         assert len(items) == 4
@@ -857,3 +866,66 @@ class TestErrorHandling:
         findings = await method.analyze("some code")
 
         assert len(findings) == 0
+
+
+# =============================================================================
+# Test Per-Method Severity Cap (D.8 Agent A)
+# =============================================================================
+
+
+class TestSeverityCap:
+    """Tests for the #154 max_severity = WARNING cap.
+
+    Boundary Analysis is checklist-driven (deterministic emission against
+    YAML rules), so it inflates less than #205 — but broad checklist items
+    can still carry CRITICAL severity. The cap downgrades them post-emission
+    while preserving the finding for human review.
+    """
+
+    def test_class_attribute_is_warning(self) -> None:
+        """BoundaryAnalysisMethod declares max_severity = WARNING at class level."""
+        assert BoundaryAnalysisMethod.max_severity == Severity.WARNING
+
+    @pytest.mark.asyncio
+    async def test_critical_checklist_violation_downgraded_to_warning(
+        self, temp_checklist_dir: Path, mock_provider: MagicMock
+    ) -> None:
+        """A CRITICAL checklist violation is downgraded to WARNING on analyze().
+
+        GEN-002 in the temp_checklist_dir fixture is severity_if_violated=critical.
+        Without the cap, _create_finding would emit a CRITICAL finding.
+        With the cap, _cap_severities downgrades it to WARNING but preserves
+        the finding (still emitted with original id, pattern_id, evidence).
+        """
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps(
+            [
+                {
+                    "id": "GEN-002",
+                    "violated": True,
+                    "confidence": 0.95,
+                    "evidence_quote": "data[0]",
+                    "line_number": 3,
+                    "explanation": "No nil check before dereference",
+                },
+            ]
+        )
+        mock_provider.invoke.return_value = mock_result
+        mock_provider.parse_output.return_value = mock_result.stdout
+
+        with patch(
+            "bmad_assist.deep_verify.methods.boundary_analysis.ClaudeSDKProvider",
+            return_value=mock_provider,
+        ):
+            method = BoundaryAnalysisMethod(checklist_dir=temp_checklist_dir)
+            findings = await method.analyze("def f(d): return d[0]\n")
+
+            assert len(findings) == 1
+            # Severity downgraded — but finding NOT dropped.
+            assert findings[0].severity == Severity.WARNING
+            # Other fields preserved by dataclasses.replace().
+            # _create_finding uses f"#154-F{index + 1}" so finding_idx=1 → F2.
+            assert findings[0].id == "#154-F2"
+            assert findings[0].method_id == MethodId("#154")
+            assert len(findings[0].evidence) == 1
+            assert findings[0].evidence[0].quote == "data[0]"

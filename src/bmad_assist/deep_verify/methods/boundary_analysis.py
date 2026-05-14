@@ -327,6 +327,14 @@ class BoundaryAnalysisMethod(BaseVerificationMethod):
 
     method_id: MethodId
 
+    # D.8 Agent A: cap #154 at WARNING.
+    #
+    # Boundary Analysis is checklist-driven (deterministic pattern emission
+    # against YAML-defined rules), so it inflates less than #205 — but it can
+    # still mark broad-edge-case checklist items as CRITICAL. Cap is
+    # conservative; expected real-world impact is small relative to #205.
+    max_severity: Severity | None = Severity.WARNING
+
     def __init__(
         self,
         checklist_dir: Path | None = None,
@@ -441,7 +449,7 @@ class BoundaryAnalysisMethod(BaseVerificationMethod):
                 self._threshold,
             )
 
-            return findings
+            return self._cap_severities(findings)
 
         except Exception as e:
             logger.warning("Boundary analysis failed: %s", e, exc_info=True)
@@ -743,10 +751,8 @@ class BoundaryAnalysisMethod(BaseVerificationMethod):
                     finding_idx += 1
                     findings.append(self._create_finding(resp, item, finding_idx))
 
-            return findings
+            return self._cap_severities(findings)
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.debug(
-                "Failed to parse batch file response for %s: %s", file_path, e
-            )
+            logger.debug("Failed to parse batch file response for %s: %s", file_path, e)
             return []

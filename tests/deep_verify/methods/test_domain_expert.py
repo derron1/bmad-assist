@@ -52,9 +52,7 @@ def mock_provider() -> Generator[MagicMock, None, None]:
     This fixture MUST be applied BEFORE creating DomainExpertMethod instances
     to ensure they use the mocked provider instead of making real API calls.
     """
-    with patch(
-        "bmad_assist.deep_verify.methods.domain_expert.ClaudeSDKProvider"
-    ) as mock:
+    with patch("bmad_assist.deep_verify.methods.domain_expert.ClaudeSDKProvider") as mock:
         provider_instance = MagicMock()
         mock.return_value = provider_instance
         yield provider_instance
@@ -777,19 +775,21 @@ class TestAnalyze:
 
             # Mock provider response
             mock_result = MagicMock()
-            mock_result.stdout = json.dumps({
-                "violations": [
-                    {
-                        "rule_id": "SEC-001",
-                        "rule_title": "SQL Injection",
-                        "evidence_quote": "f'SELECT * FROM users'",
-                        "line_number": 10,
-                        "violation_explanation": "SQL injection risk",
-                        "remediation": "Use params",
-                        "confidence": 0.9,
-                    }
-                ]
-            })
+            mock_result.stdout = json.dumps(
+                {
+                    "violations": [
+                        {
+                            "rule_id": "SEC-001",
+                            "rule_title": "SQL Injection",
+                            "evidence_quote": "f'SELECT * FROM users'",
+                            "line_number": 10,
+                            "violation_explanation": "SQL injection risk",
+                            "remediation": "Use params",
+                            "confidence": 0.9,
+                        }
+                    ]
+                }
+            )
             mock_result.exit_code = 0
             mock_provider.invoke.return_value = mock_result
             mock_provider.parse_output.return_value = mock_result.stdout
@@ -815,26 +815,28 @@ class TestAnalyze:
             method._loader.load = MagicMock(return_value=sample_rules)
 
             mock_result = MagicMock()
-            mock_result.stdout = json.dumps({
-                "violations": [
-                    {
-                        "rule_id": "SEC-001",
-                        "rule_title": "High Confidence",
-                        "evidence_quote": "code",
-                        "violation_explanation": "Test",
-                        "remediation": "Fix",
-                        "confidence": 0.9,  # Above threshold
-                    },
-                    {
-                        "rule_id": "GEN-001",
-                        "rule_title": "Low Confidence",
-                        "evidence_quote": "code",
-                        "violation_explanation": "Test",
-                        "remediation": "Fix",
-                        "confidence": 0.5,  # Below threshold
-                    },
-                ]
-            })
+            mock_result.stdout = json.dumps(
+                {
+                    "violations": [
+                        {
+                            "rule_id": "SEC-001",
+                            "rule_title": "High Confidence",
+                            "evidence_quote": "code",
+                            "violation_explanation": "Test",
+                            "remediation": "Fix",
+                            "confidence": 0.9,  # Above threshold
+                        },
+                        {
+                            "rule_id": "GEN-001",
+                            "rule_title": "Low Confidence",
+                            "evidence_quote": "code",
+                            "violation_explanation": "Test",
+                            "remediation": "Fix",
+                            "confidence": 0.5,  # Below threshold
+                        },
+                    ]
+                }
+            )
             mock_result.exit_code = 0
             mock_provider.invoke.return_value = mock_result
             mock_provider.parse_output.return_value = mock_result.stdout
@@ -1241,8 +1243,7 @@ class TestRunsForAllDomains:
         mock_provider.parse_output.return_value = mock_result.stdout
 
         findings = await method.analyze(
-            "some code",
-            domains=[ArtifactDomain.SECURITY, ArtifactDomain.API]
+            "some code", domains=[ArtifactDomain.SECURITY, ArtifactDomain.API]
         )
 
         assert isinstance(findings, list)
@@ -1295,8 +1296,75 @@ class TestRunsForAllDomains:
         mock_provider.parse_output.return_value = mock_result.stdout
 
         findings = await method.analyze(
-            "some code",
-            domains=[ArtifactDomain.API, ArtifactDomain.CONCURRENCY]
+            "some code", domains=[ArtifactDomain.API, ArtifactDomain.CONCURRENCY]
         )
 
         assert isinstance(findings, list)
+
+
+# =============================================================================
+# Test Per-Method Severity Cap (D.8 Agent A)
+# =============================================================================
+
+
+class TestSeverityCap:
+    """Tests for the #203 max_severity = WARNING cap.
+
+    Domain Expert tends to emit CRITICAL too liberally when general-purpose
+    rule libraries match narrow code regions. The cap downgrades severity
+    post-emission while preserving the finding for human review.
+    """
+
+    def test_class_attribute_is_warning(self) -> None:
+        """DomainExpertMethod declares max_severity = WARNING at class level."""
+        assert DomainExpertMethod.max_severity == Severity.WARNING
+
+    @pytest.mark.asyncio
+    async def test_critical_rule_violation_downgraded_to_warning(
+        self,
+        sample_rules: list[KnowledgeRule],
+    ) -> None:
+        """A CRITICAL STANDARDS-category violation is downgraded to WARNING.
+
+        SEC-001 in sample_rules is a STANDARDS rule with severity=CRITICAL.
+        resolve_finding_severity would normally pass that through to the
+        Finding, but _cap_severities on the analyze() return path downgrades
+        it to WARNING without dropping the finding or losing other fields.
+        """
+        with patch(
+            "bmad_assist.deep_verify.methods.domain_expert.ClaudeSDKProvider"
+        ) as mock_provider_class:
+            mock_provider = MagicMock()
+            mock_provider_class.return_value = mock_provider
+
+            method = DomainExpertMethod()
+            method._loader.load = MagicMock(return_value=sample_rules)
+
+            mock_result = MagicMock()
+            mock_result.stdout = json.dumps(
+                {
+                    "violations": [
+                        {
+                            "rule_id": "SEC-001",
+                            "rule_title": "SQL Injection Prevention",
+                            "evidence_quote": "f'SELECT * FROM users'",
+                            "line_number": 10,
+                            "violation_explanation": "SQL injection risk",
+                            "remediation": "Use parameterized queries",
+                            "confidence": 0.95,
+                        }
+                    ]
+                }
+            )
+            mock_result.exit_code = 0
+            mock_provider.invoke.return_value = mock_result
+            mock_provider.parse_output.return_value = mock_result.stdout
+
+            findings = await method.analyze("some code with sql")
+
+            assert len(findings) == 1
+            # Severity downgraded — but finding NOT dropped.
+            assert findings[0].severity == Severity.WARNING
+            # Other fields preserved by dataclasses.replace().
+            assert findings[0].id == "#203-F1"
+            assert len(findings[0].evidence) == 1
