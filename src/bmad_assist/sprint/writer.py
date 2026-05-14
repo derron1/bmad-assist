@@ -203,6 +203,8 @@ def _build_output_data(
         data["tracking_system"] = status.metadata.tracking_system
     if status.metadata.story_location:
         data["story_location"] = status.metadata.story_location
+    if status.metadata.last_updated:
+        data["last_updated"] = status.metadata.last_updated.isoformat()
 
     # Build development_status section preserving entry order
     dev_status: dict[str, str] = {}
@@ -402,7 +404,13 @@ def _write_with_ruamel(
 
             # Update metadata fields in-place
             output_data["generated"] = data["generated"]
-            for meta_key in ["project", "project_key", "tracking_system", "story_location"]:
+            for meta_key in [
+                "project",
+                "project_key",
+                "tracking_system",
+                "story_location",
+                "last_updated",
+            ]:
                 if meta_key in data:
                     output_data[meta_key] = data[meta_key]
                 elif meta_key in output_data:

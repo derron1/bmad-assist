@@ -466,6 +466,37 @@ class TestSyncStateToSprint:
         # Updated changed
         assert updated.entries["20-9-sync"].status == "in-progress"
 
+    def test_sync_refreshes_last_updated_preserves_generated(
+        self,
+        sample_state: State,
+        sample_sprint_status: SprintStatus,
+    ):
+        """sync_state_to_sprint sets metadata.last_updated to now and leaves
+        metadata.generated alone — generated is historical, last_updated tracks
+        the most recent sync write.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        original_generated = sample_sprint_status.metadata.generated
+        before = datetime.now(UTC)
+
+        updated, _ = sync_state_to_sprint(sample_state, sample_sprint_status)
+
+        after = datetime.now(UTC)
+        # generated unchanged (historical)
+        assert updated.metadata.generated == original_generated
+        # last_updated refreshed to "now"
+        assert updated.metadata.last_updated is not None
+        # Allow a 1s slop for clock granularity, normalize to aware datetime
+        lu = updated.metadata.last_updated
+        if lu.tzinfo is None:
+            lu = lu.replace(tzinfo=UTC)
+        assert before - timedelta(seconds=1) <= lu <= after + timedelta(seconds=1)
+        # Original SprintStatus not mutated
+        assert sample_sprint_status.metadata.last_updated != lu or (
+            sample_sprint_status.metadata.last_updated is None
+        )
+
     def test_sync_one_way_never_modifies_state(
         self,
         sample_sprint_status: SprintStatus,

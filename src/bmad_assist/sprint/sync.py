@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -462,9 +463,15 @@ def sync_state_to_sprint(
         errors=(),
     )
 
-    # Create new SprintStatus with updated entries
+    # Create new SprintStatus with updated entries.
+    # Refresh last_updated to the current UTC time so downstream consumers can
+    # tell when the sprint-status was last touched independently of the
+    # original 'generated' value (which we leave alone — it's historical).
+    refreshed_metadata = sprint_status.metadata.model_copy(
+        update={"last_updated": datetime.now(UTC)}
+    )
     updated_status = SprintStatus(
-        metadata=sprint_status.metadata,
+        metadata=refreshed_metadata,
         entries=new_entries,
     )
 

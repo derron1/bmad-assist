@@ -203,12 +203,14 @@ def _extract_metadata(data: dict[str, Any]) -> SprintStatusMetadata:
         SprintStatusMetadata with extracted fields.
 
     """
+    last_updated_raw = data.get("last_updated")
     return SprintStatusMetadata(
         generated=_parse_generated(data.get("generated")),
         project=data.get("project"),
         project_key=data.get("project_key"),
         tracking_system=data.get("tracking_system"),
         story_location=data.get("story_location"),
+        last_updated=_parse_generated(last_updated_raw) if last_updated_raw is not None else None,
     )
 
 

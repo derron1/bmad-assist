@@ -113,6 +113,14 @@ class SprintStatusMetadata(BaseModel):
         None,
         description="Path to story files directory",
     )
+    last_updated: datetime | None = Field(
+        None,
+        description=(
+            "Timestamp of the most recent sync write (UTC). "
+            "Refreshed on every trigger_sync() call so consumers can tell when "
+            "the file was last modified independently of the original 'generated' value."
+        ),
+    )
 
 
 class SprintStatusEntry(BaseModel):
