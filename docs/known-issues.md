@@ -73,3 +73,60 @@ In `src/bmad_assist/core/loop/handlers/qa_plan_generate.py`:
 ### Stretch: pass-rate accounting
 
 The `2/96 passed` figure should reflect what actually ran (`2/24`). Likely lives in [src/bmad_assist/qa/executor.py](../src/bmad_assist/qa/executor.py) or [src/bmad_assist/qa/summary.py](../src/bmad_assist/qa/summary.py) — accounting appears to read from the (broken) embedded plan's category counts rather than the executor's actual result set.
+
+---
+
+## RETRO-001 — Retrospective marker mismatch silently saves raw dialogue as the "report"
+
+**Status**: open
+**Filed**: 2026-05-16
+**Component**: [src/bmad_assist/skills/bmad-retrospective/](../src/bmad_assist/skills/bmad-retrospective/), [src/bmad_assist/core/extraction.py](../src/bmad_assist/core/extraction.py), [src/bmad_assist/core/loop/handlers/retrospective.py](../src/bmad_assist/core/loop/handlers/retrospective.py)
+
+### Summary
+
+The retrospective extractor expects `<!-- RETROSPECTIVE_REPORT_START -->` / `<!-- RETROSPECTIVE_REPORT_END -->` markers around the final report. The compiled prompt only contains the vague directive "Generate retrospective report with extraction markers" — it never instructs the LLM to wrap output in the literal marker strings the extractor greps for. When the LLM produces party-mode dialogue or pauses mid-workflow, no markers and no fallback patterns match; the extractor saves the raw response body as the "report" and the phase reports `success=True`.
+
+### Extractor contract
+
+[src/bmad_assist/core/extraction.py:93-105](../src/bmad_assist/core/extraction.py#L93-L105):
+
+- Primary markers: `<!-- RETROSPECTIVE_REPORT_START -->` / `<!-- RETROSPECTIVE_REPORT_END -->`
+- Fallback patterns (tried in order):
+  1. `^#\s*Epic\s+\d+\s+Retrospective`
+  2. `^[═✅]+\s*RETROSPECTIVE\s+COMPLETE`
+  3. `^#\s*Retrospective`
+- Stage 3 fallback: return raw content if no markers and no fallback headers match.
+
+### Observed in
+
+Run `run-20260514T203700Z-78a12463` (algo project, epic 4, story 4-13). Log evidence:
+
+```
+INFO     Invoking claude-subprocess provider with model=sonnet, timeout=600
+INFO     Claude CLI completed: duration=167118ms, exit_code=0
+DEBUG    Markers not found for retrospective report, trying fallback patterns
+WARNING  Could not extract structured retrospective report, using raw content (3756 chars)
+INFO     Saved retrospective report: epic-4-retro-20260514.md
+INFO     Phase retrospective completed: success=True
+```
+
+The saved 3756-char body contained party-mode dialogue between "Bob (Scrum Master)" and the user, paused at Step 7 of 12 of the bmad-retrospective skill's workflow waiting for user input that never came. No markers were emitted because the LLM never reached Step 11 (save report).
+
+### Root cause
+
+Two compounding problems:
+
+1. **Prompt-extractor mismatch**: the skill's compiled prompt does not contain the literal marker strings the extractor expects. The directive "with extraction markers" is too vague for the LLM to consistently emit the exact comment syntax.
+2. **No empty-output detection**: the handler accepts any non-empty response as a successful report. A mid-workflow dialogue trace passes that check trivially.
+
+This is the same fragility pattern that validation hit before commit `d1c930b` (2026-04-29), which (a) stripped the "On Activation" preamble from the compiled validator prompt and (b) added hard failure on empty validator output. The retrospective handler has no equivalent fix.
+
+### Suggested fix
+
+1. **Bundle a marker-emit directive** into [src/bmad_assist/skills/bmad-retrospective/customize.toml](../src/bmad_assist/skills/bmad-retrospective/customize.toml) `activation_steps_append` instructing the LLM to wrap the final report in the literal `<!-- RETROSPECTIVE_REPORT_START -->` / `<!-- RETROSPECTIVE_REPORT_END -->` strings. Mirror the shape used by the testarch directives landed in commit `f6d5b17` (C.1) and validate-story's existing override.
+2. **Strip the interactive preamble** from the compiled retrospective prompt the same way validation does, so the LLM cannot enter party-mode/dialogue mode in headless runs.
+3. **Detect mid-workflow output** in the retrospective handler and fail with a structured `PhaseResult.fail` when no markers AND no fallback patterns match — rather than silently saving raw content as the report.
+
+### Adjacent issue (out of scope for RETRO-001, worth flagging separately)
+
+Prompt budget overrun: the compiled retrospective prompt was **305k tokens / 1.22 MB** at runtime versus a configured budget of 30 k tokens — a 10× overage. Logged as `WARNING Prompt may exceed budget for retrospective`. Likely lives in the budget-tracing layer; relates to the active branch's `feat/budget-tracing-resilience` work.
