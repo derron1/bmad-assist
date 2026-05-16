@@ -272,7 +272,12 @@ class TestDevStoryGateIntegration:
         mock_run_gate.assert_not_called()
 
     def test_gate_skipped_returns_success(self, project_with_paths: Path, dev_state: State) -> None:
-        """Gate runs and returns skipped=True (no config) → handler ok."""
+        """Gate runs and returns skipped=True (no config) → handler ok.
+
+        D.7 follow-up: the skipped gate result must persist into
+        ``PhaseResult.outputs["quality_gate_result"]`` so the runner can
+        attach it to the PhaseEvent (visible in the run YAML without --debug).
+        """
         handler = DevStoryHandler(_make_config(), project_with_paths)
 
         skip_result = QualityGateResult(
@@ -294,9 +299,20 @@ class TestDevStoryGateIntegration:
             result = handler.execute(dev_state)
 
         assert result.success
+        assert result.outputs["quality_gate_result"] == {
+            "passed": False,
+            "skipped": True,
+            "skip_reason": "no .pre-commit-config.yaml",
+            "failed_hooks": [],
+            "duration_ms": 2,
+            "output": "",
+        }
 
     def test_gate_passed_returns_success(self, project_with_paths: Path, dev_state: State) -> None:
-        """Gate ran and passed → handler returns ok and gate was invoked."""
+        """Gate ran and passed → handler returns ok and gate was invoked.
+
+        D.7 follow-up: the passed gate result must be attached to outputs.
+        """
         handler = DevStoryHandler(_make_config(), project_with_paths)
 
         pass_result = QualityGateResult(passed=True, duration_ms=120)
@@ -318,11 +334,18 @@ class TestDevStoryGateIntegration:
 
         assert result.success
         mock_run_gate.assert_called_once()
+        assert result.outputs["quality_gate_result"]["passed"] is True
+        assert result.outputs["quality_gate_result"]["duration_ms"] == 120
 
     def test_gate_failed_returns_phase_result_fail(
         self, project_with_paths: Path, dev_state: State
     ) -> None:
-        """Hook failure → PhaseResult.fail with hook names in error message."""
+        """Hook failure → PhaseResult.fail with hook names in error message.
+
+        D.7 follow-up: even on failure, the gate result must persist into
+        ``PhaseResult.outputs["quality_gate_result"]`` so the runner records
+        which hooks failed in the run YAML.
+        """
         handler = DevStoryHandler(_make_config(), project_with_paths)
 
         fail_result = QualityGateResult(
@@ -352,6 +375,14 @@ class TestDevStoryGateIntegration:
         assert "Quality gate failed" in result.error
         assert "ruff (lint)" in result.error
         assert "mypy" in result.error
+        assert result.outputs["quality_gate_result"] == {
+            "passed": False,
+            "skipped": False,
+            "skip_reason": None,
+            "failed_hooks": ["ruff (lint)", "mypy"],
+            "duration_ms": 5000,
+            "output": "ruff (lint).....Failed\nmypy............Failed\n",
+        }
 
 
 # =============================================================================

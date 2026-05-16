@@ -8,6 +8,8 @@ import pytest
 
 from bmad_assist.core.loop.run_tracking import (
     MAX_ARG_LENGTH,
+    PhaseEvent,
+    PhaseEventType,
     PhaseInvocation,
     PhaseStatus,
     RunLog,
@@ -59,15 +61,19 @@ class TestMaskCliArgs:
         args = [
             "--credential=abc",
             "--auth=xyz",
-            "--secret", "shhh",
-            "-password", "pass123",
+            "--secret",
+            "shhh",
+            "-password",
+            "pass123",
         ]
         result = mask_cli_args(args)
         assert result == [
             "--credential=***",
             "--auth=***",
-            "--secret", "***",
-            "-password", "***",
+            "--secret",
+            "***",
+            "-password",
+            "***",
         ]
 
     def test_truncates_overly_long_args(self) -> None:
@@ -150,6 +156,90 @@ class TestPhaseInvocation:
         )
         assert phase.status == PhaseStatus.ERROR
         assert phase.error_type == "TimeoutError"
+
+
+class TestPhaseEventQualityGateResult:
+    """D.7 follow-up: PhaseEvent.quality_gate_result persistence shape."""
+
+    def test_defaults_to_none(self) -> None:
+        """quality_gate_result is optional; omitting it defaults to None.
+
+        Backward compatibility: old run YAML files written before D.7
+        follow-up have no quality_gate_result field. They must load fine.
+        """
+        event = PhaseEvent(
+            event_type=PhaseEventType.COMPLETED,
+            phase="DEV_STORY",
+            timestamp=datetime.now(UTC),
+            provider="claude-subprocess",
+            model="opus",
+        )
+        assert event.quality_gate_result is None
+
+    def test_accepts_gate_result_dict(self) -> None:
+        """quality_gate_result accepts the serialized QualityGateResult dict.
+
+        Shape mirrors what BaseHandler._run_quality_gate_check produces.
+        """
+        gate_dict = {
+            "passed": True,
+            "skipped": False,
+            "skip_reason": None,
+            "failed_hooks": [],
+            "duration_ms": 120,
+            "output": "",
+        }
+        event = PhaseEvent(
+            event_type=PhaseEventType.COMPLETED,
+            phase="CREATE_STORY",
+            timestamp=datetime.now(UTC),
+            provider="claude-subprocess",
+            model="opus",
+            quality_gate_result=gate_dict,
+        )
+        assert event.quality_gate_result == gate_dict
+        assert event.quality_gate_result["passed"] is True
+
+    def test_accepts_skipped_shape(self) -> None:
+        """The skipped-with-reason variant must persist its skip_reason."""
+        event = PhaseEvent(
+            event_type=PhaseEventType.COMPLETED,
+            phase="DEV_STORY",
+            timestamp=datetime.now(UTC),
+            provider="claude-subprocess",
+            model="opus",
+            quality_gate_result={
+                "passed": False,
+                "skipped": True,
+                "skip_reason": "pre-commit not found on PATH",
+                "failed_hooks": [],
+                "duration_ms": 0,
+                "output": "",
+            },
+        )
+        assert event.quality_gate_result["skipped"] is True
+        assert event.quality_gate_result["skip_reason"] == "pre-commit not found on PATH"
+
+    def test_accepts_failed_shape(self) -> None:
+        """The failed variant must persist failed_hooks list and output blob."""
+        event = PhaseEvent(
+            event_type=PhaseEventType.COMPLETED,
+            phase="DEV_STORY",
+            timestamp=datetime.now(UTC),
+            provider="claude-subprocess",
+            model="opus",
+            status=PhaseStatus.ERROR,
+            quality_gate_result={
+                "passed": False,
+                "skipped": False,
+                "skip_reason": None,
+                "failed_hooks": ["ruff (lint)", "mypy"],
+                "duration_ms": 5000,
+                "output": "ruff (lint).....Failed\nmypy............Failed\n",
+            },
+        )
+        assert event.quality_gate_result["failed_hooks"] == ["ruff (lint)", "mypy"]
+        assert "ruff (lint)" in event.quality_gate_result["output"]
 
 
 class TestSaveRunLog:
@@ -271,6 +361,7 @@ class TestHelperFunctions:
             # Set mtime to 2 hours ago
             old_time = time.time() - 7200
             import os
+
             os.utime(old_tmp, (old_time, old_time))
 
             # Create a "new" tmp file

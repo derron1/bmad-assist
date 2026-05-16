@@ -938,27 +938,30 @@ class BaseHandler(ABC):
                 paths.append(absolute)
         return paths
 
-    def _run_quality_gate_check(self) -> PhaseResult | None:
+    def _run_quality_gate_check(self) -> tuple[PhaseResult | None, dict[str, Any] | None]:
         """Run the quality gate for this phase, if enabled.
 
         Intended to be called by ``execute()`` AFTER successful provider
-        invocation but BEFORE returning ``PhaseResult.ok``. Returns:
+        invocation but BEFORE returning ``PhaseResult.ok``. Returns a
+        tuple ``(failure, gate_dict)``:
 
-        - ``None`` when the gate is disabled for this phase, was skipped,
+        - ``failure`` is ``None`` when the gate is disabled, was skipped,
           or passed — the caller should continue with its success path.
-        - ``PhaseResult.fail(...)`` when the gate ran and any hook failed
+          ``PhaseResult.fail(...)`` when the gate ran and any hook failed
           — the caller should return this directly to fail the phase.
+        - ``gate_dict`` is a serialized ``QualityGateResult`` (passed,
+          skipped, skip_reason, failed_hooks, duration_ms, output) when
+          the gate ran. ``None`` when the gate is disabled. Callers
+          should attach this to ``PhaseResult.outputs["quality_gate_result"]``
+          on the success path so the runner can persist it to the run YAML
+          alongside ``termination_metadata`` (D.7 follow-up).
 
         Logging is handled here so callers don't need to repeat it.
-
-        Returns:
-            None on success / skip / gate-disabled; PhaseResult.fail on
-            hook failure.
 
         """
         qg_config = get_quality_gate_config(self.config)
         if not qg_config.is_enabled_for_phase(self.phase_name):
-            return None
+            return None, None
 
         # Imported lazily so unrelated handlers don't pull the runner in.
         from bmad_assist.quality_gate import run_quality_gate
@@ -972,6 +975,15 @@ class BaseHandler(ABC):
             timeout_seconds=qg_config.timeout_seconds,
         )
 
+        gate_dict: dict[str, Any] = {
+            "passed": gate_result.passed,
+            "skipped": gate_result.skipped,
+            "skip_reason": gate_result.skip_reason,
+            "failed_hooks": list(gate_result.failed_hooks),
+            "duration_ms": gate_result.duration_ms,
+            "output": gate_result.output,
+        }
+
         if gate_result.skipped:
             logger.info(
                 "Quality gate skipped for %s: %s (duration=%dms)",
@@ -979,7 +991,7 @@ class BaseHandler(ABC):
                 gate_result.skip_reason,
                 gate_result.duration_ms,
             )
-            return None
+            return None, gate_dict
 
         if not gate_result.passed:
             logger.error(
@@ -990,9 +1002,16 @@ class BaseHandler(ABC):
                 gate_result.output,
             )
             hook_list = ", ".join(gate_result.failed_hooks) or "unknown"
-            return PhaseResult.fail(
-                f"Quality gate failed: {len(gate_result.failed_hooks)} hooks failed "
-                f"({hook_list}). See logs for details."
+            return (
+                PhaseResult(
+                    success=False,
+                    error=(
+                        f"Quality gate failed: {len(gate_result.failed_hooks)} hooks failed "
+                        f"({hook_list}). See logs for details."
+                    ),
+                    outputs={"quality_gate_result": gate_dict},
+                ),
+                gate_dict,
             )
 
         logger.info(
@@ -1000,7 +1019,7 @@ class BaseHandler(ABC):
             self.phase_name,
             gate_result.duration_ms,
         )
-        return None
+        return None, gate_dict
 
     def execute(self, state: State) -> PhaseResult:
         """Execute the handler for the given state.
@@ -1066,7 +1085,7 @@ class BaseHandler(ABC):
                 # enabled for this phase) BEFORE declaring success. The
                 # gate hard-fails the phase if any pre-commit hook fails;
                 # there is no LLM fix-retry. See D.7.
-                gate_failure = self._run_quality_gate_check()
+                gate_failure, gate_dict = self._run_quality_gate_check()
                 if gate_failure is not None:
                     return gate_failure
 
@@ -1078,6 +1097,8 @@ class BaseHandler(ABC):
                 }
                 if term_metadata:
                     outputs["termination_metadata"] = term_metadata
+                if gate_dict is not None:
+                    outputs["quality_gate_result"] = gate_dict
                 phase_result = PhaseResult.ok(outputs)
 
             # Save timing if enabled and successful

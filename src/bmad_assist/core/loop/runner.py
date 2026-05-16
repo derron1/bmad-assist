@@ -352,7 +352,9 @@ def _start_ipc_server(
         logger.info("IPC server started on %s", socket_path)
         from bmad_assist.cli_utils import console
 
-        console.print("[dim]TUI available: run [bold]bmad-assist tui[/bold] in another terminal[/dim]")
+        console.print(
+            "[dim]TUI available: run [bold]bmad-assist tui[/bold] in another terminal[/dim]"
+        )
         console.print(f"[dim]  Socket: {socket_path}[/dim]")
         return ipc_thread
     except (StateError, OSError, TimeoutError, _IPCError) as e:
@@ -508,7 +510,12 @@ def run_loop(
 
             try:
                 exit_reason = _run_loop_body(
-                    config, project_path, epic_list, epic_stories_loader, run_log, cancel_ctx,
+                    config,
+                    project_path,
+                    epic_list,
+                    epic_stories_loader,
+                    run_log,
+                    cancel_ctx,
                     ipc_server=ipc_server,
                 )
                 # Update run_log with final status
@@ -860,33 +867,41 @@ def _run_loop_body(
                 override = config.phase_models[phase_name]
                 multi_list = override if isinstance(override, list) else [override]  # type: ignore[list-item]
                 for mc in multi_list:
-                    details.append({
-                        "provider": mc.provider,
-                        "model": mc.display_model,
-                        "phase": phase_name,
-                        "role": "multi",
-                    })
+                    details.append(
+                        {
+                            "provider": mc.provider,
+                            "model": mc.display_model,
+                            "phase": phase_name,
+                            "role": "multi",
+                        }
+                    )
             else:
                 for mc in config.providers.multi:
-                    details.append({
-                        "provider": mc.provider,
-                        "model": mc.display_model,
+                    details.append(
+                        {
+                            "provider": mc.provider,
+                            "model": mc.display_model,
+                            "phase": phase_name,
+                            "role": "multi",
+                        }
+                    )
+                details.append(
+                    {
+                        "provider": config.providers.master.provider,
+                        "model": config.providers.master.display_model,
                         "phase": phase_name,
-                        "role": "multi",
-                    })
-                details.append({
+                        "role": "master",
+                    }
+                )
+        else:
+            details.append(
+                {
                     "provider": config.providers.master.provider,
                     "model": config.providers.master.display_model,
                     "phase": phase_name,
                     "role": "master",
-                })
-        else:
-            details.append({
-                "provider": config.providers.master.provider,
-                "model": config.providers.master.display_model,
-                "phase": phase_name,
-                "role": "master",
-            })
+                }
+            )
 
         return details
 
@@ -915,7 +930,9 @@ def _run_loop_body(
             "current_epic": state.current_epic,
             "current_story": state.current_story,
             "current_phase": state.current_phase.name if state.current_phase else None,
-            "phase_started_at": state.phase_started_at.isoformat() if state.phase_started_at else None,
+            "phase_started_at": state.phase_started_at.isoformat()
+            if state.phase_started_at
+            else None,
             "session_details": _ipc_session_details(),
         }
 
@@ -926,7 +943,6 @@ def _run_loop_body(
     saved_phase: Phase | None = None
 
     try:  # IPC cleanup in finally block at the end of _run_loop_body
-
         # Epic setup: run before first story if not already complete
         # Per ADR-007: This also handles resume-after-setup-crash by restarting all setup phases
         if not state.epic_setup_complete and loop_config.epic_setup:
@@ -935,7 +951,9 @@ def _run_loop_body(
             saved_phase = state.current_phase
             logger.info("Running epic setup phases for epic %s", state.current_epic)
             state, setup_success = _execute_epic_setup(
-                state, state_path, project_path,
+                state,
+                state_path,
+                project_path,
             )
         if not setup_success:
             logger.error("Epic setup failed, halting loop")
@@ -990,15 +1008,20 @@ def _run_loop_body(
                 epic_id=state.current_epic,
                 story_id=str(state.current_story) if state.current_story else None,
             )
-            emitter.update_state(RunnerState.RUNNING, {
-                "current_epic": state.current_epic,
-                "current_story": state.current_story,
-                "current_phase": _phase_name_ipc,
-                "elapsed_seconds": get_project_duration_ms(state) / 1000.0,
-                "llm_sessions": _ipc_llm_count(),
-                "phase_started_at": state.phase_started_at.isoformat() if state.phase_started_at else None,
-                "session_details": _ipc_session_details(),
-            })
+            emitter.update_state(
+                RunnerState.RUNNING,
+                {
+                    "current_epic": state.current_epic,
+                    "current_story": state.current_story,
+                    "current_phase": _phase_name_ipc,
+                    "elapsed_seconds": get_project_duration_ms(state) / 1000.0,
+                    "llm_sessions": _ipc_llm_count(),
+                    "phase_started_at": state.phase_started_at.isoformat()
+                    if state.phase_started_at
+                    else None,
+                    "session_details": _ipc_session_details(),
+                },
+            )
 
             # CLI Observability: Record phase START in run log (crash diagnostics)
             if run_log is not None:
@@ -1072,7 +1095,9 @@ def _run_loop_body(
                     MULTI_LLM_PHASES as _MULTI_PHASES,
                 )
 
-                _pcount = (len(config.providers.multi) + 1) if phase_name.lower() in _MULTI_PHASES else 1
+                _pcount = (
+                    (len(config.providers.multi) + 1) if phase_name.lower() in _MULTI_PHASES else 1
+                )
                 _compile_ms = result.outputs.get("compile_ms") if result.outputs else None
                 _invoke_ms = result.outputs.get("invoke_ms") if result.outputs else None
                 run_log.phases.append(
@@ -1090,10 +1115,15 @@ def _run_loop_body(
                         invoke_ms=_invoke_ms,
                     )
                 )
-                # Extract termination_metadata from phase outputs (if guard was active)
+                # Extract termination_metadata + quality_gate_result from
+                # phase outputs (if those producers were active). D.7 follow-up
+                # persists gate outcomes to the run YAML so they're queryable
+                # without --debug.
                 term_metadata = None
+                gate_result_dict = None
                 if result.outputs and isinstance(result.outputs, dict):
                     term_metadata = result.outputs.get("termination_metadata")
+                    gate_result_dict = result.outputs.get("quality_gate_result")
 
                 # Add COMPLETED event for CSV timeline
                 run_log.phase_events.append(
@@ -1111,6 +1141,7 @@ def _run_loop_body(
                         termination_metadata=term_metadata,
                         compile_ms=_compile_ms,
                         invoke_ms=_invoke_ms,
+                        quality_gate_result=gate_result_dict,
                     )
                 )
                 # Clear current_phase now that it's recorded in phases list
@@ -1160,7 +1191,9 @@ def _run_loop_body(
                 # Check if this is a teardown phase failure (resume case)
                 # Teardown phases should warn and continue, not halt (per ADR-002)
                 teardown_phases = (
-                    [Phase(p) for p in loop_config.epic_teardown] if loop_config.epic_teardown else []
+                    [Phase(p) for p in loop_config.epic_teardown]
+                    if loop_config.epic_teardown
+                    else []
                 )
                 is_teardown_failure = state.current_phase in teardown_phases
 
@@ -1195,7 +1228,9 @@ def _run_loop_body(
 
                     if is_project_complete:
                         project_duration_ms = get_project_duration_ms(state)
-                        total_stories = len(state.completed_stories) if state.completed_stories else 0
+                        total_stories = (
+                            len(state.completed_stories) if state.completed_stories else 0
+                        )
                         _dispatch_event(
                             "project_completed",
                             project_path,
@@ -1309,7 +1344,9 @@ def _run_loop_body(
 
                     # Wait for resume (pause.flag cleared) or stop request
                     # shutdown_requested() is checked inside wait_for_resume (Story 22.10)
-                    resumed = wait_for_resume(project_path, stop_event=None, pause_timeout_minutes=60)
+                    resumed = wait_for_resume(
+                        project_path, stop_event=None, pause_timeout_minutes=60
+                    )
 
                     if not resumed:
                         # Stop requested while paused or timeout
@@ -1352,9 +1389,7 @@ def _run_loop_body(
 
             # Handle VALIDATE_STORY_SYNTHESIS RETRYABLE outcomes (ToolCallGuard, truncation)
             if current_phase == Phase.VALIDATE_STORY_SYNTHESIS and result.success:
-                vss_failure_class = (
-                    result.outputs.get("failure_class") if result.outputs else None
-                )
+                vss_failure_class = result.outputs.get("failure_class") if result.outputs else None
                 vss_extraction_quality = (
                     result.outputs.get("extraction_quality") if result.outputs else None
                 )
@@ -1413,9 +1448,7 @@ def _run_loop_body(
                 resolution = result.outputs.get("resolution") if result.outputs else None
                 verdict = result.outputs.get("verdict", "UNKNOWN") if result.outputs else "UNKNOWN"
                 synthesis_report_path = (
-                    result.outputs.get("synthesis_report_path")
-                    if result.outputs
-                    else None
+                    result.outputs.get("synthesis_report_path") if result.outputs else None
                 )
                 extraction_quality = (
                     result.outputs.get("extraction_quality") if result.outputs else None
@@ -1597,11 +1630,15 @@ def _run_loop_body(
                         story_title=story_title,
                     )
 
-                new_state, is_epic_complete = handle_story_completion(state, epic_stories, state_path)
+                new_state, is_epic_complete = handle_story_completion(
+                    state, epic_stories, state_path
+                )
 
                 if is_epic_complete:
                     # Run all epic teardown phases (retrospective, qa_plan_*, etc.)
-                    logger.info("Epic %s stories complete, running teardown phases", state.current_epic)
+                    logger.info(
+                        "Epic %s stories complete, running teardown phases", state.current_epic
+                    )
                     state, _teardown_result = _execute_epic_teardown(
                         new_state, state_path, project_path
                     )
@@ -1640,7 +1677,9 @@ def _run_loop_body(
                     if is_project_complete:
                         # Story standalone-03 AC7: Dispatch project_completed event
                         project_duration_ms = get_project_duration_ms(state)
-                        total_stories = len(state.completed_stories) if state.completed_stories else 0
+                        total_stories = (
+                            len(state.completed_stories) if state.completed_stories else 0
+                        )
                         _dispatch_event(
                             "project_completed",
                             project_path,
@@ -1700,7 +1739,9 @@ def _run_loop_body(
                         except ValueError:
                             # Fallback for standalone stories or non-standard IDs
                             # Use current_epic directly as EpicId (supports string epics)
-                            parsed_epic = state.current_epic if state.current_epic is not None else 1
+                            parsed_epic = (
+                                state.current_epic if state.current_epic is not None else 1
+                            )
                             parsed_story = 1
 
                         # Get story title from story file or use default
@@ -1723,7 +1764,9 @@ def _run_loop_body(
                             sequence_id=sequence_id,
                             epic_num=parsed_epic,
                             story_id=story_id_str,
-                            phase=state.current_phase.name if state.current_phase else "CREATE_STORY",
+                            phase=state.current_phase.name
+                            if state.current_phase
+                            else "CREATE_STORY",
                             phase_status="in-progress",
                         )
 
@@ -1833,7 +1876,9 @@ def _run_loop_body(
                 # Check if this is the last epic_teardown phase (in case get_next_phase
                 # returns None for a phase that's part of teardown but executed separately)
                 teardown_phases = (
-                    [Phase(p) for p in loop_config.epic_teardown] if loop_config.epic_teardown else []
+                    [Phase(p) for p in loop_config.epic_teardown]
+                    if loop_config.epic_teardown
+                    else []
                 )
                 is_teardown_phase = current_phase in teardown_phases
 
@@ -1864,7 +1909,9 @@ def _run_loop_body(
 
                     if is_project_complete:
                         project_duration_ms = get_project_duration_ms(state)
-                        total_stories = len(state.completed_stories) if state.completed_stories else 0
+                        total_stories = (
+                            len(state.completed_stories) if state.completed_stories else 0
+                        )
                         _dispatch_event(
                             "project_completed",
                             project_path,

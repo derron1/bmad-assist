@@ -66,9 +66,14 @@ class PhaseEvent(BaseModel):
     duration_ms: int | None = None
     status: PhaseStatus | None = None  # success/error/timeout
     error_type: str | None = None
-    termination_metadata: dict[str, Any] | None = None  # opaque termination data (guard stats, etc.)
+    termination_metadata: dict[str, Any] | None = (
+        None  # opaque termination data (guard stats, etc.)
+    )
     compile_ms: int | None = None  # Time spent compiling the workflow prompt
-    invoke_ms: int | None = None   # Time spent invoking the provider
+    invoke_ms: int | None = None  # Time spent invoking the provider
+    quality_gate_result: dict[str, Any] | None = (
+        None  # serialized QualityGateResult; populated only when D.7 gate ran
+    )
 
 
 class PhaseInvocation(BaseModel):
@@ -84,7 +89,7 @@ class PhaseInvocation(BaseModel):
     error_type: str | None = None
     provider_count: int = 1  # Actual LLM invocations (>1 for multi-LLM phases)
     compile_ms: int | None = None  # Time spent compiling the workflow prompt
-    invoke_ms: int | None = None   # Time spent invoking the provider
+    invoke_ms: int | None = None  # Time spent invoking the provider
 
 
 class CurrentPhase(BaseModel):
