@@ -17,7 +17,46 @@ activation_steps_prepend = []
 # Overrides append. Use for context-heavy setup that should happen
 # once the user has been acknowledged.
 
-activation_steps_append = []
+activation_steps_append = [
+  # Headless override: bmad-assist runs testarch workflows without a human in
+  # the loop. Step files (loaded by the model from disk at runtime) contain
+  # interactive gates (HALT/Ask/[C/R/V/E] menu) appropriate for solo-dev use of
+  # upstream TEA but inappropriate for automated multi-LLM orchestration. This
+  # entry pre-resolves the workflow target from the embedded context and tells
+  # the model to bypass those gates.
+  #
+  # Test-design-specific: the orchestrator's test_design handler resolves
+  # System-level vs Epic-level scope BEFORE invocation (via sprint-status
+  # presence, first-epic check, or config override). The decision is passed via
+  # {test_design_level}. The skill's step-01-detect-mode.md asks "(A)
+  # System-level or (B) Epic-level" and halts if unclear — that menu must be
+  # bypassed because the orchestrator already chose; the regex output extractor
+  # then matches "system" or "epic" in the report to confirm the level.
+  '''HEADLESS MULTI-LLM TEST DESIGN — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. There is no user to ask; do not request clarification.
+
+Embedded inputs (use these — do not ask):
+- Epic / story metadata → <variables> block
+- Story file (when present) → <file label="STORY FILE">
+- Architecture, project context, standards → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- {epic_num} = the value already in <variables>
+- {story_num} = the value already in <variables>
+- {story_id} = the value already in <variables>
+- {project_path} = the value already in <variables>
+- {test_design_mode} = the orchestrator-chosen mode
+- {test_design_level} = the orchestrator-resolved scope (one of: "system" or "epic")
+
+Skill overrides:
+1. Skip the [C]reate / [R]esume / [V]alidate / [E]dit mode menu. Mode is auto-selected by the orchestrator; proceed directly into the create flow (steps-c) unless the embedded variables explicitly indicate resume/validate/edit.
+2. Skip the (A) System-level / (B) Epic-level menu in step-01-detect-mode.md. {test_design_level} is authoritative — generate the corresponding scope's test plan only. Do NOT re-decide based on PRD/ADR vs Epic presence; do NOT halt on "mode unclear"; do NOT present a selection menu.
+3. Skip all other interactive gates in step files. Ignore: <ask> blocks, "HALT. Notify the user", "Should I...", "Which...?", "Wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+4. Emit the level token verbatim (e.g., "level: system" or "level: epic") somewhere in the final report — the orchestrator's regex extractor matches "system" or "epic" to confirm the chosen scope landed.
+5. For HALT preconditions (e.g., genuinely missing PRD when {test_design_level} = "system"), prefer falling through with explicit "insufficient evidence" findings rather than halting. Only halt if literally no information is available to make progress.
+6. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run
 # (testing standards, framework conventions, compliance constraints).

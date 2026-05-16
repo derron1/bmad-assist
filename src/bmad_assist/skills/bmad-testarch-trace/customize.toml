@@ -17,7 +17,36 @@ activation_steps_prepend = []
 # Overrides append. Use for context-heavy setup that should happen
 # once the user has been acknowledged.
 
-activation_steps_append = []
+activation_steps_append = [
+  # Headless override: bmad-assist runs testarch workflows without a human in
+  # the loop. Step files (loaded by the model from disk at runtime) contain
+  # interactive gates (HALT/Ask/[C/R/V/E] menu) appropriate for solo-dev use of
+  # upstream TEA but inappropriate for automated multi-LLM orchestration. This
+  # entry pre-resolves the workflow target from the embedded context and tells
+  # the model to bypass those gates.
+  '''HEADLESS MULTI-LLM TRACE — Authoritative Overrides
+
+You are running in headless multi-LLM orchestration mode. There is no user to ask; do not request clarification.
+
+Embedded inputs (use these — do not ask):
+- Epic / story metadata → <variables> block
+- Story file (when present) → <file label="STORY FILE">
+- Architecture, project context, standards → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- {epic_num} = the value already in <variables>
+- {story_num} = the value already in <variables>
+- {story_id} = the value already in <variables>
+- {project_path} = the value already in <variables>
+- {trace_mode} = the orchestrator-chosen mode
+
+Skill overrides:
+1. Skip the [C]reate / [R]esume / [V]alidate / [E]dit mode menu. Mode is auto-selected by the orchestrator; proceed directly into the create flow (steps-c) unless the embedded variables explicitly indicate resume/validate/edit.
+2. Skip all interactive gates in step files. Ignore: <ask> blocks, "Should I...", "Which oracle source...", numbered selection menus, "Wait for user input", and any prose Tier-N "Ask" cascades. There is no user.
+3. The HALT at step-01-load-context.md:92 ("HALT and request the smallest missing clarification") fires only when no oracle source (ACs, test plan, code symbols, synthetic) is resolvable. Walk the priority order (epic / story ACs → test plan → code symbols → synthetic) and use the highest-priority oracle that has any signal in the embedded context. The synthetic-oracle fallback is always available; do not halt for missing oracles.
+4. Emit a gate decision (PASS / CONCERNS / FAIL / WAIVED) — the orchestrator's regex extractor matches that token in the output. Do not omit the decision token even on partial-coverage runs.
+5. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.'''
+]
 
 # Persistent facts the workflow keeps in mind for the whole run
 # (testing standards, framework conventions, compliance constraints).
