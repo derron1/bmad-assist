@@ -110,15 +110,26 @@ _MIN_VALIDATORS = 2
 # F7 FIX: Use shared delayed_invoke instead of local duplicate
 from bmad_assist.core.async_utils import delayed_invoke
 
-# Tools allowed for validators (read-only + organization tools)
-# Write/Edit/Bash restricted to prevent file modification
+# Tools allowed for validators (organization tool only).
+#
+# validate_story works from EMBEDDED context: the story file, project-context,
+# architecture, and previous stories are bundled into the prompt by
+# SourceContextService. The prompt directive explicitly says "All inputs are
+# EMBEDDED below — do not attempt to read files."
+#
+# Empirically (run 20260526T134028Z, serenityv2 story 10.4): the Claude/Sonnet
+# validator took 518s with Read/Grep/Glob enabled, doing 10 redundant
+# filesystem walks; Codex finished in 129s with `--sandbox read-only` enforced
+# at the CLI level and produced matching CRITICAL findings. The filesystem
+# tools added latency, not signal. The prompt's "do not read files" directive
+# alone was not enough — structural restriction here is the enforcement layer.
+#
+# Note: code_review has its own _REVIEWER_ALLOWED_TOOLS which DOES include
+# Read/Grep/Glob — code reviewers legitimately need to read the source being
+# reviewed. The validate_story phase is different: it validates a story
+# spec markdown, not live code.
 _VALIDATOR_ALLOWED_TOOLS: list[str] = [
     "TodoWrite",  # Task organization
-    "Read",  # File reading
-    "Grep",  # Content search
-    "Glob",  # File pattern matching
-    "WebFetch",  # Web content fetching
-    "WebSearch",  # Web search
 ]
 
 
@@ -723,13 +734,21 @@ async def run_validation_phase(
     # Add validator names with role letters
     validator_idx = 0
     for mc in multi_configs:
-        role = role_letters[validator_idx] if validator_idx < len(role_letters) else f"V{validator_idx}"
+        role = (
+            role_letters[validator_idx]
+            if validator_idx < len(role_letters)
+            else f"V{validator_idx}"
+        )
         task_names.append(f"{role}:{mc.provider}-{mc.display_model}")
         validator_idx += 1
 
     # Add master if included
     if not phase_has_override:
-        role = role_letters[validator_idx] if validator_idx < len(role_letters) else f"V{validator_idx}"
+        role = (
+            role_letters[validator_idx]
+            if validator_idx < len(role_letters)
+            else f"V{validator_idx}"
+        )
         task_names.append(f"{role}:master-{config.providers.master.display_model}")
         validator_idx += 1
 
@@ -748,9 +767,7 @@ async def run_validation_phase(
             logger.debug("GATHER_DEBUG: [%s] failed: %s", name, e)
             raise
 
-    tracked_tasks = [
-        track_task(i, t, task_names[i]) for i, t in enumerate(tasks)
-    ]
+    tracked_tasks = [track_task(i, t, task_names[i]) for i, t in enumerate(tasks)]
 
     logger.debug("GATHER_DEBUG: Waiting for %d tasks: %s", len(tracked_tasks), task_names)
     results = await asyncio.gather(*tracked_tasks, return_exceptions=True)
@@ -853,7 +870,7 @@ async def run_validation_phase(
         if anonymized_id and anonymized_id.startswith("Validator "):
             role_id = anonymized_id[-1].lower()  # "Validator C" -> "c"
         else:
-            role_id = chr(ord('a') + idx)  # fallback to index-based
+            role_id = chr(ord("a") + idx)  # fallback to index-based
 
         try:
             save_validation_report(
@@ -1037,7 +1054,7 @@ def _filter_outlier_validations(
     lengths = [len(v.content) for v in validations]
     mean_len = sum(lengths) / len(lengths)
     variance = sum((ln - mean_len) ** 2 for ln in lengths) / len(lengths)
-    std_dev = variance ** 0.5
+    std_dev = variance**0.5
 
     if std_dev == 0:
         return validations
@@ -1058,13 +1075,14 @@ def _filter_outlier_validations(
         logger.warning(
             "Dropped %d outlier validation(s): %s",
             len(rejected),
-            ", ".join(
-                f"{vid} ({length:,} chars, {sigma:.1f}σ)" for vid, length, sigma in rejected
-            ),
+            ", ".join(f"{vid} ({length:,} chars, {sigma:.1f}σ)" for vid, length, sigma in rejected),
         )
         logger.info(
             "Validation size stats: mean=%.0f chars, std=%.0f chars, kept=%d, dropped=%d",
-            mean_len, std_dev, len(result), len(rejected),
+            mean_len,
+            std_dev,
+            len(result),
+            len(rejected),
         )
 
     return result
@@ -1126,9 +1144,7 @@ def _trim_validation_report(
         for idx, match in enumerate(matches):
             emoji = match.group(1)
             section_start = match.start()
-            section_end = (
-                matches[idx + 1].start() if idx + 1 < len(matches) else len(content)
-            )
+            section_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(content)
             section = content[section_start:section_end]
 
             cap = effective.get(emoji)
@@ -1144,8 +1160,7 @@ def _trim_validation_report(
             cutoff = sub_matches[cap].start()
             trimmed_count = len(sub_matches) - cap
             result.append(
-                section[:cutoff].rstrip()
-                + f"\n\n_(... {trimmed_count} additional finding(s) "
+                section[:cutoff].rstrip() + f"\n\n_(... {trimmed_count} additional finding(s) "
                 f"trimmed for synthesis input — full report saved on disk ...)_\n\n"
             )
         return "".join(result)
