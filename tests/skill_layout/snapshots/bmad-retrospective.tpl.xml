@@ -157,9 +157,42 @@ Greet `{user_name}`, speaking in `English`.
 
 ### Step 6: Execute Append Steps
 
-Execute each entry in `` in order.
+Execute each entry in `- HEADLESS MULTI-LLM RETROSPECTIVE — Authoritative Overrides
 
-Activation is complete. Begin the workflow below.
+You are running in headless multi-LLM orchestration mode. There is no user to ask; do not request clarification. Do not enter party-mode interactive dialogue.
+
+Embedded inputs (use these — do not ask):
+- Epic / story metadata → <variables> block
+- Story files, sprint-status, antipatterns, prior retrospectives → <file> entries in <context>
+- Project context, architecture, standards → other <file> entries
+
+Pre-resolved variables (do NOT re-discover):
+- 10 = the value already in <variables>
+- {project_path} = the value already in <variables>
+- {user_name} = the value already in <variables> (do not greet conversationally; this is a non-interactive run)
+
+Skill overrides:
+1. Skip Steps 5 (Greet the User) interactive greeting and all party-mode dialogue gates throughout the workflow. Ignore: interactive ask elements, "Q1 — ...?" / "Q2 — ...?" cascades, "What is your take on...", "Bob (Scrum Master):" / "Sally:" / "Murat:" / persona-prompted user replies, numbered selection menus, "Wait for user input", and any prose Tier-N "Ask" cascades. (Do not echo the literal upstream tag syntax for these gates — it would collide with the orchestrator's regex stripper for interactive blocks.)
+2. Execute the full pipeline through Step 11 (Save Retrospective) and Step 12 (Final Summary) without pausing. The retrospective should synthesize the embedded artifacts (sprint outcomes, antipatterns, prior retros) directly into the structured report — no facilitated discussion is required because there is no participant to facilitate.
+3. Do not ask for clarification. If you would otherwise stop to ask, instead make the most defensible reading of the embedded context and continue.
+
+REQUIRED OUTPUT FORMAT — Marker-Wrapped Report
+
+The orchestrator extracts the retrospective report by grepping for literal HTML comment markers ([core/extraction.py](https://example.invalid)). Without the markers, the extractor falls through 3 fallback patterns and saves the raw response body as the "report" — a silent-success failure mode.
+
+Your final output MUST begin with the start marker and end with the end marker, exactly:
+
+<!-- RETROSPECTIVE_REPORT_START -->
+
+# Epic 10 Retrospective
+
+... full structured retrospective per Step 11 ...
+
+<!-- RETROSPECTIVE_REPORT_END -->
+
+The markers are literal HTML comment strings. Do not paraphrase them. Do not omit either marker. Emit the START marker before any report content and the END marker after all report content, including action items and handoff notes.` in order.
+
+Activation is complete. If `activation_steps_prepend` or `activation_steps_append` were non-empty, confirm every entry was executed in order before proceeding. Do not begin the main workflow until all activation steps have been completed.
 
 ## Paths
 
