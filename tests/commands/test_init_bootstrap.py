@@ -125,6 +125,75 @@ def test_bootstrap_refresh_preserves_customize_toml(tmp_path: Path) -> None:
     assert (skill_dir / "customize.toml").read_text(encoding="utf-8") == user_override
 
 
+def test_bootstrap_legacy_stamp_does_not_poison_stale_customize(tmp_path: Path) -> None:
+    """BOOT-001 regression: legacy one-line stamp must not falsely certify stale content.
+
+    Reproduces the poison vector: an install with a legacy one-line stamp
+    (``version == current``, no ``customize_toml_hash``) whose customize.toml is
+    a STALE bundled default (differs from the current bundled). The buggy code
+    re-stamped with the CURRENT bundled hash without copying — falsely
+    certifying stale content as current-bundled, which froze it forever. After
+    the fix, the stamp must record the hash of what is actually on disk (the
+    stale content), never the current bundled hash.
+    """
+    from bmad_assist.skills import get_bundled_skill_dir
+
+    src_dir = get_bundled_skill_dir("bmad-create-story")
+    assert src_dir is not None
+    current_bundled_hash = _hash_file(src_dir / "customize.toml")
+    assert current_bundled_hash is not None
+
+    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
+    skill_dir.mkdir(parents=True)
+    stale_customize = "# stale bundled default\nactivation_steps_append = []\n"
+    (skill_dir / "customize.toml").write_text(stale_customize, encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("OLD CONTENT\n", encoding="utf-8")
+    stale_hash = _hash_file(skill_dir / "customize.toml")
+    assert stale_hash != current_bundled_hash
+    # Legacy one-line stamp at the CURRENT version (the poison precondition).
+    _stamp_skill(skill_dir, bmad_assist.__version__)
+
+    bootstrap_new_layout(tmp_path, force=False, console=_quiet())
+
+    stamp = _read_installed_bundle_stamp(skill_dir)
+    # The stamp must reflect the on-disk (stale) content, NOT the current
+    # bundled hash. A stamp == current_bundled_hash here is the poison.
+    assert stamp.customize_toml_hash == stale_hash
+    assert stamp.customize_toml_hash != current_bundled_hash
+
+
+def test_bootstrap_legacy_stale_customize_self_heals_on_second_run(tmp_path: Path) -> None:
+    """BOOT-001 regression: a stale legacy default self-heals within two runs.
+
+    Run 1 records the truthful (stale) on-disk hash. Run 2 sees the stamp no
+    longer matches current bundled, takes the refresh path, recognizes the
+    on-disk content as the previously-stamped default, and overwrites it with
+    the current bundled customize.toml.
+    """
+    from bmad_assist.skills import get_bundled_skill_dir
+
+    src_dir = get_bundled_skill_dir("bmad-create-story")
+    assert src_dir is not None
+    expected = (src_dir / "customize.toml").read_text(encoding="utf-8")
+
+    skill_dir = tmp_path / ".claude" / "skills" / "bmad-create-story"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "customize.toml").write_text(
+        "# stale bundled default\nactivation_steps_append = []\n", encoding="utf-8"
+    )
+    (skill_dir / "SKILL.md").write_text("OLD CONTENT\n", encoding="utf-8")
+    _stamp_skill(skill_dir, bmad_assist.__version__)
+
+    # Run 1: truthful stamp of the stale content (no copy yet).
+    bootstrap_new_layout(tmp_path, force=False, console=_quiet())
+    # Run 2: stamp != current → refresh → recognized-as-unmodified → copied.
+    bootstrap_new_layout(tmp_path, force=False, console=_quiet())
+
+    assert (skill_dir / "customize.toml").read_text(encoding="utf-8") == expected
+    stamp = _read_installed_bundle_stamp(skill_dir)
+    assert stamp.customize_toml_hash == _hash_file(src_dir / "customize.toml")
+
+
 def test_bootstrap_refresh_overwrites_unmodified_bundled_customize_toml(
     tmp_path: Path,
 ) -> None:

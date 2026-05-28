@@ -217,6 +217,21 @@ def _write_bundle_version(
     (skill_dir / _BUNDLE_VERSION_FILE).write_text(content, encoding="utf-8")
 
 
+def _installed_customize_hash(skill_dir: Path) -> str | None:
+    """Hash the customize.toml that is actually on disk in an installed skill.
+
+    The stamp's invariant is that ``customize_toml_hash`` records the
+    bundled default the on-disk file was last synced from. ``_copy_skill_tree``
+    may PRESERVE an existing customize.toml (no copy) when it diverges from the
+    previously stamped default, so callers must stamp the hash of what is
+    *actually on disk* rather than the current bundled hash — otherwise the
+    stamp falsely certifies stale content as current-bundled and every future
+    run's stamp-is-current fast-path skips the skill forever (see BOOT-001 in
+    docs/known-issues.md).
+    """
+    return _hash_file(skill_dir / "customize.toml")
+
+
 def _copy_skill_tree(
     src_dir: Path,
     dst_dir: Path,
@@ -381,7 +396,7 @@ def bootstrap_new_layout(
                     dst_dir,
                     preserve_customizations=preserve_customizations,
                 )
-                _write_bundle_version(dst_dir, current_version, current_customize_hash)
+                _write_bundle_version(dst_dir, current_version, _installed_customize_hash(dst_dir))
                 if skill_status not in ("fresh",):
                     skill_status = "fresh"
                 continue
@@ -400,7 +415,7 @@ def bootstrap_new_layout(
                     preserve_customizations=preserve_customizations,
                     previous_customize_toml_hash=installed_stamp.customize_toml_hash,
                 )
-                _write_bundle_version(dst_dir, current_version, current_customize_hash)
+                _write_bundle_version(dst_dir, current_version, _installed_customize_hash(dst_dir))
                 if skill_status != "fresh":
                     skill_status = "forced"
                 continue
@@ -411,7 +426,7 @@ def bootstrap_new_layout(
             ):
                 # Upgrade legacy one-line stamps in place without
                 # changing an otherwise current no-clobber install.
-                _write_bundle_version(dst_dir, current_version, current_customize_hash)
+                _write_bundle_version(dst_dir, current_version, _installed_customize_hash(dst_dir))
                 if skill_status is None:
                     skill_status = "skipped"
                 continue
@@ -431,7 +446,7 @@ def bootstrap_new_layout(
                     preserve_customizations=preserve_customizations,
                     previous_customize_toml_hash=installed_stamp.customize_toml_hash,
                 )
-                _write_bundle_version(dst_dir, current_version, current_customize_hash)
+                _write_bundle_version(dst_dir, current_version, _installed_customize_hash(dst_dir))
                 if skill_status not in ("fresh", "forced"):
                     skill_status = "refreshed"
                     if from_version is None:

@@ -4,6 +4,63 @@ Tracked issues that have not yet been resolved. Filed here when GitHub issue tra
 
 ---
 
+## BOOT-001 — Bootstrap stamp poisoning silently freezes stale customize.toml (blocks bundled-skill updates)
+
+**Status**: open
+**Filed**: 2026-05-28
+**Component**: [src/bmad_assist/core/project_setup.py](../src/bmad_assist/core/project_setup.py) (`bootstrap_new_layout`, `_copy_skill_tree`, `_write_bundle_version`)
+
+### Summary
+
+Bootstrap can write a `.bundle-version` stamp that records the **current** bundled `customize.toml` hash while the **installed** `customize.toml` content is stale (never copied). The stamp then falsely certifies stale content as current-bundled. On every subsequent run the stamp-is-current fast-path fires and skips the skill, so the stale file is frozen forever. Net effect: changes to a bundled `customize.toml` silently never reach affected consumer projects.
+
+### Observed in
+
+serenityv2 run `run-20260528T200311Z`. This session added a `HEADLESS MULTI-LLM RETROSPECTIVE` directive to the bundled `bmad-retrospective/customize.toml` (commit `d1adbd3`) and headless directives to 8 testarch skills (commit `f6d5b17` / C.1). None reached serenityv2:
+
+| | value |
+|---|---|
+| Current bundled hash | `89aa3cc39688` (87-line file, has directive) |
+| Installed content hash (`.claude/.../customize.toml`) | `0b032c342129` (41-line file, `activation_steps_append = []`) |
+| `.bundle-version` stamp records | `89aa3cc39688` ← the **current bundled** hash, not the installed content's |
+| customize.toml mtime | May 1 (untouched) |
+| .bundle-version mtime | May 28 21:03 (rewritten this run) |
+
+Bootstrap log for all 18 skills: `Preserving modified customize.toml at .../serenityv2/.claude/skills/<skill>/customize.toml; bundled defaults were not overwritten`.
+
+### Root cause — two poisoning vectors
+
+Both write `current_customize_hash` to the stamp when the file on disk is not actually the current bundled content:
+
+1. **Legacy-stamp upgrade** ([project_setup.py:408-417](../src/bmad_assist/core/project_setup.py#L408-L417)): when an old one-line stamp has `customize_toml_hash: None` and `version == current`, bootstrap calls `_write_bundle_version(dst_dir, current_version, current_customize_hash)` **without copying the file or verifying the on-disk content matches**. If the legacy install's content is stale, the stamp is now poisoned.
+2. **Refresh-after-preserve** ([project_setup.py:428-434](../src/bmad_assist/core/project_setup.py#L428-L434)): `_copy_skill_tree` hits its "Preserving modified" branch ([line 288-294](../src/bmad_assist/core/project_setup.py#L288-L294), `continue` without copying), then the caller unconditionally stamps `current_customize_hash` anyway.
+
+The invariant that should hold — *the stamp's `customize_toml_hash` equals the bundled default the on-disk file was last synced from* — is violated. Once `stamp == current` but `content != current`, the fast-path at [project_setup.py:419-422](../src/bmad_assist/core/project_setup.py#L419-L422) (`stamp_is_current` trusts the stamp, never hashes on-disk content) skips the skill permanently.
+
+### Blast radius
+
+Every consumer project bootstrapped by an older bmad-assist that used the legacy one-line stamp format. For those, **any** future bundled `customize.toml` change silently fails to propagate. Not specific to serenityv2 or to this session's directives.
+
+### Recovery (for already-poisoned installs)
+
+A normal `bmad-assist run` will NOT fix a poisoned install (the fast-path skips it). Options:
+
+1. `bmad-assist init --reset-skills-force` — sets `preserve_customizations=False`, overwrites ALL customize.toml in both mirrors. Safe when the project keeps genuine overrides in `_bmad/custom/<skill>.toml` (the documented override location) rather than in `.claude/skills/`.
+2. Manually delete the stale installed `customize.toml` (both `.claude/skills/` and `.agents/skills/` mirrors); bootstrap then takes the fresh-copy branch.
+
+### Suggested fix
+
+Make the stamp truthful: never write `current_customize_hash` unless the customize.toml was actually copied to the current bundled content. Concretely:
+
+- Have `_copy_skill_tree` report whether it copied vs preserved the customize.toml (or compute the on-disk hash after the copy/preserve decision).
+- Stamp the **on-disk content hash**, not `current_customize_hash`. When copied → on-disk == current → stamp current. When preserved → stamp the actual (stale/user) content's basis.
+- Fix the legacy-upgrade path ([line 414](../src/bmad_assist/core/project_setup.py#L414)) the same way: stamp the on-disk hash, not `current`. This lets legacy installs **self-heal** on the next run (stamp ≠ current → refresh → `_copy_skill_tree` sees on-disk == prior stamp → copies the new bundled).
+- Already-poisoned installs (stamp already == current, content stale) cannot self-heal — they need the one-time force-refresh above. Optionally add a content-hash verification to the `stamp_is_current` fast-path to detect desync, but it can't safely auto-overwrite without risking genuine user edits.
+
+This is the deeper form of the handoff's **A.1** item ("bootstrap content-aware refresh… worth confirming behavior on every code path").
+
+---
+
 ## QA-001 — `qa_plan_generate` accepts stub plans, never verifies parser sees >0 tests
 
 **Status**: open
