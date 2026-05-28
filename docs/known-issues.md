@@ -78,9 +78,27 @@ The `2/96 passed` figure should reflect what actually ran (`2/24`). Likely lives
 
 ## RETRO-001 — Retrospective marker mismatch silently saves raw dialogue as the "report"
 
-**Status**: open
+**Status**: resolved in code; pending live-run validation
 **Filed**: 2026-05-16
+**Resolved**: 2026-05-28 by commit `d1adbd3`
 **Component**: [src/bmad_assist/skills/bmad-retrospective/](../src/bmad_assist/skills/bmad-retrospective/), [src/bmad_assist/core/extraction.py](../src/bmad_assist/core/extraction.py), [src/bmad_assist/core/loop/handlers/retrospective.py](../src/bmad_assist/core/loop/handlers/retrospective.py)
+
+### Resolution
+
+Two-part fix landed in commit `d1adbd3`:
+
+1. **Activation guardrail strengthened** — [SKILL.md:76](../src/bmad_assist/skills/bmad-retrospective/SKILL.md#L76) now requires explicit confirmation that `activation_steps_prepend` and `activation_steps_append` were executed in order before the main workflow begins. Cherry-picked from upstream BMAD-METHOD PR [#2398](https://github.com/bmad-code-org/BMAD-METHOD/pull/2398) (v6.8.0), which applied the same prose to 23+ skills after diagnosing the same fragility class.
+2. **Headless directive + marker enforcement** — [customize.toml `activation_steps_append`](../src/bmad_assist/skills/bmad-retrospective/customize.toml) now instructs the LLM to skip party-mode facilitation, synthesize the retrospective directly from embedded artifacts, and wrap the final report in the literal `<!-- RETROSPECTIVE_REPORT_START -->` / `<!-- RETROSPECTIVE_REPORT_END -->` strings the extractor requires. Pattern matches [src/bmad_assist/skills/bmad-validate-story/customize.toml](../src/bmad_assist/skills/bmad-validate-story/customize.toml) and the 8 testarch directives landed in commit `f6d5b17`.
+
+Snapshot regenerated; 354 skill_layout + 12058 impact-suite tests green.
+
+Validation outstanding: a live algo / serenityv2 run that reaches the retrospective phase, with the saved report wrapped in the markers and `Markers not found for retrospective report` log line absent. Reopen this entry if either symptom recurs.
+
+### Subtle gotcha (worth knowing for future customize.toml directives)
+
+The directive cannot contain literal upstream interactive-element XML syntax (e.g., the opening tag for the upstream ask element). The retrospective patch at [.bmad-assist/patches/retrospective.patch.yaml:43](../.bmad-assist/patches/retrospective.patch.yaml#L43) has a non-greedy regex stripper for ask blocks. If the directive uses the literal opening tag, the regex spans from the directive's occurrence to the SKILL.md's closing tag at line 201, consuming `<workflow>` and several `<step>` blocks in between. The directive refers to "interactive ask elements" instead. Same trap would catch any customize.toml directive that echoes upstream XML tags which have an active regex stripper — worth a generalized note in [docs/workflow-patches.md](workflow-patches.md) eventually.
+
+### Original report (preserved for historical context)
 
 ### Summary
 
